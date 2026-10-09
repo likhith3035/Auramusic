@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import com.music.bitchord.ui.components.LocalShelfRowChrome
 import com.music.bitchord.ui.components.ShelfRowChrome
 import com.music.bitchord.ui.components.ShelfRow
+import com.music.bitchord.ui.library.DailyHighlightsCard
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.pointer.isBackPressed
@@ -33,6 +34,7 @@ import com.music.bitchord.playback.PlaybackPosition
 import com.music.bitchord.playback.QueueSource
 import com.music.bitchord.playback.QueueTimeline
 import com.music.bitchord.playback.QueueTimeline.asQueueEntry
+import com.music.bitchord.playback.SmartSleepTimer
 import com.music.bitchord.data.listentogether.partyQueueIndexOf
 import com.music.bitchord.data.listentogether.partyUpcomingAfter
 import com.music.bitchord.ui.LyricsProviderState
@@ -40,6 +42,7 @@ import com.music.bitchord.ui.player.LyricsSidePanel
 import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.QueueSidePanel
 import com.music.bitchord.ui.player.PlayerBack
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.player.RepeatModes
 import com.music.bitchord.ui.player.rememberMixPulse
 import androidx.compose.runtime.SideEffect
@@ -291,6 +294,8 @@ import com.music.bitchord.data.settings.LastPlayerScreen
 import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.TrackAnalysisState
 import com.music.bitchord.data.settings.TransitionWindow
+import com.music.bitchord.ui.about.AuraChangelogDialog
+import com.music.bitchord.ui.about.DeveloperProfileCard
 import com.music.bitchord.ui.icons.BitChordIcons
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeTint
@@ -506,7 +511,7 @@ fun BitChordDesktopApp() {
             title = { Text(DesktopStrings["d_update_available", "Update available"]) },
             text = {
                 Text(
-                    "BitChord ${update.version} is out — you have ${DesktopUpdateChecker.currentVersion}." +
+                    "AuraMusic ${update.version} is out — you have ${DesktopUpdateChecker.currentVersion}." +
                         (update.notes?.takeIf { it.isNotBlank() }?.let { "\n\n${it.take(600)}" } ?: ""),
                 )
             },
@@ -608,6 +613,7 @@ fun BitChordDesktopApp() {
     var replayPeriod by remember { mutableStateOf(DesktopReplayPeriod.ALL_TIME) }
     val replayHolder = remember { DesktopAccounts.active()?.name.orEmpty() }
     var replaySummary by remember { mutableStateOf(DesktopListeningStats.summary()) }
+    var desktopDailyHighlights by remember { mutableStateOf(DesktopListeningStats.dailyHighlights()) }
     var statsCountedSongs by remember { mutableStateOf<Set<String>>(emptySet()) }
     var playlistTarget by remember { mutableStateOf<Song?>(null) }
     // One busy flag and one message for every playlist edit: only one of them can be in flight,
@@ -1440,7 +1446,8 @@ fun BitChordDesktopApp() {
         DesktopPlaybackEngine(
             onEnded = {
                 selectedSong?.let(DesktopScrobbling::onPlaybackEnded)
-                if (DesktopSleepTimer.afterTrack.value) {
+                val shouldStop = SmartSleepTimer.onTrackCompleted()
+                if (shouldStop || DesktopSleepTimer.afterTrack.value) {
                     DesktopSleepTimer.cancel()
                 } else if (repeatMode == DesktopRepeatMode.ONE) {
                     // Replayed in place. [startSong] makes the track a queue of one, which threw
@@ -1684,9 +1691,17 @@ fun BitChordDesktopApp() {
     LaunchedEffect(Unit) {
         while (currentCoroutineContext().isActive) {
             delay(1_000L)
-            if (DesktopSleepTimer.isExpired()) {
-                DesktopSleepTimer.cancel()
-                playbackEngine.pause()
+            val remaining = SmartSleepTimer.remainingMs()
+            if (remaining != null && remaining <= 0L) {
+                val isPlaying = playbackEngine.state.value.isPlaying
+                val shouldPauseNow = SmartSleepTimer.onDurationCountdownExpired(isPlaying)
+                if (shouldPauseNow) {
+                    DesktopSleepTimer.cancel()
+                    playbackEngine.pause()
+                }
+            }
+            if (playbackEngine.state.value.isPlaying && SmartSleepTimer.checkInactivityExceeded()) {
+                SmartSleepTimer.shouldStopAfterCurrentTrack.value = true
             }
         }
     }
@@ -1867,6 +1882,7 @@ fun BitChordDesktopApp() {
     }
     LaunchedEffect(statsRevision) {
         replaySummary = withContext(Dispatchers.IO) { DesktopListeningStats.summary(replayPeriod) }
+        desktopDailyHighlights = withContext(Dispatchers.IO) { DesktopListeningStats.dailyHighlights() }
     }
     DisposableEffect(playbackEngine) {
         onDispose { playbackEngine.release() }
@@ -2938,6 +2954,8 @@ fun BitChordDesktopApp() {
                         // A second click on the same button puts the column away, as in Apple Music.
                         onOpenLyrics = { overlays.toggleSidePanel(DesktopSidePanel.LYRICS) },
                         onOpenQueue = { overlays.toggleSidePanel(DesktopSidePanel.QUEUE) },
+                        onOpenSettings = ::openSettings,
+                        settingsOpen = overlays.settingsPage != null,
                         sidePanel = overlays.sidePanel,
                         accountAvatar = activeAccount?.avatar
                             ?: activeAccount?.profiles?.firstOrNull()?.avatar,
@@ -3092,6 +3110,7 @@ fun BitChordDesktopApp() {
                             onRemoveFromQueue = ::removeFromQueue,
                             onMoveInQueue = ::moveInQueue,
                             onClearQueue = ::clearQueue,
+                            onAddToQueue = ::addToQueue,
                             onOpenMenu = { playerMenuOpen = true },
                             onOpenAlbum = { id ->
                                 overlays.nowPlaying = false
@@ -3707,6 +3726,7 @@ fun BitChordDesktopApp() {
                             loadingMore = homeLoadingMore,
                             recentlyPlayedLoading = homeRecentsLoading,
                             leadHero = false,
+                            accountName = activeAccount?.name?.takeIf(String::isNotBlank),
                         )
                         destination == DesktopDestination.EXPLORE && selectedMoodGenre != null -> Column(Modifier.fillMaxSize()) {
                             MoodGenrePlaylistsScreen(
@@ -3849,6 +3869,17 @@ fun BitChordDesktopApp() {
                             onNewPlaylist = { overlays.playlistDialog = true },
                             onShowAll = { shelf -> libraryShowAll = shelf },
                             replay = {
+                                DailyHighlightsCard(
+                                    summary = desktopDailyHighlights,
+                                    onPlaySong = { playSong(it) },
+                                    onPlayTodayMix = {
+                                        val songs = desktopDailyHighlights.todaySongs
+                                        if (songs.isNotEmpty()) {
+                                            playSongs(songs, 0)
+                                        }
+                                    },
+                                    modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp)
+                                )
                                 // The phone's wallet of Replay cards, or nothing until there is
                                 // listening to deal them from.
                                 val cards = remember(replaySummary) { replaySummary.heroCards() }
@@ -3952,6 +3983,8 @@ private fun DesktopTopBar(
     onOpenAudioOutput: () -> Unit,
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    settingsOpen: Boolean = false,
     /** Which of the two the column beside the page is showing, lit on its button. */
     sidePanel: DesktopSidePanel?,
     accountAvatar: String?,
@@ -3999,7 +4032,7 @@ private fun DesktopTopBar(
                 // The mark leads the player's own controls, now that the sidebar runs to the top.
                 Image(
                     painter = painterResource(Res.drawable.logo_mark),
-                    contentDescription = "BitChord",
+                    contentDescription = "AuraMusic",
                     modifier = Modifier.size(width = 28.dp, height = 18.dp),
                 )
                 Spacer(Modifier.width(14.dp))
@@ -4200,6 +4233,14 @@ private fun DesktopTopBar(
                             BitChordIcons.Queue,
                             DesktopStrings["queue", "Queue"],
                             tint = if (sidePanel == DesktopSidePanel.QUEUE) Color.White else DesktopSecondary,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    DesktopToolbarButton(onClick = onOpenSettings, size = 32.dp) {
+                        Icon(
+                            Icons.Rounded.Settings,
+                            DesktopStrings["settings", "Settings"],
+                            tint = if (settingsOpen) Color.White else DesktopSecondary,
                             modifier = Modifier.size(19.dp),
                         )
                     }
@@ -4450,6 +4491,7 @@ private fun DesktopFloatingNavigation(
     destination: DesktopDestination,
     onDestinationSelected: (DesktopDestination) -> Unit,
 ) {
+    val nothingOsMode by DesktopAppUiHost.nothingOsMode.collectAsState()
     val tabs = listOf(
         DesktopDestination.LISTEN_NOW to (BitChordIcons.Play to "Play"),
         DesktopDestination.EXPLORE to (BitChordIcons.Explore to "Explore"),
@@ -4476,17 +4518,29 @@ private fun DesktopFloatingNavigation(
         ) {
             tabs.forEach { (item, iconAndLabel) ->
                 val isSelected = item == selected
+                val activeBg = if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.18f) else DesktopAccent.copy(alpha = 0.18f)
+                val activeTint = if (nothingOsMode) NothingThemeTokens.Red else DesktopAccent
+                val inactiveTint = if (nothingOsMode) NothingThemeTokens.MutedText else DesktopSecondary
                 Column(
                     Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(percent = 50))
-                        .background(if (isSelected) DesktopAccent.copy(alpha = 0.18f) else Color.Transparent)
+                        .background(if (isSelected) activeBg else Color.Transparent)
                         .clickable { onDestinationSelected(item) }
                         .padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(iconAndLabel.first, iconAndLabel.second, tint = if (isSelected) DesktopAccent else DesktopSecondary, modifier = Modifier.size(20.dp))
-                    Text(iconAndLabel.second, color = if (isSelected) Color.White else DesktopSecondary, style = MaterialTheme.typography.labelSmall)
+                    Icon(
+                        iconAndLabel.first,
+                        iconAndLabel.second,
+                        tint = if (isSelected) activeTint else inactiveTint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        iconAndLabel.second,
+                        color = if (isSelected) (if (nothingOsMode) NothingThemeTokens.White else Color.White) else inactiveTint,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
             }
         }
@@ -4501,6 +4555,7 @@ private fun DesktopMiniPlayer(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val nothingOsMode by DesktopAppUiHost.nothingOsMode.collectAsState()
     val shape = RoundedCornerShape(percent = 50)
     Row(
         Modifier
@@ -4512,17 +4567,45 @@ private fun DesktopMiniPlayer(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DesktopArtwork(song.thumbnailUrl, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)), px = ROW_ART_PX)
+        DesktopArtwork(
+            song.thumbnailUrl,
+            Modifier.size(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .then(
+                    if (nothingOsMode) Modifier.border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(8.dp)) else Modifier
+                ),
+            px = ROW_ART_PX,
+        )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-            Text(song.artist, color = DesktopSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                song.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.SemiBold,
+                color = if (nothingOsMode) NothingThemeTokens.White else Color.Unspecified,
+            )
+            Text(
+                song.artist,
+                color = if (nothingOsMode) NothingThemeTokens.MutedText else DesktopSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         IconButton(onClick = onPlayPause) {
-            Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (isPlaying) "Pause" else "Play", tint = Color.White)
+            Icon(
+                if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                if (isPlaying) "Pause" else "Play",
+                tint = if (nothingOsMode) NothingThemeTokens.Red else Color.White,
+            )
         }
         IconButton(onClick = onNext) {
-            Icon(Icons.Rounded.FastForward, DesktopStrings["widget_next", "Next"], tint = Color.White)
+            Icon(
+                Icons.Rounded.FastForward,
+                DesktopStrings["widget_next", "Next"],
+                tint = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+            )
         }
     }
 }
@@ -5689,6 +5772,13 @@ private fun DesktopSettingsScreen(
                         reduceDynamicBlur,
                         DesktopAppearanceSettings::setReduceDynamicBlur,
                     )
+                    val nothingOsMode by DesktopAppUiHost.nothingOsMode.collectAsState()
+                    SettingsToggle(
+                        "Nothing OS UI Mode",
+                        "AMOLED pitch-black surfaces, Nothing Red accents, and dot-matrix styling",
+                        nothingOsMode,
+                        DesktopAppUiHost::setNothingOsMode,
+                    )
                     // Window furniture belongs beside the visual settings it changes, rather than
                     // interrupting playback controls. These rows remain Windows-only.
                     if (DesktopPlatform.drawsOwnWindowFrame) {
@@ -5797,7 +5887,7 @@ private fun DesktopSettingsScreen(
                         DesktopStrings["d_tray_icon", "Tray icon"],
                         DesktopStrings[
                             "d_show_bitchord_in_the_system_tray_with_playback_controls",
-                            "Show BitChord in the system tray, with playback controls",
+                            "Show AuraMusic in the system tray, with playback controls",
                         ],
                         trayIconEnabled,
                         onTrayIconChange,
@@ -5807,7 +5897,7 @@ private fun DesktopSettingsScreen(
                             DesktopStrings["d_keep_playing_when_closed", "Keep playing when closed"],
                             DesktopStrings[
                                 "d_closing_the_window_leaves_bitchord_in_the_tray_instead_o",
-                                "Closing the window leaves BitChord in the tray instead of quitting",
+                                "Closing the window leaves AuraMusic in the tray instead of quitting",
                             ],
                             closeToTray,
                             onCloseToTrayChange,
@@ -6009,35 +6099,52 @@ private fun DesktopSettingsScreen(
 /** The line at the foot of the settings sheet, as Android has it. */
 @Composable
 private fun DesktopSettingsFooter(onLicenses: () -> Unit) {
+    var showChangelog by remember { mutableStateOf(false) }
     val version = remember { System.getProperty("bitchord.version") ?: "1.8-beta1" }
     val linkStyles = TextLinkStyles(
         style = SpanStyle(color = DesktopAccent, textDecoration = TextDecoration.Underline),
     )
-    Text(
-        text = buildAnnotatedString {
-            append("bitchord $version  ")
-            withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx/BitChord", linkStyles)) {
-                append("GitHub")
-            }
-            append("  ")
-            withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx", linkStyles)) {
-                append("Developer")
-            }
-            append("  ")
-            withLink(LinkAnnotation.Url("https://discord.gg/pDdKfrdHY6", linkStyles)) {
-                append("Discord")
-            }
-            append("  ")
-            withLink(LinkAnnotation.Clickable("licenses", linkStyles) { onLicenses() }) {
-                append("Licenses")
-            }
-            append("\n~YouTube Music Backend")
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = DesktopSecondary,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
-    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        DeveloperProfileCard(
+            developerName = "kami likhith",
+            onOpenChangelog = { showChangelog = true },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Text(
+            text = buildAnnotatedString {
+                append("AuraMusic $version by likhith  ")
+                withLink(LinkAnnotation.Url("https://github.com/likhith3035", linkStyles)) {
+                    append("GitHub")
+                }
+                append("  ")
+                withLink(LinkAnnotation.Url("https://devlikhith.vercel.app/", linkStyles)) {
+                    append("Developer")
+                }
+                append("  ")
+                withLink(LinkAnnotation.Clickable("licenses", linkStyles) { onLicenses() }) {
+                    append("Licenses")
+                }
+                append("\n~YouTube Music Backend")
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = DesktopSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    if (showChangelog) {
+        AuraChangelogDialog(
+            onDismissRequest = { showChangelog = false },
+        )
+    }
 }
 
 /** Everything this build is assembled from, and the terms each part came under. A page of Settings. */
@@ -6051,7 +6158,7 @@ private fun DesktopLicensesPage(onDismiss: () -> Unit) {
             modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
         )
         Text(
-            DesktopStrings["d_bitchord_is_free_software_and_so_is_everything_it_is_bui", "BitChord is free software, and so is everything it is built on."],
+            DesktopStrings["d_bitchord_is_free_software_and_so_is_everything_it_is_bui", "AuraMusic is free software, and so is everything it is built on."],
             color = DesktopSecondary,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -6261,7 +6368,7 @@ private fun DesktopSourceEditorDialog(
                 Text(
                     DesktopStrings[
                         "d_an_addon_server",
-                        "An addon server — BitChord asks it over plain HTTP and runs no code from it. " +
+                        "An addon server — AuraMusic asks it over plain HTTP and runs no code from it. " +
                             "A compatible module index also works and is stored as one.",
                     ],
                     color = DesktopSecondary,
@@ -6694,8 +6801,14 @@ private fun Song.isNowPlaying(): Boolean = isSameTrackAs(LocalNowPlaying.current
 
 /** The frosted pane the floating bars are made of. */
 @Composable
-internal fun Modifier.desktopBarGlass(shape: Shape): Modifier =
-    desktopFrosted(DesktopBarGlass, tintAlpha = 0.55f).border(0.5.dp, DesktopBarEdge, shape)
+internal fun Modifier.desktopBarGlass(shape: Shape): Modifier {
+    val nothingOsMode by DesktopAppUiHost.nothingOsMode.collectAsState()
+    return if (nothingOsMode) {
+        background(NothingThemeTokens.Black, shape).border(1.dp, NothingThemeTokens.Border, shape)
+    } else {
+        desktopFrosted(DesktopBarGlass, tintAlpha = 0.55f).border(0.5.dp, DesktopBarEdge, shape)
+    }
+}
 
 /** The edge of a chrome pane that meets the page, and so has to dissolve into it. */
 internal enum class DesktopChromeEdge { NONE, BOTTOM, END }
