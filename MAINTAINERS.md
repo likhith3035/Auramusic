@@ -1,10 +1,16 @@
 # Maintainers
 
-This document lists the maintainers responsible for BitChord.
+This document lists the maintainers responsible for AuraMusic.
 
 | Maintainer | GitHub | Responsibilities |
 |---|---|---|
-| Kushagra Singh | [@kushagrasinghx](https://github.com/kushagrasinghx) | Project creator, core architecture, release management, and PR reviews |
+| Likhith | [@likhith3035](https://github.com/likhith3035) | Lead maintainer, features development, release management, and repository administration |
+
+## Upstream & Core Architecture Credits
+
+| Name | GitHub | Role |
+|---|---|---|
+| Kushagra Singh | [@kushagrasinghx](https://github.com/kushagrasinghx) | BitChord creator & core architectural foundation |
 
 ## Responsibilities
 
@@ -12,9 +18,10 @@ Maintainers oversee project direction, repository maintenance, review and mergin
 
 ## Contributors
 
-This list is automatically generated from GitHub repository contributor data.
+This list includes contributors across AuraMusic and its open-source lineage:
 
 <!-- BEGIN CONTRIBUTORS -->
+- [@likhith3035](https://github.com/likhith3035)
 - [@kushagrasinghx](https://github.com/kushagrasinghx)
 - [@Galaxyyss](https://github.com/Galaxyyss)
 - [@NeoTurcios](https://github.com/NeoTurcios)
