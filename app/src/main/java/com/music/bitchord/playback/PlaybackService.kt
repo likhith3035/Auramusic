@@ -75,6 +75,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.guava.future
+import com.music.bitchord.data.MonotonicClock
 import com.music.bitchord.playback.audio.DspChain
 import com.music.bitchord.playback.cast.CastController
 import com.music.bitchord.playback.cast.CastPlayback
@@ -915,12 +916,16 @@ class PlaybackService : MediaLibraryService() {
         ) {
             val exoPlayer = player ?: return
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                SmartSleepTimer.recordUserActivity()
                 if (exoPlayer.isPlaying) pushDiscordPresence(exoPlayer)
                 updateLyricSubtitle()
             }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                SmartSleepTimer.recordUserActivity()
+            }
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
@@ -3006,12 +3011,14 @@ class PlaybackService : MediaLibraryService() {
         // in between is Discord's own arithmetic.
         if (exoPlayer.isPlaying) pushDiscordPresence(exoPlayer)
 
-        // "Sleep after this song": the queue moving on by itself is the
-        // moment the track the user meant has finished. REPEAT counts
-        // too, or the timer would never fire with repeat-one on.
-        if (ended && SleepTimer.afterTrack.value) {
-            exoPlayer.pause()
-            SleepTimer.cancel()
+        // "Sleep after this song" or smart sleep timer completion: the queue
+        // moving on by itself is the moment the track the user meant has finished.
+        // REPEAT counts too, or the timer would never fire with repeat-one on.
+        if (ended) {
+            val shouldStop = SmartSleepTimer.onTrackCompleted()
+            if (shouldStop) {
+                exoPlayer.pause()
+            }
         }
         if (exoPlayer.isPlaying) registerCurrentPlay()
         savePlaybackState(exoPlayer)
@@ -5414,12 +5421,23 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun watchSleepTimer() {
         scope.launch {
-            SleepTimer.deadline.collectLatest { deadline ->
+            SmartSleepTimer.deadlineMs.collectLatest { deadline ->
                 if (deadline == null) return@collectLatest
-                val remaining = deadline - SystemClock.elapsedRealtime()
+                val remaining = deadline - MonotonicClock.nowMs()
                 if (remaining > 0) delay(remaining)
-                player?.pause()
-                SleepTimer.cancel()
+                val isPlaying = player?.isPlaying == true
+                val shouldPauseNow = SmartSleepTimer.onDurationCountdownExpired(isPlaying)
+                if (shouldPauseNow) {
+                    player?.pause()
+                }
+            }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(15_000L)
+                if (player?.isPlaying == true && SmartSleepTimer.checkInactivityExceeded()) {
+                    SmartSleepTimer.shouldStopAfterCurrentTrack.value = true
+                }
             }
         }
     }
@@ -8065,8 +8083,8 @@ class PlaybackService : MediaLibraryService() {
         /** Length of a FLAC STREAMINFO block, which the format fixes at 34 bytes. */
         const val STREAM_INFO_BYTES = 34
 
-        const val CHANNEL_ID = "bitchord_playback"
-        const val SESSION_ID = "BitChordPlayback"
+        const val CHANNEL_ID = "auramusic_playback"
+        const val SESSION_ID = "AuraMusicPlayback"
 
         /** How often played-seconds are sampled off the player. */
         const val PROGRESS_SAMPLE_MS = 5_000L
