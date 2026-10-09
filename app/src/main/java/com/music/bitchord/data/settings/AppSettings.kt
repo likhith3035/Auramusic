@@ -208,9 +208,14 @@ object AppSettings {
      * not one portable audio file.
      */
     val exportDownloads = MutableStateFlow(false)
+    val newReleaseAlertsEnabled = MutableStateFlow(true)
+    val newReleaseAlertFrequencyHours = MutableStateFlow(12)
 
     /** Whether the active network charges for data. `null` while offline. */
     val meteredConnection = MutableStateFlow<Boolean?>(null)
+
+    /** Whether the device currently has an active internet connection. */
+    val isOnline = MutableStateFlow(true)
 
     // `losslessAudio` used to live here, behind a "Prefer lossless" switch on
     // the Sources screen. It is gone: sources are asked for their best and each
@@ -340,6 +345,9 @@ object AppSettings {
 
     val playbackSpeed = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
+
+    /** Nothing OS UI mode: true pitch-black AMOLED, Nothing Red accents, dot-matrix & glyph widgets. */
+    val nothingOsMode = MutableStateFlow(false)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -798,6 +806,8 @@ object AppSettings {
             )
         }.getOrDefault(OutputPcmMode.PCM_16)
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
+        newReleaseAlertsEnabled.value = prefs.getBoolean(KEY_NEW_RELEASE_ALERTS, true)
+        newReleaseAlertFrequencyHours.value = prefs.getInt(KEY_NEW_RELEASE_ALERT_FREQUENCY, 12)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, true)
@@ -816,6 +826,7 @@ object AppSettings {
         themeMode.value = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
+        nothingOsMode.value = prefs.getBoolean(KEY_NOTHING_OS_MODE, false)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
@@ -1008,6 +1019,7 @@ object AppSettings {
             meteredConnection.value = runCatching {
                 if (manager.activeNetwork == null) null else manager.isActiveNetworkMetered
             }.getOrNull()
+            isOnline.value = evaluateIsOnline(manager)
         }
         refresh()
         runCatching {
@@ -1022,6 +1034,24 @@ object AppSettings {
                 },
             )
         }
+    }
+
+    private fun evaluateIsOnline(manager: ConnectivityManager): Boolean {
+        return runCatching {
+            val active = manager.activeNetwork ?: return@runCatching false
+            val caps = manager.getNetworkCapabilities(active) ?: return@runCatching false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Checks the current network connection synchronously and updates [isOnline].
+     */
+    fun checkIsOnline(context: Context): Boolean {
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return true
+        val online = evaluateIsOnline(manager)
+        isOnline.value = online
+        return online
     }
 
     fun setAutoplay(value: Boolean) {
@@ -1177,6 +1207,11 @@ object AppSettings {
         prefs.edit().putString(KEY_THEME, value.name).apply()
     }
 
+    fun setNothingOsMode(value: Boolean) {
+        nothingOsMode.value = value
+        prefs.edit().putBoolean(KEY_NOTHING_OS_MODE, value).apply()
+    }
+
     fun setReduceAnimation(value: Boolean) {
         reduceAnimation.value = value
         if (value) highPerformanceMode.value = false
@@ -1231,6 +1266,24 @@ object AppSettings {
     fun setLiquidGlass(value: Boolean) {
         liquidGlass.value = value
         prefs.edit().putBoolean(KEY_LIQUID_GLASS, value).apply()
+    }
+
+    fun setNewReleaseAlertsEnabled(context: Context, value: Boolean) {
+        newReleaseAlertsEnabled.value = value
+        prefs.edit().putBoolean(KEY_NEW_RELEASE_ALERTS, value).apply()
+        if (value) {
+            com.music.bitchord.data.newrelease.NewReleaseWorker.schedule(context, newReleaseAlertFrequencyHours.value)
+        } else {
+            com.music.bitchord.data.newrelease.NewReleaseWorker.cancel(context)
+        }
+    }
+
+    fun setNewReleaseAlertFrequencyHours(context: Context, value: Int) {
+        newReleaseAlertFrequencyHours.value = value
+        prefs.edit().putInt(KEY_NEW_RELEASE_ALERT_FREQUENCY, value).apply()
+        if (newReleaseAlertsEnabled.value) {
+            com.music.bitchord.data.newrelease.NewReleaseWorker.schedule(context, value)
+        }
     }
 
     fun setHighPerformanceMode(value: Boolean) {
@@ -1960,6 +2013,7 @@ object AppSettings {
     private const val KEY_SMART_VERSION_ALIGNMENT = "smart_version_alignment"
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
+    private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"
     private const val KEY_TRANSLATION_LANGUAGE = "translation_language"
@@ -2028,6 +2082,8 @@ object AppSettings {
     private const val KEY_DISCORD_BUTTON_2_VISIBLE = "discord_button_2_visible"
     private const val KEY_DISCORD_INFO_DISMISSED = "discord_info_dismissed"
     private const val KEY_LAST_VERSION_CODE = "last_version_code"
+    private const val KEY_NEW_RELEASE_ALERTS = "new_release_alerts_enabled"
+    private const val KEY_NEW_RELEASE_ALERT_FREQUENCY = "new_release_alert_frequency_hours"
 }
 
 

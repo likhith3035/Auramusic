@@ -68,9 +68,12 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Upgrade
 import com.music.bitchord.data.listentogether.ServerConnectionState
+import com.music.bitchord.data.newrelease.NewReleaseNotificationHelper
+import com.music.bitchord.data.newrelease.NewReleaseWorker
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -166,6 +169,8 @@ import com.music.bitchord.ui.screens.PartyServerEditor
 import com.music.bitchord.ui.screens.SettingsScreen
 import com.music.bitchord.ui.screens.SourceEditorAlert
 import com.music.bitchord.ui.screens.SourcesScreen
+import com.music.bitchord.ui.screens.AuraOfflineScreen
+import com.music.bitchord.ui.splash.AuraSplashScreen
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.ui.screens.SpotifyCanvasAuthScreen
 import com.music.bitchord.ui.screens.SpotifyLibraryScreen
@@ -212,6 +217,7 @@ import com.music.bitchord.ui.components.ReorderPlaylistSheet
 import com.music.bitchord.ui.components.LongPressOrigin
 import com.music.bitchord.ui.components.SongActionsPresentation
 import com.music.bitchord.ui.components.SongActionsSheet
+import com.music.bitchord.ui.player.SongShareSheet
 import com.music.bitchord.ui.components.HeldContextMenu
 import com.music.bitchord.ui.components.HeldItem
 import androidx.media3.session.MediaController
@@ -341,6 +347,10 @@ class MainActivity : AppCompatActivity() {
         JamInviteLink.consume(intent)
         // Likewise for a link tapped or shared from another app — see [MusicLink].
         MusicLink.consume(intent)
+        NewReleaseNotificationHelper.ensureChannel(this)
+        if (AppSettings.newReleaseAlertsEnabled.value) {
+            NewReleaseWorker.schedule(this, AppSettings.newReleaseAlertFrequencyHours.value)
+        }
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
@@ -356,7 +366,8 @@ class MainActivity : AppCompatActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            BitChordTheme(darkTheme = darkTheme) {
+            val nothingOs by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+            BitChordTheme(darkTheme = darkTheme, nothingOs = nothingOs) {
                 // The glass surfaces sample this layer, and a layer records only
                 // what is drawn into it — which, for BitChord, is a page that
                 // paints no background of its own. Everywhere a page is not
@@ -397,6 +408,12 @@ class MainActivity : AppCompatActivity() {
                         windowHeight = maxHeight,
                         appBackdrop = appBackdrop,
                     )
+                    var showSplash by rememberSaveable { mutableStateOf(true) }
+                    if (showSplash) {
+                        AuraSplashScreen(
+                            onFinished = { showSplash = false },
+                        )
+                    }
                 }
                 }
             }
@@ -594,6 +611,7 @@ private fun BitChordApp(
     var showDiscordLogin by remember { mutableStateOf(false) }
     var discordDialog by remember { mutableStateOf<DiscordDialog?>(null) }
     var songActions by remember { mutableStateOf<Song?>(null) }
+    var songToShare by remember { mutableStateOf<Song?>(null) }
     var showLyricsOffset by remember { mutableStateOf(false) }
     /**
      * Whether the track menu that is up was opened from the player.
@@ -1893,6 +1911,7 @@ private fun BitChordApp(
                 .show()
         }
     }
+    var pendingLocalMusicAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val mediaPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -1900,7 +1919,10 @@ private fun BitChordApp(
             viewModel.reloadLocalDetail("local:all")
             viewModel.reloadLocalDetail("local:downloads")
             viewModel.loadLibrarySongs()
+            pendingLocalMusicAction?.invoke()
+            pendingLocalMusicAction = null
         } else {
+            pendingLocalMusicAction = null
             Toast.makeText(context, context.getString(R.string.storage_required_read), Toast.LENGTH_SHORT).show()
         }
     }
@@ -1909,6 +1931,98 @@ private fun BitChordApp(
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
+
+    val isOnline by AppSettings.isOnline.collectAsStateWithLifecycle()
+    var isRetryingConnection by remember { mutableStateOf(false) }
+
+    val playLocalMusicNow: () -> Unit = {
+        if (!LocalMediaRepository.hasStoragePermission(context)) {
+            pendingLocalMusicAction = {
+                scope.launch {
+                    val songs = LocalMediaRepository.getLocalMusic(context).ifEmpty {
+                        LocalMediaRepository.getDownloadedSongs(context)
+                    }
+                    if (songs.isNotEmpty()) {
+                        playFrom(
+                            songs,
+                            0,
+                            QueueSource(
+                                context.getString(R.string.local_music),
+                                PlaybackSourceType.BROWSE,
+                                "local:all",
+                            ),
+                        )
+                        showNowPlaying = true
+                    }
+                }
+            }
+            mediaPermissionLauncher.launch(mediaPermission)
+        } else {
+            scope.launch {
+                val songs = LocalMediaRepository.getLocalMusic(context).ifEmpty {
+                    LocalMediaRepository.getDownloadedSongs(context)
+                }
+                if (songs.isNotEmpty()) {
+                    playFrom(
+                        songs,
+                        0,
+                        QueueSource(
+                            context.getString(R.string.local_music),
+                            PlaybackSourceType.BROWSE,
+                            "local:all",
+                        ),
+                    )
+                    showNowPlaying = true
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.no_tracks_here),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    val browseDeviceMusicNow: () -> Unit = {
+        if (!LocalMediaRepository.hasStoragePermission(context)) {
+            pendingLocalMusicAction = {
+                viewModel.openDetail(
+                    browseId = "local:all",
+                    title = context.getString(R.string.local_music),
+                )
+            }
+            mediaPermissionLauncher.launch(mediaPermission)
+        } else {
+            viewModel.openDetail(
+                browseId = "local:all",
+                title = context.getString(R.string.local_music),
+            )
+        }
+    }
+
+    val tryReconnectNow: () -> Unit = {
+        isRetryingConnection = true
+        scope.launch {
+            kotlinx.coroutines.delay(650)
+            val online = AppSettings.checkIsOnline(context)
+            if (online) {
+                viewModel.loadHome()
+                viewModel.loadExplore()
+                viewModel.refresh(MainViewModel.Feed.HOME)
+                viewModel.refresh(MainViewModel.Feed.EXPLORE)
+                Toast.makeText(context, "Connection restored!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(
+                    context,
+                    "No internet connection yet. Check Wi-Fi or mobile data.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            isRetryingConnection = false
+        }
+    }
+
     // The Search tab's Library source reads the Local Music folder, so it asks
     // for the same permission opening that folder does.
     val onSearchSourceChange: (SearchSource) -> Unit = { source ->
@@ -2119,6 +2233,12 @@ private fun BitChordApp(
     val (replay, setReplayPeriod) = rememberReplayState(replayOpen)
     val replayCards = remember(replay.summary) {
         replay.summary?.takeUnless { it.isEmpty }?.cards(context).orEmpty()
+    }
+    var dailyHighlights by remember { mutableStateOf<com.music.bitchord.data.stats.DailyHighlightsSummary?>(null) }
+    LaunchedEffect(replayOpen, player.song?.videoId, replay.summary) {
+        if (replayOpen) {
+            dailyHighlights = com.music.bitchord.data.stats.ListeningStats.dailyHighlights()
+        }
     }
 
     // ---- The track in the player ----
@@ -2423,6 +2543,7 @@ private fun BitChordApp(
                     QueueCoordinator.clearUserQueue(c)
                 }
             },
+            onAddToQueue = addToQueue,
         )
     }
 
@@ -2981,43 +3102,59 @@ private fun BitChordApp(
                             contentPadding = listPadding,
                         )
                     } else when (key.removePrefix(TAB_KEY).toIntOrNull() ?: selectedTab) {
-                        TAB_HOME -> HomeScreen(
-                            state = homeState,
-                            listState = homeListState,
-                            currentSong = player.song,
-                            isPlaying = player.isPlaying,
-                            title = stringResource(R.string.listen_now),
-                            signedIn = signedIn,
-                            onSignIn = { webSession = WebSessionMode.SIGN_IN },
-                            onItemClick = { item, shelfTitle ->
-                                val song = shelfSong(item)
-                                // Hoisted because ShelfItem lives in :shared, and
-                                // Kotlin will not smart-cast a public nullable
-                                // property declared in another module.
-                                val browseId = item.browseId
-                                when {
-                                    song != null -> playRadio(
-                                        song,
-                                        QueueSource(shelfTitle, PlaybackSourceType.HOME),
-                                    )
-                                    browseId != null -> viewModel.openDetail(
-                                        browseId = browseId,
-                                        title = item.title,
-                                        subtitle = item.subtitle,
-                                        thumbnailUrl = item.thumbnailUrl,
-                                    )
-                                }
-                            },
-                            onItemLongPress = onShelfLongPress,
-                            onRetry = viewModel::loadHome,
-                            refreshing = MainViewModel.Feed.HOME in refreshing,
-                            onRefresh = { viewModel.refresh(MainViewModel.Feed.HOME) },
-                            pullState = homePull,
-                            contentPadding = listPadding,
-                            onLoadMore = viewModel::loadMoreHome,
-                            loadingMore = homeLoadingMore,
-                            recentlyPlayedLoading = homeRecentlyPlayedLoading,
-                        )
+                        TAB_HOME -> {
+                            LaunchedEffect(Unit) {
+                                viewModel.markNewReleasesSeen()
+                            }
+                            if (!isOnline && homeState !is UiState.Success || homeState is UiState.Error) {
+                                AuraOfflineScreen(
+                                    onListenLocalMusic = playLocalMusicNow,
+                                    onBrowseDeviceMusic = browseDeviceMusicNow,
+                                    onTryAgain = tryReconnectNow,
+                                    contentPadding = listPadding,
+                                    isRetrying = isRetryingConnection,
+                                )
+                            } else {
+                                HomeScreen(
+                                    state = homeState,
+                                    listState = homeListState,
+                                    currentSong = player.song,
+                                    isPlaying = player.isPlaying,
+                                    title = stringResource(R.string.listen_now),
+                                    signedIn = signedIn,
+                                    onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                                    onItemClick = { item, shelfTitle ->
+                                        val song = shelfSong(item)
+                                        // Hoisted because ShelfItem lives in :shared, and
+                                        // Kotlin will not smart-cast a public nullable
+                                        // property declared in another module.
+                                        val browseId = item.browseId
+                                        when {
+                                            song != null -> playRadio(
+                                                song,
+                                                QueueSource(shelfTitle, PlaybackSourceType.HOME),
+                                            )
+                                            browseId != null -> viewModel.openDetail(
+                                                browseId = browseId,
+                                                title = item.title,
+                                                subtitle = item.subtitle,
+                                                thumbnailUrl = item.thumbnailUrl,
+                                            )
+                                        }
+                                    },
+                                    onItemLongPress = onShelfLongPress,
+                                    onRetry = viewModel::loadHome,
+                                    refreshing = MainViewModel.Feed.HOME in refreshing,
+                                    onRefresh = { viewModel.refresh(MainViewModel.Feed.HOME) },
+                                    pullState = homePull,
+                                    contentPadding = listPadding,
+                                    onLoadMore = viewModel::loadMoreHome,
+                                    loadingMore = homeLoadingMore,
+                                    recentlyPlayedLoading = homeRecentlyPlayedLoading,
+                                    accountName = account?.name,
+                                )
+                            }
+                        }
                         TAB_EXPLORE -> selectedMoodGenre?.let { category ->
                             MoodGenrePlaylistsScreen(
                                 title = category.title,
@@ -3050,16 +3187,28 @@ private fun BitChordApp(
                                 onRetry = { viewModel.openMoodGenre(category) },
                                 contentPadding = listPadding,
                             )
-                        } ?: ExploreScreen(
-                            state = exploreState,
-                            listState = exploreListState,
-                            onCategoryClick = viewModel::openMoodGenre,
-                            onRetry = viewModel::loadExplore,
-                            refreshing = MainViewModel.Feed.EXPLORE in refreshing,
-                            onRefresh = { viewModel.refresh(MainViewModel.Feed.EXPLORE) },
-                            pullState = explorePull,
-                            contentPadding = listPadding,
-                        )
+                        } ?: run {
+                            if (!isOnline && exploreState !is UiState.Success || exploreState is UiState.Error) {
+                                AuraOfflineScreen(
+                                    onListenLocalMusic = playLocalMusicNow,
+                                    onBrowseDeviceMusic = browseDeviceMusicNow,
+                                    onTryAgain = tryReconnectNow,
+                                    contentPadding = listPadding,
+                                    isRetrying = isRetryingConnection,
+                                )
+                            } else {
+                                ExploreScreen(
+                                    state = exploreState,
+                                    listState = exploreListState,
+                                    onCategoryClick = viewModel::openMoodGenre,
+                                    onRetry = viewModel::loadExplore,
+                                    refreshing = MainViewModel.Feed.EXPLORE in refreshing,
+                                    onRefresh = { viewModel.refresh(MainViewModel.Feed.EXPLORE) },
+                                    pullState = explorePull,
+                                    contentPadding = listPadding,
+                                )
+                            }
+                        }
                         TAB_SEARCH -> SearchScreen(
                             query = query,
                             onQueryChange = viewModel::onQueryChange,
@@ -3236,6 +3385,16 @@ private fun BitChordApp(
                                     loading = replay.loading,
                                     holder = account?.name.orEmpty(),
                                     memberSince = replay.memberSince,
+                                    dailyHighlights = dailyHighlights,
+                                    onPlaySong = { song ->
+                                        playRadio(song, QueueSource("Today's Highlight", PlaybackSourceType.REPLAY))
+                                    },
+                                    onPlayTodayMix = {
+                                        val songs = dailyHighlights?.todaySongs.orEmpty()
+                                        if (songs.isNotEmpty()) {
+                                            playFrom(songs, 0, QueueSource("Today's Mix", PlaybackSourceType.REPLAY))
+                                        }
+                                    },
                                     onOpenReplay = { page ->
                                         replayLandingPage = page
                                         showReplay = true
@@ -3695,6 +3854,17 @@ private fun BitChordApp(
                             // [TopBarDownloadButton], which decides that for
                             // itself rather than being told.
                             TopBarDownloadButton(onClick = { showDownloadManager = true })
+                            IconButton(
+                                onClick = { showSettings = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Settings,
+                                    contentDescription = stringResource(R.string.settings),
+                                    tint = if (showSettings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
                             TopBarAccountButton(
                                 account = account,
                                 onClick = {
@@ -4017,11 +4187,7 @@ private fun BitChordApp(
             // tablet the player is visible whatever the menu was opened from.
             val fromPlayer = menuFromPlayer
             val share: () -> Unit = {
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=${song.videoId}")
-                }
-                context.startActivity(Intent.createChooser(sendIntent, song.title))
+                songToShare = song
                 songActions = null
             }
             // Navigating has to take the player down with the sheet, or the
@@ -4337,6 +4503,20 @@ private fun BitChordApp(
         // — the ⋮, the player — starts from the sheet.
         LaunchedEffect(songActions == null) {
             if (songActions == null) songMenuOrigin = null
+        }
+
+        songToShare?.let { song ->
+            val songLyricsLines = if (song.videoId == playerSong?.videoId) {
+                lyrics?.mapNotNull { it.text.takeIf { t -> t.isNotBlank() } }.orEmpty()
+            } else {
+                emptyList()
+            }
+            SongShareSheet(
+                song = song,
+                hazeState = hazeState,
+                lyricsLines = songLyricsLines,
+                onDismiss = { songToShare = null },
+            )
         }
 
         // ---- Download manager ----
