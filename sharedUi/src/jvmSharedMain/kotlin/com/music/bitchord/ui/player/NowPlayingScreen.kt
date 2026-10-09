@@ -3659,15 +3659,21 @@ fun NowPlayingScreen(
                         song = song,
                         isLoading = isLoading,
                     )
-                    if (sleepTimerStatus != SleepTimerStatus.OFF) {
-                        Spacer(Modifier.width(8.dp))
-                        SleepTimerPill(
-                            status = sleepTimerStatus,
-                            mode = sleepTimerMode,
-                            remainingMs = sleepTimerRemainingMs,
-                            onClick = { showSleepTimerSheet = true },
-                        )
-                    }
+                }
+            }
+
+            if (sleepTimerStatus != SleepTimerStatus.OFF) {
+                Spacer(Modifier.height(5.dp))
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SleepTimerPill(
+                        status = sleepTimerStatus,
+                        mode = sleepTimerMode,
+                        remainingMs = sleepTimerRemainingMs,
+                        onClick = { showSleepTimerSheet = true },
+                    )
                 }
             }
 
@@ -3795,36 +3801,37 @@ private fun SleepTimerPill(
     remainingMs: Long?,
     onClick: () -> Unit,
 ) {
+    val remainingSongs by SmartSleepTimer.remainingSongs.collectAsStateWithLifecycle()
     val text = when {
         status == SleepTimerStatus.PAUSED -> "Timer Paused"
         status == SleepTimerStatus.FINISHING_CURRENT_SONG -> "Ending after track"
         mode is SleepTimerMode.Duration && remainingMs != null -> SmartSleepTimer.formatRemaining(remainingMs)
         mode is SleepTimerMode.SongCount -> {
-            val left = SmartSleepTimer.remainingSongs.value
-            if (left <= 1) "Last track" else "$left songs left"
+            if (remainingSongs <= 1) "Last track" else "$remainingSongs songs left"
         }
         else -> "Sleep Timer"
     }
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.16f))
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.14f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = Icons.Rounded.Bedtime,
             contentDescription = null,
             tint = Color(0xFFCE93D8),
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(13.dp),
         )
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(5.dp))
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.5.sp,
             ),
             color = Color.White,
         )

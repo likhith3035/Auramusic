@@ -86,10 +86,14 @@ fun SmartSleepTimerSheet(
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
-    var selectedTab by remember { mutableStateOf(SleepTimerTab.DURATION) }
-
     val status by SmartSleepTimer.status.collectAsStateWithLifecycle()
     val mode by SmartSleepTimer.mode.collectAsStateWithLifecycle()
+
+    var selectedTab by remember(mode) {
+        mutableStateOf(
+            if (mode is SleepTimerMode.SongCount) SleepTimerTab.SONG_COUNT else SleepTimerTab.DURATION
+        )
+    }
 
     PlayerDrawer(
         hazeState = hazeState,
@@ -100,7 +104,6 @@ fun SmartSleepTimerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
