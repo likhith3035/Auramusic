@@ -263,13 +263,13 @@ private fun DurationTimerPane(
                         SleepTimerStatus.RUNNING -> "Active Countdown"
                         SleepTimerStatus.PAUSED -> "Timer Paused"
                         SleepTimerStatus.FINISHING_CURRENT_SONG -> "Finishing current song..."
-                        else -> "Timer"
+                        SleepTimerStatus.OFF -> "Timer"
                     }
                     val statusDotColor = when (status) {
                         SleepTimerStatus.RUNNING -> Color(0xFF4CAF50)
                         SleepTimerStatus.PAUSED -> Color(0xFFFFB300)
                         SleepTimerStatus.FINISHING_CURRENT_SONG -> Color(0xFFBA68C8)
-                        else -> Color.White.copy(alpha = 0.5f)
+                        SleepTimerStatus.OFF -> Color.White.copy(alpha = 0.5f)
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -543,7 +543,7 @@ private fun SongCountTimerPane(
                         SleepTimerStatus.RUNNING -> "Counting Tracks"
                         SleepTimerStatus.PAUSED -> "Counter Paused"
                         SleepTimerStatus.FINISHING_CURRENT_SONG -> "Final song playing..."
-                        else -> "Track Timer"
+                        SleepTimerStatus.OFF -> "Track Timer"
                     }
 
                     Text(

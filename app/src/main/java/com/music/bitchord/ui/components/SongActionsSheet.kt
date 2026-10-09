@@ -5,6 +5,7 @@ import com.music.bitchord.R
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.PlaylistRemove
@@ -74,6 +76,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.model.LikeStatus
@@ -83,7 +86,13 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.webdav.WebDavUploads
 import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import com.music.bitchord.playback.SleepTimer
+import com.music.bitchord.playback.SmartSleepTimer
+import com.music.bitchord.playback.SleepTimerStatus
+import com.music.bitchord.playback.SleepTimerMode
+import com.music.bitchord.ui.player.SongInfoContent
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.ArtworkPalette
@@ -196,6 +205,7 @@ fun SongActionsSheet(
     presentation: SongActionsPresentation = SongActionsPresentation.Sheet,
 ) {
     var pickingSleepTimer by remember { mutableStateOf(false) }
+    var showingDetails by remember { mutableStateOf(false) }
     val menu = presentation == SongActionsPresentation.Menu
     // Read from the thumbnail the row that opened this sheet was already
     // showing, not a larger copy of it: the tint is a blur and a handful of
@@ -296,6 +306,11 @@ fun SongActionsSheet(
 
         DownloadRow(song, palette, isOffline, onDownload)
         WebDavUploadRow(song, palette, isOffline, onUploadToWebDav)
+        if (!isOffline) {
+            onShare?.let {
+                ActionRow(Icons.Rounded.Share, stringResource(R.string.share), accent = palette.accent, onClick = it)
+            }
+        }
         ActionRow(
             icon = Icons.Rounded.Radio,
             label = stringResource(R.string.start_radio),
@@ -334,6 +349,11 @@ fun SongActionsSheet(
                 accent = palette.accent,
             ) { onOpenArtist(id) }
         }
+        ActionRow(
+            icon = Icons.Rounded.Info,
+            label = "Song details & credits",
+            accent = palette.accent,
+        ) { showingDetails = true }
         if (showSleepTimer) {
             ActionRow(
                 icon = Icons.Rounded.Bedtime,
@@ -354,11 +374,6 @@ fun SongActionsSheet(
                 onClick = it,
             )
         }
-        if (!isOffline) {
-            onShare?.let {
-                ActionRow(Icons.Rounded.Share, stringResource(R.string.share), accent = palette.accent, onClick = it)
-            }
-        }
         // Last, and only from the player: it is about the track playing right
         // now rather than about the song as a thing in a library, and it is
         // the one row here nobody reaches for by accident.
@@ -368,8 +383,114 @@ fun SongActionsSheet(
     }
 
     if (menu) {
+        if (showingDetails) {
+            SongInfoContent(
+                song = song,
+                onClose = { showingDetails = false },
+                onOpenArtist = onOpenArtist,
+                onOpenAlbum = onOpenAlbum,
+                onShare = onShare,
+                palette = palette,
+                scrollable = true,
+                modifier = modifier.heightIn(max = 480.dp),
+            )
+            return
+        }
         CompositionLocalProvider(LocalActionRowStyle provides ActionRowStyle.Menu) {
-            Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()), content = rows)
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+            ) {
+                // Top Quick Action Row (Like, Play Next, Queue, Share, Download)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MenuQuickIconButton(
+                        icon = if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        label = stringResource(R.string.like),
+                        tint = if (liked) palette.accent else MaterialTheme.colorScheme.onSurface,
+                        onClick = onToggleLike,
+                    )
+                    MenuQuickIconButton(
+                        icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        label = stringResource(R.string.play_next),
+                        onClick = onPlayNext,
+                    )
+                    MenuQuickIconButton(
+                        icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                        label = stringResource(R.string.add_to_queue),
+                        onClick = onAddToQueue,
+                    )
+                    if (!isOffline && onShare != null) {
+                        MenuQuickIconButton(
+                            icon = Icons.Rounded.Share,
+                            label = stringResource(R.string.share),
+                            tint = Color(0xFF00E5FF),
+                            onClick = onShare,
+                        )
+                    }
+                    if (!isOffline) {
+                        MenuQuickIconButton(
+                            icon = Icons.Rounded.Download,
+                            label = stringResource(R.string.download),
+                            onClick = onDownload,
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                )
+
+                ActionRow(
+                    icon = Icons.Rounded.Radio,
+                    label = stringResource(R.string.start_radio),
+                    accent = palette.accent,
+                    onClick = onStartRadio,
+                )
+                if (signedIn && !isOffline) {
+                    ActionRow(
+                        icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        label = stringResource(R.string.add_to_playlist),
+                        accent = palette.accent,
+                        onClick = onAddToPlaylist,
+                    )
+                }
+                onRemoveFromPlaylist?.let {
+                    ActionRow(
+                        icon = Icons.Rounded.PlaylistRemove,
+                        label = stringResource(R.string.remove_from_playlist),
+                        accent = palette.accent,
+                        onClick = it,
+                    )
+                }
+                song.albumId?.let { id ->
+                    ActionRow(
+                        icon = Icons.Rounded.Album,
+                        label = stringResource(R.string.open_album),
+                        accent = palette.accent,
+                    ) { onOpenAlbum(id) }
+                }
+                song.artistId?.let { id ->
+                    ActionRow(
+                        icon = Icons.Rounded.Person,
+                        label = stringResource(R.string.open_artist),
+                        accent = palette.accent,
+                    ) { onOpenArtist(id) }
+                }
+                ActionRow(
+                    icon = Icons.Rounded.Info,
+                    label = "Song details & credits",
+                    accent = palette.accent,
+                ) { showingDetails = true }
+            }
         }
         return
     }
@@ -377,6 +498,18 @@ fun SongActionsSheet(
     TintedSheet(palette = palette, imageUrl = song.thumbnailUrl, modifier = modifier) {
         if (pickingSleepTimer) {
             SleepTimerPicker(palette = palette, onBack = { pickingSleepTimer = false })
+            return@TintedSheet
+        }
+        if (showingDetails) {
+            SongInfoContent(
+                song = song,
+                onClose = { showingDetails = false },
+                onOpenArtist = onOpenArtist,
+                onOpenAlbum = onOpenAlbum,
+                onShare = onShare,
+                palette = palette,
+                scrollable = false,
+            )
             return@TintedSheet
         }
 
@@ -683,6 +816,17 @@ private fun SleepTimerPicker(palette: ArtworkPalette, onBack: () -> Unit) {
         }
         HorizontalDivider(thickness = 0.5.dp, color = palette.divider)
 
+        val timerStatus by SmartSleepTimer.status.collectAsStateWithLifecycle()
+        if (timerStatus == SleepTimerStatus.RUNNING) {
+            ActionRow(Icons.Rounded.Pause, "Pause timer", accent = palette.accent) {
+                SmartSleepTimer.pause()
+            }
+        } else if (timerStatus == SleepTimerStatus.PAUSED) {
+            ActionRow(Icons.Rounded.PlayArrow, "Resume timer", accent = palette.accent) {
+                SmartSleepTimer.resume()
+            }
+        }
+
         // Finishing the song is the one people reach for at the end of a
         // listen, so it leads rather than sitting under the durations.
         SleepOption(
@@ -692,6 +836,18 @@ private fun SleepTimerPicker(palette: ArtworkPalette, onBack: () -> Unit) {
         ) {
             SleepTimer.startAfterTrack()
             onBack()
+        }
+        listOf(3, 5).forEach { count ->
+            val mode = SmartSleepTimer.mode.value
+            val isSelected = mode is SleepTimerMode.SongCount && mode.totalSongs == count
+            SleepOption(
+                label = "$count songs",
+                selected = isSelected,
+                accent = palette.accent,
+            ) {
+                SmartSleepTimer.startSongCount(count)
+                onBack()
+            }
         }
         SleepTimer.PRESETS.forEach { minutes ->
             SleepOption(
@@ -707,7 +863,7 @@ private fun SleepTimerPicker(palette: ArtworkPalette, onBack: () -> Unit) {
                 onBack()
             }
         }
-        if (chosen != null || afterTrack) {
+        if (chosen != null || afterTrack || timerStatus != SleepTimerStatus.OFF) {
             ActionRow(Icons.Rounded.Close, stringResource(R.string.turn_off_timer), accent = palette.accent) {
                 SleepTimer.cancel()
                 onBack()
@@ -949,3 +1105,44 @@ internal fun SheetHeading(text: String) {
         modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 4.dp),
     )
 }
+
+/** Compact icon button for the top quick-actions row in HeldContextMenu. */
+@Composable
+private fun MenuQuickIconButton(
+    icon: ImageVector,
+    label: String,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+

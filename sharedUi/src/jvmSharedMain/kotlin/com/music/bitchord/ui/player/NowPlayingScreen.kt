@@ -28,6 +28,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -35,6 +36,7 @@ import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -61,6 +63,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -68,6 +71,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
+import com.music.bitchord.playback.SleepTimerMode
+import com.music.bitchord.playback.SleepTimerStatus
+import com.music.bitchord.playback.SmartSleepTimer
 import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -84,6 +91,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
@@ -141,6 +150,8 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.ui.theme.StatusBarIcons
 import com.music.bitchord.ui.theme.rememberArtworkTopBandLuminance
 import com.music.bitchord.ui.theme.topBandScrimAlpha
+import com.music.bitchord.ui.theme.NothingGlyphEqualizer
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.LyricsProviderState
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
@@ -701,6 +712,7 @@ fun NowPlayingScreen(
      */
     onQueueDragActiveChange: (Boolean) -> Unit = {},
     onClearQueue: () -> Unit,
+    onAddToQueue: ((Song) -> Unit)? = null,
     onOpenMenu: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     /**
@@ -763,6 +775,16 @@ fun NowPlayingScreen(
     var showCast by remember { mutableStateOf(false) }
     var showAudioOutput by remember { mutableStateOf(false) }
     var showLyricsProviders by remember { mutableStateOf(false) }
+    var showAddSongs by remember { mutableStateOf(false) }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    val sleepTimerStatus by SmartSleepTimer.status.collectAsStateWithLifecycle()
+    val sleepTimerMode by SmartSleepTimer.mode.collectAsStateWithLifecycle()
+    val sleepTimerRemainingMs by produceState(SmartSleepTimer.remainingMs(), sleepTimerStatus) {
+        while (isActive) {
+            value = SmartSleepTimer.remainingMs()
+            delay(500L)
+        }
+    }
     // Gated on the Bluetooth permission the first time — see [rememberOutputPicker].
     val openAudioOutput = rememberOutputPicker { showAudioOutput = true }
     // Listening in a party whose host has taken the controls: the transport
@@ -822,6 +844,7 @@ fun NowPlayingScreen(
     val canvasCover = remember(canvas?.url) { mutableFloatStateOf(0f) }
     // v1.5's backdrop, kept behind a switch — see [PlayerSettings.legacyMeshGradient].
     val legacyMesh by PlayerSettings.legacyMeshGradient.collectAsStateWithLifecycle()
+    val nothingOsMode by PlayerSettings.nothingOsMode.collectAsStateWithLifecycle()
     // The backdrop's colours, taken off the artwork's own arrangement rather
     // than quantised out of it — see [ArtworkMesh].
     //
@@ -1010,6 +1033,8 @@ fun NowPlayingScreen(
     PlayerBackHandler(enabled = showAudioOutput) { showAudioOutput = false }
 
     PlayerBackHandler(enabled = showLyricsProviders) { showLyricsProviders = false }
+
+    PlayerBackHandler(enabled = showAddSongs) { showAddSongs = false }
 
     PlayerBackHandler(enabled = showListenTogetherMembers) { showListenTogetherMembers = false }
 
@@ -1526,6 +1551,21 @@ fun NowPlayingScreen(
                 onDismiss = { showLyricsProviders = false },
             )
         }
+        if (showAddSongs) {
+            QueueAddSongsSheet(
+                hazeState = playerHaze,
+                onAddToQueue = { song ->
+                    onAddToQueue?.invoke(song)
+                },
+                onDismiss = { showAddSongs = false },
+            )
+        }
+        if (showSleepTimerSheet) {
+            SmartSleepTimerSheet(
+                hazeState = playerHaze,
+                onDismiss = { showSleepTimerSheet = false },
+            )
+        }
         if (showAudioPipeline) {
             AudioPipelineDialog(
                 hazeState = playerHaze,
@@ -1898,13 +1938,26 @@ fun NowPlayingScreen(
                                 onScrub = onScrub,
                                 onScrubFinished = onScrubFinished,
                             ) {
-                                PlaybackQualityLabel(
-                                    song = song,
-                                    isLoading = isLoading,
+                                Row(
                                     modifier = Modifier
                                         .align(Alignment.Center)
                                         .padding(horizontal = 8.dp),
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                ) {
+                                    if (nothingOsMode) {
+                                        NothingGlyphEqualizer(
+                                            isPlaying = isPlaying && position.advancing,
+                                            modifier = Modifier
+                                                .height(13.dp)
+                                                .padding(end = 6.dp),
+                                        )
+                                    }
+                                    PlaybackQualityLabel(
+                                        song = song,
+                                        isLoading = isLoading,
+                                    )
+                                }
                             }
                         },
                         transport = {
@@ -1968,6 +2021,27 @@ fun NowPlayingScreen(
                                 onClick = lyricsTranslation.toggleTranslation,
                             )
                         },
+                        shareToggle = {
+                            if (lyricsShareEnabled) {
+                                ShareLyricsToggleButton(
+                                    enabled = true,
+                                    onClick = {
+                                        if (lyrics.isNullOrEmpty()) {
+                                            lyricsShare = LyricsShareRequest(
+                                                song = song,
+                                                artworkUrl = remoteArt,
+                                                lines = emptyList(),
+                                            )
+                                        } else {
+                                            val curMs = lyricsPlayhead.positionMs
+                                            val activeIndex = lyrics.indexOfLast { it.timeMs <= curMs }
+                                                .coerceAtLeast(0)
+                                            lyricPicker.pick(activeIndex)
+                                        }
+                                    },
+                                )
+                            }
+                        },
                     ) { panelModifier ->
                         LyricsTranslationMotion(
                             trigger = lyricsTranslation.transition,
@@ -2012,6 +2086,7 @@ fun NowPlayingScreen(
                         onRemove = onRemoveFromQueue,
                         onMove = onMoveInQueue,
                         onClear = onClearQueue,
+                        onOpenAddSongs = { showAddSongs = true },
                         onDragActiveChange = onQueueDragActiveChange,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -2058,14 +2133,10 @@ fun NowPlayingScreen(
             animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
             label = "fullArtworkBackdropCrossfade",
         )
-        if (legacyMeshBackdrop) {
-            // v1.5's backdrop, restored verbatim: no seam, because the blobs
-            // are not anchored to anything on screen — they fill the player and
-            // the artwork simply sits on top of them. Keyed on the track, so
-            // they drift when the player opens and on every skip, then rest.
-            // Position ticks recompose this screen twice a second and must not
-            // drag a full-screen blur along with them, which is why the palette
-            // is passed as one immutable value.
+        if (nothingOsMode) {
+            // Nothing OS UI mode: Keep the background true AMOLED pitch black
+            // for maximum contrast, zero distraction, and 100% OLED battery savings.
+        } else if (legacyMeshBackdrop) {
             MeshGradientBackground(
                 palette = rememberArtworkColors(remoteArt, canvasFrame),
                 trackKey = song.videoId,
@@ -2078,9 +2149,11 @@ fun NowPlayingScreen(
                 modifier = Modifier.graphicsLayer { alpha = 1f - fullArtworkBackdropAlpha },
             )
         }
-        fullArtworkBlurContent(
-            Modifier.graphicsLayer { alpha = fullArtworkBackdropAlpha },
-        )
+        if (!nothingOsMode) {
+            fullArtworkBlurContent(
+                Modifier.graphicsLayer { alpha = fullArtworkBackdropAlpha },
+            )
+        }
 
         // Mount once, behind the controls. A known portrait aspect changes the
         // invisible view to full-player bounds before its first frame is shown.
@@ -2871,6 +2944,11 @@ fun NowPlayingScreen(
                                 CompositingStrategy.Auto
                             }
                         }
+                        .then(
+                            if (nothingOsMode && !heroMode) {
+                                Modifier.border(1.dp, NothingThemeTokens.Border, dockFrame.cornerShape(sleeveCorner()))
+                            } else Modifier
+                        )
                         // The banner dissolves into the backdrop where the
                         // card's bottom edge would have been, and firms back
                         // up into that edge as it collapses.
@@ -3262,6 +3340,13 @@ fun NowPlayingScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     CircleGlyph(
+                        icon = Icons.Rounded.Bedtime,
+                        contentDescription = stringResource(Res.string.sleep_timer),
+                        onClick = { showSleepTimerSheet = true },
+                        active = sleepTimerStatus != SleepTimerStatus.OFF,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    CircleGlyph(
                         icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
                         contentDescription = stringResource(Res.string.more),
                         onClick = onOpenMenu,
@@ -3346,11 +3431,32 @@ fun NowPlayingScreen(
                                 onClick = lyricsTranslation.toggleRomanization,
                             )
                         }
-                        Box(
+                        Row(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
                                 .graphicsLayer { alpha = translateFade },
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            if (lyricsShareEnabled) {
+                                ShareLyricsToggleButton(
+                                    enabled = translateShown,
+                                    onClick = {
+                                        if (lyrics.isNullOrEmpty()) {
+                                            lyricsShare = LyricsShareRequest(
+                                                song = song,
+                                                artworkUrl = remoteArt,
+                                                lines = emptyList(),
+                                            )
+                                        } else {
+                                            val curMs = lyricsPlayhead.positionMs
+                                            val activeIndex = lyrics.indexOfLast { it.timeMs <= curMs }
+                                                .coerceAtLeast(0)
+                                            lyricPicker.pick(activeIndex)
+                                        }
+                                    },
+                                )
+                            }
                             TranslationToggleButton(
                                 state = lyricsTranslation.translationState,
                                 showingTranslation = lyricsTranslation.showingTranslation,
@@ -3422,6 +3528,7 @@ fun NowPlayingScreen(
                             onRemove = onRemoveFromQueue,
                             onMove = onMoveInQueue,
                             onClear = onClearQueue,
+                            onOpenAddSongs = { showAddSongs = true },
                             onScrollingChange = { queueScrolling = it },
                             onDragActiveChange = onQueueDragActiveChange,
                             collapsePlayerOnScroll = true,
@@ -3527,23 +3634,41 @@ fun NowPlayingScreen(
                 durationMs = durationMs,
                 loading = versionSwitching,
                 mixing = mixing && !scrub.scrubbing,
-                // Hidden while scrubbing: the planner is still describing
-                // where the transition *would* be, and a marker sitting under
-                // a finger that is moving the playhead invites reading it as
-                // a drag target.
                 transitionWindow = transitionWindow
                     ?.takeIf { !scrub.scrubbing && it.end > it.start }
                     ?.let { it.start..it.end },
                 onScrub = onScrub,
                 onScrubFinished = onScrubFinished,
             ) {
-                PlaybackQualityLabel(
-                    song = song,
-                    isLoading = isLoading,
+                Row(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(horizontal = 8.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    if (nothingOsMode) {
+                        NothingGlyphEqualizer(
+                            isPlaying = isPlaying && position.advancing,
+                            modifier = Modifier
+                                .height(13.dp)
+                                .padding(end = 6.dp),
+                        )
+                    }
+                    PlaybackQualityLabel(
+                        song = song,
+                        isLoading = isLoading,
+                    )
+                    if (sleepTimerStatus != SleepTimerStatus.OFF) {
+                        Spacer(Modifier.width(8.dp))
+                        SleepTimerPill(
+                            status = sleepTimerStatus,
+                            mode = sleepTimerMode,
+                            remainingMs = sleepTimerRemainingMs,
+                            onClick = { showSleepTimerSheet = true },
+                        )
+                    }
+                }
             }
 
             // The transport rides midway between the two blocks it separates:
@@ -3662,3 +3787,47 @@ private suspend fun AwaitPointerEventScope.dragQueueIn(
     onHold(false)
     onSettle(open)
 }
+
+@Composable
+private fun SleepTimerPill(
+    status: SleepTimerStatus,
+    mode: SleepTimerMode,
+    remainingMs: Long?,
+    onClick: () -> Unit,
+) {
+    val text = when {
+        status == SleepTimerStatus.PAUSED -> "Timer Paused"
+        status == SleepTimerStatus.FINISHING_CURRENT_SONG -> "Ending after track"
+        mode is SleepTimerMode.Duration && remainingMs != null -> SmartSleepTimer.formatRemaining(remainingMs)
+        mode is SleepTimerMode.SongCount -> {
+            val left = SmartSleepTimer.remainingSongs.value
+            if (left <= 1) "Last track" else "$left songs left"
+        }
+        else -> "Sleep Timer"
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.16f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Bedtime,
+            contentDescription = null,
+            tint = Color(0xFFCE93D8),
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+            ),
+            color = Color.White,
+        )
+    }
+}
+
