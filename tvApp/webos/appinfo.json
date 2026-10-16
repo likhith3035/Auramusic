@@ -1,0 +1,15 @@
+{
+  "id": "com.aura.music.tv",
+  "version": "1.0.0",
+  "vendor": "AuraMusic",
+  "type": "web",
+  "main": "index.html",
+  "title": "AuraMusic",
+  "icon": "Logo.png",
+  "largeIcon": "Logo.png",
+  "bgImage": "Banner.png",
+  "resolution": "1920x1080",
+  "supportGpu": true,
+  "supportAudioGuidance": true,
+  "requiredMemory": 64
+}
