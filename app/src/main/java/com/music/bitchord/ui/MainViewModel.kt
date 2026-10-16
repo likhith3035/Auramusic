@@ -14,6 +14,9 @@ import com.music.bitchord.data.AppUpdateChecker
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.newrelease.NewRelease
+import com.music.bitchord.data.newrelease.NewReleaseCache
+import com.music.bitchord.data.newrelease.NewReleaseChecker
 import com.music.bitchord.data.model.SPOTIFY_MISSING_PREFIX
 import com.music.bitchord.data.model.SPOTIFY_PENDING_PREFIX
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
@@ -103,6 +106,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _home = MutableStateFlow<UiState<List<HomeShelf>>>(UiState.Loading)
     val home: StateFlow<UiState<List<HomeShelf>>> = _home.asStateFlow()
+
+    private val _newReleasesForYou = MutableStateFlow<List<NewRelease>>(emptyList())
+    val newReleasesForYou: StateFlow<List<NewRelease>> = _newReleasesForYou.asStateFlow()
 
     /**
      * Token for the next page of Home shelves; null once there's nothing
@@ -1650,6 +1656,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
+            if (_signedIn.value && AppSettings.newReleaseAlertsEnabled.value) {
+                launch {
+                    try {
+                        val cached = NewReleaseCache.getCachedReleases(getApplication())
+                        if (cached.isNotEmpty() && isCurrentHomeLoad(identity, generation)) {
+                            _newReleasesForYou.value = cached
+                            publishNewForYouShelf(cached)
+                        }
+                        val fresh = NewReleaseChecker.checkNewReleases(getApplication(), forceAll = true)
+                        if (fresh.isNotEmpty() && isCurrentHomeLoad(identity, generation)) {
+                            _newReleasesForYou.value = fresh
+                            publishNewForYouShelf(fresh)
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
         }
     }
 
@@ -1682,6 +1705,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (added.isNotEmpty()) _home.value = UiState.Success(existing + added)
     }
 
+    fun markNewReleasesSeen() {
+        viewModelScope.launch {
+            NewReleaseCache.markAllAsSeen(getApplication())
+        }
+    }
+
+    private fun publishNewForYouShelf(releases: List<NewRelease>) {
+        if (releases.isEmpty()) return
+        val items = releases.map { it.toShelfItem() }
+        val shelf = HomeShelf(
+            title = NEW_FOR_YOU_SHELF,
+            items = items,
+            subtitle = getApplication<Application>().getString(R.string.new_releases_shelf_subtitle),
+        )
+        val existing = (_home.value as? UiState.Success)?.data.orEmpty()
+        if (existing.isEmpty()) {
+            _home.value = UiState.Success(listOf(shelf))
+            homeSeenTitles.add(NEW_FOR_YOU_SHELF.lowercase(Locale.ROOT))
+            return
+        }
+        val recentsIndex = existing.indexOfFirst {
+            it.title.equals("Recents", ignoreCase = true) ||
+            it.title.equals("Recently played", ignoreCase = true)
+        }
+        val withoutOld = existing.filterNot { it.title.equals(NEW_FOR_YOU_SHELF, ignoreCase = true) }
+        val insertPos = if (recentsIndex >= 0) (recentsIndex + 1).coerceAtMost(withoutOld.size) else 0
+        val updated = withoutOld.toMutableList().apply {
+            add(insertPos, shelf)
+        }
+        homeSeenTitles.add(NEW_FOR_YOU_SHELF.lowercase(Locale.ROOT))
+        _home.value = UiState.Success(updated)
+    }
+
     /** Refreshes the core feed without blanking the current Play page first. */
     private suspend fun refreshHome(identity: String?) = coroutineScope {
         val recent = if (_signedIn.value) async { YtMusicRepository.homeRecentlyPlayed() } else null
@@ -1695,6 +1751,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         recent?.await()?.onSuccess { shelf ->
             if (identity == listenerKey()) shelf?.let { publishHomeShelves(listOf(it), prepend = true) }
+        }
+        if (_signedIn.value && AppSettings.newReleaseAlertsEnabled.value) {
+            launch {
+                try {
+                    val fresh = NewReleaseChecker.checkNewReleases(getApplication(), forceAll = true)
+                    if (fresh.isNotEmpty() && identity == listenerKey()) {
+                        _newReleasesForYou.value = fresh
+                        publishNewForYouShelf(fresh)
+                    }
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 
@@ -2300,6 +2368,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        const val NEW_FOR_YOU_SHELF = "New For You"
+
         /** How many Spotify tracks are looked up on YouTube Music at once. */
         private const val SPOTIFY_MATCH_PARALLELISM = 6
 

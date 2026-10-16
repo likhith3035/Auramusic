@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Picker artwork for the 4×2 widget, on hosts older than API 31. See
-  widget_preview_square for why the band is part of the background gradient.
-  The two bars on the left stand in for the title and artist lines.
+  Picker artwork for the 4×2 widget, on hosts older than API 31.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -11,7 +9,20 @@
     android:viewportWidth="250"
     android:viewportHeight="110">
 
-    <path android:pathData="M12,0 L238,0 A12,12 0 0 1 250,12 L250,98 A12,12 0 0 1 238,110 L12,110 A12,12 0 0 1 0,98 L0,12 A12,12 0 0 1 12,0 Z">
+    <path android:pathData="M12,0 L238,0 A12,12 0 0 1 250,12 L250,98 A12,12 0 0 1 238,110 L12,110 A12,12 0 0 1 0,98 L0,12 A12,12 0 0 1 12,0 Z"
+        android:strokeWidth="1.5">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="250"
+                android:endY="110"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear">
+                <item android:color="#B300F0FF" android:offset="0" />
+                <item android:color="#553B82F6" android:offset="0.5" />
+                <item android:color="#888B5CF6" android:offset="1" />
+            </gradient>
+        </aapt:attr>
         <aapt:attr name="android:fillColor">
             <gradient
                 android:endX="0"
@@ -26,19 +37,48 @@
         </aapt:attr>
     </path>
 
-    <!-- Title and artist. -->
-    <path android:pathData="M18,73L104,73" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeWidth="7" />
-    <path android:pathData="M18,89L74,89" android:strokeColor="#8CFFFFFF" android:strokeLineCap="round" android:strokeWidth="6" />
+    <!-- AuraMusic Badge (top-right) -->
+    <path
+        android:pathData="M214,8 L238,8 A4,4 0 0 1 242,12 L242,18 A4,4 0 0 1 238,22 L214,22 A4,4 0 0 1 210,18 L210,12 A4,4 0 0 1 214,8 Z"
+        android:fillColor="#3300F0FF"
+        android:strokeColor="#6600F0FF"
+        android:strokeWidth="1" />
 
-    <!-- Transport, right-aligned in the band: previous, play, next. -->
-    <group android:translateX="160" android:translateY="68" android:scaleX="1" android:scaleY="1">
+    <!-- Waveform in Badge -->
+    <path android:pathData="M216,16L216,14" android:strokeColor="#00F0FF" android:strokeWidth="1.2" android:strokeLineCap="round" />
+    <path android:pathData="M219,18L219,12" android:strokeColor="#00F0FF" android:strokeWidth="1.2" android:strokeLineCap="round" />
+    <path android:pathData="M222,16L222,14" android:strokeColor="#00F0FF" android:strokeWidth="1.2" android:strokeLineCap="round" />
+
+    <!-- Title and artist. -->
+    <path android:pathData="M18,73L104,73" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeWidth="6" />
+    <path android:pathData="M18,87L84,87" android:strokeColor="#80A0B4DE" android:strokeLineCap="round" android:strokeWidth="4" />
+
+    <!-- Transport: previous, play, next. -->
+    <group android:translateX="158" android:translateY="68" android:scaleX="1" android:scaleY="1">
         <path android:pathData="M7,7.4L7,16.6" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeWidth="2.4" />
         <path android:fillColor="#FFFFFFFF" android:pathData="M16.6,7.7L16.6,16.3L10.7,12Z" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2.4" />
     </group>
-    <group android:translateX="188" android:translateY="68" android:scaleX="1" android:scaleY="1">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M8.4,6.4L8.4,17.6L17.6,12Z" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2.6" />
+
+    <!-- Hero Play Button -->
+    <group android:translateX="186" android:translateY="68" android:scaleX="1" android:scaleY="1">
+        <path android:pathData="M1,12 A11,11 0 1,1 23,12 A11,11 0 1,1 1,12 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:endX="23"
+                    android:endY="23"
+                    android:startX="1"
+                    android:startY="1"
+                    android:type="linear">
+                    <item android:color="#FF00F0FF" android:offset="0" />
+                    <item android:color="#FF2563EB" android:offset="0.5" />
+                    <item android:color="#FF7C3AED" android:offset="1" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:fillColor="#FFFFFFFF" android:pathData="M9.5,7.5L9.5,16.5L16.5,12Z" />
     </group>
-    <group android:translateX="216" android:translateY="68" android:scaleX="1" android:scaleY="1">
+
+    <group android:translateX="214" android:translateY="68" android:scaleX="1" android:scaleY="1">
         <path android:fillColor="#FFFFFFFF" android:pathData="M7.4,7.7L7.4,16.3L13.3,12Z" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2.4" />
         <path android:pathData="M17,7.4L17,16.6" android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:strokeWidth="2.4" />
     </group>

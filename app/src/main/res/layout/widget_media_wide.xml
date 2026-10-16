@@ -21,6 +21,38 @@
         android:contentDescription="@string/widget_artwork"
         android:scaleType="fitXY" />
 
+    <!-- Top-Right AuraMusic Brand Badge -->
+    <LinearLayout
+        android:id="@+id/widget_brand_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="12dp"
+        android:background="@drawable/widget_brand_badge_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="8dp"
+        android:paddingTop="4dp"
+        android:paddingRight="9dp"
+        android:paddingBottom="4dp">
+
+        <ImageView
+            android:layout_width="13dp"
+            android:layout_height="13dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_waveform" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="5dp"
+            android:fontFamily="@font/sf_pro_display_semibold"
+            android:includeFontPadding="false"
+            android:text="AuraMusic"
+            android:textColor="#EEFFFFFF"
+            android:textSize="11sp" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/widget_band"
         android:layout_width="match_parent"
@@ -59,7 +91,7 @@
                 android:fontFamily="@font/sf_pro_display_regular"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="#B3FFFFFF"
+                android:textColor="#A0B4DE"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -76,9 +108,9 @@
             android:id="@+id/widget_toggle"
             android:layout_width="@dimen/widget_button_wide"
             android:layout_height="@dimen/widget_button_wide"
-            android:background="@drawable/widget_transport_button"
+            android:background="@drawable/widget_hero_toggle_button"
             android:contentDescription="@string/widget_play"
-            android:padding="10dp"
+            android:padding="8dp"
             android:src="@drawable/ic_widget_play" />
 
         <ImageView

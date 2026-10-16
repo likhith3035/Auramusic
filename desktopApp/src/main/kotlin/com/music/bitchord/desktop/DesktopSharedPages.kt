@@ -96,6 +96,12 @@ internal object DesktopAppUiHost : AppUiHost {
         return ids
     }
 
+    override val nothingOsMode: StateFlow<Boolean> get() = DesktopPlayerSettings.nothingOsMode
+
+    override fun setNothingOsMode(value: Boolean) {
+        DesktopPlayerSettings.setNothingOsMode(value)
+    }
+
     private const val KEY_SWIPE_PLAY_NEXT = "swipe_play_next"
     private const val KEY_HOME_RECENTS_VIEW = "home_recents_view"
 }

@@ -232,8 +232,7 @@ abstract class MediaWidget : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, layout)
             art?.let { views.setImageViewBitmap(R.id.widget_art, it) }
 
-            // Both layouts carry the title; only the wide one has room for the
-            // artist beneath it.
+            // Both layouts carry the title and artist subtitle.
             views.setTextViewText(
                 R.id.widget_title,
                 if (snapshot.hasTrack) {
@@ -242,13 +241,17 @@ abstract class MediaWidget : AppWidgetProvider() {
                     context.getString(R.string.widget_nothing_played)
                 },
             )
-            if (size.wide) {
-                views.setTextViewText(R.id.widget_artist, snapshot.artist)
-                views.setViewVisibility(
-                    R.id.widget_artist,
-                    if (snapshot.artist.isBlank()) View.GONE else View.VISIBLE,
-                )
+            val displayArtist = when {
+                !snapshot.hasTrack -> ""
+                snapshot.artist.isBlank() -> "AuraMusic"
+                snapshot.artist.contains("AuraMusic", ignoreCase = true) -> snapshot.artist
+                else -> "${snapshot.artist} • AuraMusic"
             }
+            views.setTextViewText(R.id.widget_artist, displayArtist)
+            views.setViewVisibility(
+                R.id.widget_artist,
+                if (displayArtist.isBlank()) View.GONE else View.VISIBLE,
+            )
 
             views.setImageViewResource(
                 R.id.widget_toggle,
@@ -267,6 +270,7 @@ abstract class MediaWidget : AppWidgetProvider() {
             // artwork and should behave like it.
             val open = openPlayer(context)
             views.setOnClickPendingIntent(R.id.widget_root, open)
+            views.setOnClickPendingIntent(R.id.widget_brand_container, open)
 
             if (snapshot.hasTrack) {
                 views.setImageAlpha(R.id.widget_toggle, ALPHA_ENABLED)

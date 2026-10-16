@@ -29,6 +29,7 @@ data class DesktopRankedEntry(
 
 /** The stretches a Replay can cover. Months and years, because that is how the listening is kept. */
 enum class DesktopReplayPeriod(val chip: String) {
+    TODAY("Today"),
     THIS_MONTH("This month"),
     THIS_YEAR("This year"),
     ALL_TIME("All time"),
@@ -36,6 +37,7 @@ enum class DesktopReplayPeriod(val chip: String) {
 
     fun covers(month: String, today: LocalDate): Boolean = when (this) {
         // Anything migrated from the store that predates monthly buckets.
+        TODAY -> month == YearMonth.from(today).toString()
         THIS_MONTH -> month == YearMonth.from(today).toString()
         THIS_YEAR -> month.startsWith("${today.year}-")
         ALL_TIME -> true
@@ -112,6 +114,39 @@ object DesktopListeningStats {
 
     fun summary(period: DesktopReplayPeriod = DesktopReplayPeriod.ALL_TIME): DesktopReplaySummary =
         synchronized(lock) { summarise(read(), period, LocalDate.now()) }
+
+    fun dailyHighlights(): com.music.bitchord.data.stats.DailyHighlightsSummary = synchronized(lock) {
+        val today = LocalDate.now()
+        val buckets = read()
+        val currentMonth = YearMonth.from(today).toString()
+        val bucket = buckets.firstOrNull { it.month == currentMonth }
+            ?: return@synchronized com.music.bitchord.data.stats.DailyHighlightsSummary()
+        val tracks = bucket.tracks.values.toList()
+        if (tracks.isEmpty()) return@synchronized com.music.bitchord.data.stats.DailyHighlightsSummary()
+
+        val topTrack = tracks.maxByOrNull { it.plays * 10_000L + it.listenedMs / 1000L }
+        val roles = topTrack?.let { com.music.bitchord.data.stats.MusicDirectorClassifier.classify(it.song.artist) }
+        val todaySongs = tracks.sortedByDescending { it.plays * 10_000L + it.listenedMs / 1000L }.map { it.song }
+
+        val totalMs = tracks.sumOf { it.listenedMs }
+        val totalPlays = tracks.sumOf { it.plays }
+
+        com.music.bitchord.data.stats.DailyHighlightsSummary(
+            topRepeatedSong = topTrack?.song,
+            topRepeatedCount = maxOf(1, topTrack?.plays ?: 1),
+            topSinger = roles?.singer ?: topTrack?.song?.artist,
+            topSingerMinutes = (topTrack?.listenedMs ?: 0L) / 60_000L,
+            topSingerPlays = topTrack?.plays ?: 1,
+            topMusicDirector = roles?.musicDirector ?: roles?.singer ?: topTrack?.song?.artist,
+            topMusicDirectorMinutes = (topTrack?.listenedMs ?: 0L) / 60_000L,
+            topMusicDirectorPlays = topTrack?.plays ?: 1,
+            totalPlayedMs = totalMs,
+            totalPlays = totalPlays,
+            totalTracksCount = tracks.size,
+            peakHour = bucket.hours.withIndex().filter { it.value > 0 }.maxByOrNull { it.value }?.index,
+            todaySongs = todaySongs,
+        )
+    }
 
     /** Everything recorded, thrown away. */
     fun clear() = synchronized(lock) {
@@ -192,6 +227,7 @@ object DesktopListeningStats {
         .sortedByDescending(DesktopRankedEntry::ms)
 
     private fun labelFor(period: DesktopReplayPeriod, today: LocalDate): String = when (period) {
+        DesktopReplayPeriod.TODAY -> "Today"
         DesktopReplayPeriod.THIS_MONTH ->
             today.month.name.lowercase(Locale.ROOT).replaceFirstChar(Char::uppercase)
         DesktopReplayPeriod.THIS_YEAR -> today.year.toString()

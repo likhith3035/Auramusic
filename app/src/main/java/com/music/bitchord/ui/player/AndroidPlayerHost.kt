@@ -62,6 +62,7 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         override val lyricsOffsetMs get() = AppSettings.lyricsOffsetMs
         override val lyricsSourceOrder get() = AppSettings.lyricsSourceOrder
         override val meteredConnection get() = AppSettings.meteredConnection
+        override val nothingOsMode get() = AppSettings.nothingOsMode
         override val preferUsbDac get() = AppSettings.preferUsbDac
         override val prioritizeSpotifyCanvas get() = AppSettings.prioritizeSpotifyCanvas
         override val reduceAnimation get() = AppSettings.reduceAnimation
@@ -76,9 +77,24 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         override val syncedLyrics get() = AppSettings.syncedLyrics
         override val translationLanguage get() = AppSettings.translationLanguage
         override val versionAlignmentInProgress get() = AppSettings.versionAlignmentInProgress
+        override val playbackSpeed get() = AppSettings.playbackSpeed
+        override val fastForwardHoldSpeed get() = AppSettings.fastForwardHoldSpeed
+        override val rewindHoldSpeed get() = AppSettings.rewindHoldSpeed
 
         override fun setLastPlayerScreen(value: LastPlayerScreen) = AppSettings.setLastPlayerScreen(value)
         override fun setLyricsOffsetMs(value: Int) = AppSettings.setLyricsOffsetMs(value)
+        override fun setNothingOsMode(value: Boolean) = AppSettings.setNothingOsMode(value)
+        override fun setPlaybackSpeed(value: Float) = AppSettings.setPlaybackSpeed(value)
+        override fun setFastForwardHoldSpeed(value: Float) = AppSettings.setFastForwardHoldSpeed(value)
+        override fun setRewindHoldSpeed(value: Float) = AppSettings.setRewindHoldSpeed(value)
+    }
+
+    override fun setTemporaryPlaybackSpeed(speed: Float) {
+        AppSettings.setTemporaryPlaybackSpeed(speed)
+    }
+
+    override fun restorePlaybackSpeed() {
+        AppSettings.restorePlaybackSpeed()
     }
 
     override fun cachedCanvas(song: Song): CanvasArtwork? = CanvasRepository.cached(song)

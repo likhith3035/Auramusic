@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Share
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -64,6 +66,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.player.SongInfoContent
 
 /** The verbs the song menu needs that the player does not otherwise know about. */
 internal data class DesktopSongActions(
@@ -190,13 +193,41 @@ internal fun DesktopSongMenu(
     onDismiss: () -> Unit,
 ) {
     var pickingSleepTimer by remember { mutableStateOf(false) }
+    var showingDetails by remember { mutableStateOf(false) }
     val liked = likeStatus == LikeStatus.LIKE
     val disliked = likeStatus == LikeStatus.DISLIKE
     // A local file or a finished download has no YouTube identity behind it to rate, queue into a
     // playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
 
-    DesktopMenuSurface(onDismiss = onDismiss) {
+    DesktopMenuSurface(
+        onDismiss = onDismiss,
+        minWidth = if (showingDetails) 380.dp else 232.dp,
+        maxWidth = if (showingDetails) 480.dp else 300.dp,
+        maxHeight = if (showingDetails) 580.dp else 460.dp,
+        scrollable = true,
+    ) {
+        if (showingDetails) {
+            SongInfoContent(
+                song = song,
+                onClose = { showingDetails = false },
+                onOpenArtist = { artistId ->
+                    showingDetails = false
+                    onDismiss()
+                    onOpenArtist?.invoke(artistId)
+                },
+                onOpenAlbum = { albumId ->
+                    showingDetails = false
+                    onDismiss()
+                    onOpenAlbum?.invoke(albumId)
+                },
+                onShare = {
+                    onShare()
+                },
+            )
+            return@DesktopMenuSurface
+        }
+
         if (pickingSleepTimer) {
             DesktopMenuHeader("Sleep timer") { pickingSleepTimer = false }
             DesktopMenuDivider()
@@ -290,6 +321,11 @@ internal fun DesktopSongMenu(
 
         DesktopMenuDivider()
         DesktopMenuRow(
+            icon = Icons.Rounded.Info,
+            label = "Song details & credits",
+            onClick = { showingDetails = true },
+        )
+        DesktopMenuRow(
             icon = Icons.Rounded.Bedtime,
             label = DesktopStrings["sleep_timer", "Sleep timer"],
             value = sleepTimerLabel(sleepTimerMinutes, sleepAfterTrack),
@@ -308,7 +344,14 @@ private fun sleepTimerLabel(minutes: Int?, afterTrack: Boolean): String = when {
 
 /** The panel a menu is drawn in: a floating card in the app's own glass. */
 @Composable
-private fun DesktopMenuSurface(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun DesktopMenuSurface(
+    onDismiss: () -> Unit,
+    minWidth: Dp = 232.dp,
+    maxWidth: Dp = 300.dp,
+    maxHeight: Dp = 460.dp,
+    scrollable: Boolean = true,
+    content: @Composable () -> Unit,
+) {
     Popup(
         popupPositionProvider = remember { DesktopMenuPosition() },
         onDismissRequest = onDismiss,
@@ -317,14 +360,14 @@ private fun DesktopMenuSurface(onDismiss: () -> Unit, content: @Composable () ->
         val shape = RoundedCornerShape(12.dp)
         Column(
             Modifier
-                .widthIn(min = 232.dp, max = 300.dp)
+                .widthIn(min = minWidth, max = maxWidth)
                 .clip(shape)
                 .desktopCard(shape)
                 .padding(vertical = 6.dp)
                 // A menu with every optional row on it is taller than a small window; capped and
                 // scrolled rather than run off the screen.
-                .heightIn(max = 460.dp)
-                .verticalScroll(rememberScrollState()),
+                .heightIn(max = maxHeight)
+                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier),
         ) {
             content()
         }

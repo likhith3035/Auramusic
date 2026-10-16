@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,12 +31,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -216,6 +219,7 @@ internal fun InlineQueue(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
+    onOpenAddSongs: (() -> Unit)? = null,
     onScrollingChange: (Boolean) -> Unit = {},
     onDragActiveChange: (Boolean) -> Unit = {},
     /** Phone only: let queue scrolling dismiss/restore the lower half player. */
@@ -269,8 +273,20 @@ internal fun InlineQueue(
                 color = Color.White,
                 modifier = Modifier.weight(1f),
             )
-            if (tracks.user.isNotEmpty()) {
-                QueueClearButton(MaterialTheme.typography.titleMedium, controlsLocked, onClear)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (!controlsLocked && onOpenAddSongs != null) {
+                    QueueAddSongsButton(
+                        style = MaterialTheme.typography.labelMedium,
+                        locked = controlsLocked,
+                        onClick = onOpenAddSongs,
+                    )
+                }
+                if (tracks.user.isNotEmpty()) {
+                    QueueClearButton(MaterialTheme.typography.titleMedium, controlsLocked, onClear)
+                }
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -314,10 +330,65 @@ internal fun InlineQueue(
                             title = stringResource(Res.string.next_in_queue),
                             modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).then(queueMotion()),
                         ) {
-                            QueueClearButton(MaterialTheme.typography.labelLarge, controlsLocked, onClear)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                if (!controlsLocked && onOpenAddSongs != null) {
+                                    QueueAddSongsButton(
+                                        style = MaterialTheme.typography.labelSmall,
+                                        locked = controlsLocked,
+                                        onClick = onOpenAddSongs,
+                                    )
+                                }
+                                QueueClearButton(MaterialTheme.typography.labelLarge, controlsLocked, onClear)
+                            }
                         }
                     }
                     queueSection(tracks.user, QueueSection.USER, drag, controlsLocked, onJumpTo, onRemove)
+                } else if (!controlsLocked && onOpenAddSongs != null) {
+                    item(key = "empty-user-queue-card") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .clickable(onClick = onOpenAddSongs)
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
+                                .then(queueMotion()),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00D2FF).copy(alpha = 0.18f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    tint = Color(0xFF00D2FF),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Add Songs to Queue",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "Tap to search and pick songs to play next",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.55f),
+                                )
+                            }
+                        }
+                    }
                 }
                 if (tracks.context.isNotEmpty()) {
                     item(key = "header-context") {
@@ -423,6 +494,32 @@ private fun QueueClearButton(style: TextStyle, locked: Boolean, onClear: () -> U
             .clickable(enabled = !locked, onClick = onClear)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     )
+}
+
+@Composable
+private fun QueueAddSongsButton(style: TextStyle, locked: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .background(Color.White.copy(alpha = if (locked) 0.05f else 0.12f))
+            .clickable(enabled = !locked, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Add,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = if (locked) 0.3f else 0.95f),
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = "Add Songs",
+            style = style,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White.copy(alpha = if (locked) 0.3f else 0.95f),
+        )
+    }
 }
 
 @Composable

@@ -2,6 +2,9 @@ package com.music.bitchord.ui.screens
 
 import com.music.bitchord.ui.components.contextClick
 import com.music.bitchord.ui.AppUi
+import com.music.bitchord.ui.theme.NothingThemeTokens
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
 import com.music.bitchord.sharedui.resources.*
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.DrawableResource
@@ -52,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -87,6 +91,7 @@ import com.music.bitchord.ui.components.recentlyPlayedSkeleton
 import com.music.bitchord.ui.components.heroCardWidth
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.trackColumnWidth
+import com.music.bitchord.ui.home.AuraGreetingHeader
 import com.music.bitchord.ui.player.MeshGradientBackground
 import com.music.bitchord.ui.player.MeshPalette
 
@@ -138,31 +143,32 @@ fun HomeScreen(
     leadHero: Boolean = true,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
+    accountName: String? = null,
 ) {
     val recentsViewType by AppUi.host.homeRecentsViewType.collectAsStateWithLifecycle()
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
 
     PullToRefresh(
         refreshing = refreshing,
         onRefresh = onRefresh,
         state = pullState,
-        modifier = modifier,
+        modifier = modifier.then(if (nothingOsMode) Modifier.background(NothingThemeTokens.Black) else Modifier),
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(if (nothingOsMode) Modifier.background(NothingThemeTokens.Black) else Modifier),
             // The heading sits higher than the other tabs' first row: pull the
             // whole feed up by [HOME_TITLE_LIFT] with it.
-            contentPadding = if (title != null) {
-                PaddingValues(
-                    top = (contentPadding.calculateTopPadding() - HOME_TITLE_LIFT).coerceAtLeast(0.dp),
-                    bottom = contentPadding.calculateBottomPadding(),
-                )
-            } else {
-                contentPadding
-            },
+            contentPadding = PaddingValues(
+                top = (contentPadding.calculateTopPadding() - HOME_TITLE_LIFT).coerceAtLeast(0.dp),
+                bottom = contentPadding.calculateBottomPadding(),
+            ),
         ) {
-            if (title != null) {
-                item { HomeTitle(title) }
+            item {
+                AuraGreetingHeader(
+                    accountName = accountName,
+                    nothingOsMode = nothingOsMode,
+                )
             }
             if (!signedIn && onSignIn != null) {
                 item {
@@ -439,6 +445,9 @@ fun CompactTrackRow(
     isCurrent: Boolean = false,
     isPlaying: Boolean = false,
 ) {
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+    val playingColor = if (nothingOsMode) NothingThemeTokens.Red else PlayingAccent
+    val rowShape = if (nothingOsMode) RoundedCornerShape(10.dp) else RoundedCornerShape(7.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -454,9 +463,12 @@ fun CompactTrackRow(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .thumbnailBorder(RoundedCornerShape(7.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .clip(rowShape)
+                    .then(
+                        if (nothingOsMode) Modifier.border(1.dp, NothingThemeTokens.Border, rowShape)
+                        else Modifier.thumbnailBorder(rowShape)
+                    )
+                    .background(if (nothingOsMode) NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant),
             )
             if (isCurrent && isPlaying) SearchPlayingBars(Modifier.align(Alignment.Center))
         }
@@ -465,7 +477,7 @@ fun CompactTrackRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isCurrent) PlayingAccent else MaterialTheme.colorScheme.onBackground,
+                color = if (isCurrent) playingColor else MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -493,23 +505,57 @@ fun CompactTrackRow(
  */
 @Composable
 private fun HomeTitle(title: String, modifier: Modifier = Modifier) {
-    val style = MaterialTheme.typography.displayLarge
-    val logoHeight = with(LocalDensity.current) { (style.fontSize * LOGO_TO_FONT).toDp() }
-    Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
-        Icon(
-            painter = painterResource(Res.drawable.ic_logo),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .padding(bottom = 14.dp)
-                .height(logoHeight)
-                .aspectRatio(LOGO_ASPECT),
-        )
-        Text(
-            text = title,
-            style = style,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+    if (nothingOsMode) {
+        Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                Text(
+                    text = "A U R A",
+                    style = MaterialTheme.typography.displayMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 4.sp,
+                    ),
+                    color = NothingThemeTokens.White,
+                )
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(NothingThemeTokens.Red),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Light,
+                    letterSpacing = 1.sp,
+                ),
+                color = NothingThemeTokens.MutedText,
+            )
+        }
+    } else {
+        val style = MaterialTheme.typography.displayLarge
+        val logoHeight = with(LocalDensity.current) { (style.fontSize * LOGO_TO_FONT).toDp() }
+        Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_logo),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .padding(bottom = 14.dp)
+                    .height(logoHeight)
+                    .aspectRatio(LOGO_ASPECT),
+            )
+            Text(
+                text = title,
+                style = style,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
     }
 }
 
@@ -530,6 +576,7 @@ private const val LOGO_ASPECT = 730f / 484f
 internal fun SectionHeader(title: String, subtitle: String = "", onShowAll: (() -> Unit)? = null) {
     val displayTitle = localizeShelfTitle(title)
     val displaySubtitle = localizeShelfSubtitle(subtitle)
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
     Row(
         modifier = Modifier
             .padding(horizontal = PAGE_GUTTER, vertical = 10.dp)
@@ -537,13 +584,33 @@ internal fun SectionHeader(title: String, subtitle: String = "", onShowAll: (() 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                text = displayTitle,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = displayTitle,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (title.equals("New For You", ignoreCase = true)) {
+                    Spacer(Modifier.width(8.dp))
+                    val badgeBg = if (nothingOsMode) NothingThemeTokens.Red else MaterialTheme.colorScheme.primary
+                    val badgeColor = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onPrimary
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(if (nothingOsMode) 50 else 6))
+                            .background(badgeBg)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = "NEW",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = badgeColor,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
             if (displaySubtitle.isNotBlank()) {
                 Text(
                     text = displaySubtitle,
@@ -783,12 +850,17 @@ private fun HeroCard(
     isCurrent: Boolean = false,
     isPlaying: Boolean = false,
 ) {
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+    val heroShape = if (nothingOsMode) RoundedCornerShape(24.dp) else RoundedCornerShape(18.dp)
     Box(
         modifier = modifier
             .aspectRatio(HERO_CARD_RATIO)
-            .clip(RoundedCornerShape(18.dp))
-            .thumbnailBorder(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(heroShape)
+            .then(
+                if (nothingOsMode) Modifier.border(1.dp, NothingThemeTokens.Border, heroShape)
+                else Modifier.thumbnailBorder(heroShape)
+            )
+            .background(if (nothingOsMode) NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant)
             .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .contextClick(onLongPress),
     ) {
@@ -813,7 +885,7 @@ private fun HeroCard(
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleLarge,
-                color = if (isCurrent) PlayingAccent else Color.White,
+                color = if (isCurrent) (if (nothingOsMode) NothingThemeTokens.Red else PlayingAccent) else Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1022,13 +1094,18 @@ internal fun ShelfCard(
                 icon = Icons.Rounded.Storage,
             )
             else -> {
+                val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+                val shelfShape = if (nothingOsMode) RoundedCornerShape(20.dp) else RoundedCornerShape(12.dp)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .thumbnailBorder(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .clip(shelfShape)
+                        .then(
+                            if (nothingOsMode) Modifier.border(1.dp, NothingThemeTokens.Border, shelfShape)
+                            else Modifier.thumbnailBorder(shelfShape)
+                        )
+                        .background(if (nothingOsMode) NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     AsyncImage(
                         model = item.thumbnailUrl.artworkAt(CARD_ART_PX),
@@ -1054,10 +1131,16 @@ internal fun ShelfCard(
                 )
                 Spacer(Modifier.width(4.dp))
             }
+            val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+            val cardTitleColor = if (isCurrent) {
+                if (nothingOsMode) NothingThemeTokens.Red else PlayingAccent
+            } else {
+                MaterialTheme.colorScheme.onBackground
+            }
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isCurrent) PlayingAccent else MaterialTheme.colorScheme.onBackground,
+                color = cardTitleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),

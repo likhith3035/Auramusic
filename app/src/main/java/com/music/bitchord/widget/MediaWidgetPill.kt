@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.graphics.Bitmap
+import android.view.View
 import android.widget.RemoteViews
 import com.music.bitchord.MainActivity
 import com.music.bitchord.R
@@ -148,12 +149,33 @@ class MediaWidgetPill : AppWidgetProvider() {
 
             views.setTextViewText(
                 R.id.widget_title,
-                when {
-                    !snapshot.hasTrack -> context.getString(R.string.widget_nothing_played)
-                    snapshot.artist.isBlank() -> snapshot.title
-                    else -> "${snapshot.title} - ${snapshot.artist}"
+                if (snapshot.hasTrack) {
+                    snapshot.title
+                } else {
+                    context.getString(R.string.widget_nothing_played)
                 },
             )
+            val displayArtist = when {
+                !snapshot.hasTrack -> ""
+                snapshot.artist.isBlank() -> "AuraMusic"
+                snapshot.artist.contains("AuraMusic", ignoreCase = true) -> snapshot.artist
+                else -> "${snapshot.artist} • AuraMusic"
+            }
+            views.setTextViewText(R.id.widget_artist, displayArtist)
+            views.setViewVisibility(
+                R.id.widget_artist,
+                if (displayArtist.isBlank()) View.GONE else View.VISIBLE,
+            )
+
+            if (snapshot.hasTrack) {
+                views.setViewVisibility(R.id.widget_equalizer, View.VISIBLE)
+                views.setImageAlpha(
+                    R.id.widget_equalizer,
+                    if (snapshot.isPlaying) ALPHA_ENABLED else ALPHA_DISABLED,
+                )
+            } else {
+                views.setViewVisibility(R.id.widget_equalizer, View.GONE)
+            }
 
             views.setImageViewResource(
                 R.id.widget_toggle,

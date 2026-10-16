@@ -40,6 +40,9 @@ object SmartSleepTimer {
     private val _deadlineMs = MutableStateFlow<Long?>(null)
     val deadlineMs: StateFlow<Long?> = _deadlineMs.asStateFlow()
 
+    /** Chosen preset minutes, or null if off/custom/track-based. */
+    val minutes = MutableStateFlow<Int?>(null)
+
     /** Frozen remaining ms when timer is paused. */
     private var pausedDurationRemainingMs: Long? = null
 
@@ -70,6 +73,7 @@ object SmartSleepTimer {
         cancel()
         _mode.value = SleepTimerMode.Duration(minutes)
         _status.value = SleepTimerStatus.RUNNING
+        this.minutes.value = minutes
         _deadlineMs.value = MonotonicClock.nowMs() + (minutes * 60_000L)
         pausedDurationRemainingMs = null
         recordUserActivity()
@@ -99,6 +103,7 @@ object SmartSleepTimer {
         cancel()
         _mode.value = SleepTimerMode.SongCount(totalSongs)
         _status.value = SleepTimerStatus.RUNNING
+        this.minutes.value = null
         completedSongs.value = 0
         remainingSongs.value = totalSongs
         shouldStopAfterCurrentTrack.value = (totalSongs == 1)
@@ -152,6 +157,7 @@ object SmartSleepTimer {
         _mode.value = SleepTimerMode.Off
         _status.value = SleepTimerStatus.OFF
         _deadlineMs.value = null
+        this.minutes.value = null
         pausedDurationRemainingMs = null
         shouldStopAfterCurrentTrack.value = false
         completedSongs.value = 0

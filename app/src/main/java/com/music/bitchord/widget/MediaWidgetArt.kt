@@ -121,6 +121,12 @@ internal object MediaWidgetArt {
 
         val rounded = composed.withRoundedCorners(cornerRadiusPx)
         composed.recycle()
+        Canvas(rounded).drawNeonBorder(
+            width = widthPx.toFloat(),
+            height = heightPx.toFloat(),
+            radius = cornerRadiusPx,
+            strokeWidthPx = (widthPx * 0.007f).coerceIn(2.5f, 5f),
+        )
         if (!failed) cacheKey?.let { composites.put(it, rounded) }
         return rounded
     }
@@ -156,8 +162,15 @@ internal object MediaWidgetArt {
         }
         val square = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         Canvas(square).fillCentreCropped(cover)
-        val round = square.withRoundedCorners(sizePx / 2f)
+        val radiusPx = sizePx * 0.24f
+        val round = square.withRoundedCorners(radiusPx)
         square.recycle()
+        Canvas(round).drawNeonBorder(
+            width = sizePx.toFloat(),
+            height = sizePx.toFloat(),
+            radius = radiusPx,
+            strokeWidthPx = (sizePx * 0.025f).coerceIn(2f, 4f),
+        )
         composites.put(circleKey(key, sizePx), round)
         return round
     }
@@ -233,6 +246,12 @@ internal object MediaWidgetArt {
         // the home screen rather than being pasted over it.
         val rounded = composed.withRoundedCorners(heightPx / 2f, PILL_ALPHA)
         composed.recycle()
+        Canvas(rounded).drawNeonBorder(
+            width = widthPx.toFloat(),
+            height = heightPx.toFloat(),
+            radius = heightPx / 2f,
+            strokeWidthPx = (heightPx * 0.025f).coerceIn(2f, 4f),
+        )
         if (!failed && key != null) composites.put(pillKey(key, widthPx, heightPx), rounded)
         return rounded
     }
@@ -628,6 +647,32 @@ internal object MediaWidgetArt {
             },
         )
         return out
+    }
+
+    /**
+     * Paints a luminous glassmorphic neon gradient border stroke around the
+     * widget's rounded outline.
+     */
+    private fun Canvas.drawNeonBorder(
+        width: Float,
+        height: Float,
+        radius: Float,
+        strokeWidthPx: Float = 3f,
+    ) {
+        val half = strokeWidthPx / 2f
+        val rect = RectF(half, half, width - half, height - half)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+            shader = LinearGradient(
+                0f, 0f, width, height,
+                intArrayOf(0xB300F0FF.toInt(), 0x553B82F6, 0x888B5CF6.toInt()),
+                floatArrayOf(0f, 0.45f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+        }
+        val r = (radius - half).coerceAtLeast(0f)
+        drawRoundRect(rect, r, r, paint)
     }
 
     // ---- tuning ----

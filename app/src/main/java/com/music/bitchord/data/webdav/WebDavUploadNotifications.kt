@@ -46,6 +46,7 @@ object WebDavUploadNotifications {
         }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_logo)
+            .setColor(0xFF00E5FF.toInt())
             .setContentTitle(title)
             .setContentText(text)
             // Indeterminate until something has a length to measure against.

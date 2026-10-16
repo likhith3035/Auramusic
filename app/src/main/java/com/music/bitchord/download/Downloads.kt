@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.widget.Toast
+import com.music.bitchord.R
 import com.music.bitchord.data.DebugLog as Log
 import androidx.core.content.ContextCompat
 import com.music.bitchord.data.innertube.StreamResolver
@@ -1032,6 +1034,15 @@ object Downloads {
                 DownloadSession.done(id)
                 clear(id)
                 Log.d(TAG, "saved $name")
+                if (!DownloadSession.state.value.busy) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.saved_to_auramusic_folder),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
             }
         } catch (e: Throwable) {
             pending?.abort()

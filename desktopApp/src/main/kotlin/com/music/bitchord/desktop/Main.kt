@@ -22,6 +22,12 @@ import bitchord.desktopapp.generated.resources.logo
 import java.awt.Dimension
 import java.awt.Rectangle
 import java.awt.Toolkit
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.music.bitchord.ui.splash.AuraSplashScreen
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.painterResource
 
@@ -73,7 +79,7 @@ private fun desktopMain() = application {
     Window(
         onCloseRequest = { if (DesktopWindowVisibility.onCloseRequest()) exitApplication() },
         visible = visible,
-        title = "BitChord",
+        title = "AuraMusic",
         icon = painterResource(Res.drawable.logo),
         state = state,
         // No system title bar on Windows, where the application draws its own instead — see
@@ -112,7 +118,7 @@ private fun desktopMain() = application {
                 (openingSize.width.value * transform.scaleX).roundToInt(),
                 (openingSize.height.value * transform.scaleY).roundToInt(),
             )
-            if (DesktopPlatform.isWindows && DesktopWindowsFrame.install("BitChord")) {
+            if (DesktopPlatform.isWindows && DesktopWindowsFrame.install("AuraMusic")) {
                 DesktopWindowBackdrop.apply()
             }
         }
@@ -150,7 +156,15 @@ private fun desktopMain() = application {
             LocalDesktopWindowActions provides actions,
             LocalDesktopWindowScope provides this,
         ) {
-            BitChordDesktopApp()
+            Box(Modifier.fillMaxSize()) {
+                BitChordDesktopApp()
+                var showSplash by remember { mutableStateOf(true) }
+                if (showSplash) {
+                    AuraSplashScreen(
+                        onFinished = { showSplash = false },
+                    )
+                }
+            }
         }
     }
 }

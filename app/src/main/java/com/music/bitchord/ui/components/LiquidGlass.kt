@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.components.backdrop.Backdrop
 import com.music.bitchord.ui.components.backdrop.backdrops.LayerBackdrop
 import com.music.bitchord.ui.components.backdrop.drawBackdrop
@@ -125,6 +126,12 @@ fun Modifier.lightweightLiquidGlass(
     shape: CornerBasedShape,
     fallbackColor: Color,
 ): Modifier {
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    if (nothingOsMode) {
+        return clip(shape)
+            .background(color = NothingThemeTokens.Black, shape = shape)
+            .border(1.dp, NothingThemeTokens.Border, shape)
+    }
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val glassTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
         Color(0xFFFAFAFA)
@@ -169,6 +176,11 @@ fun Modifier.lightweightLiquidGlass(
  */
 @Composable
 fun Modifier.liquidGlass(shape: CornerBasedShape): Modifier {
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    if (nothingOsMode) {
+        return background(NothingThemeTokens.Black, shape)
+            .border(1.dp, NothingThemeTokens.Border, shape)
+    }
     if (!isGlassSupported()) return this
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     if (reduceDynamicBlur) {

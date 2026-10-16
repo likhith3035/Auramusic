@@ -1,6 +1,10 @@
 package com.music.bitchord.ui.screens
 
 import com.music.bitchord.ui.components.contextClick
+import com.music.bitchord.ui.AppUi
+import com.music.bitchord.ui.theme.NothingPill
+import com.music.bitchord.ui.theme.NothingThemeTokens
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.Dp
 import com.music.bitchord.sharedui.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -36,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NorthWest
@@ -43,19 +48,29 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -190,7 +205,12 @@ fun SearchScreen(
             if (!loadingMore && total > 0 && lastVisible >= total - 4) onLoadMore()
         }
     }
-    Column(modifier = modifier.fillMaxSize()) {
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .then(if (nothingOsMode) Modifier.background(NothingThemeTokens.Black) else Modifier),
+    ) {
         // Search field and filter tabs stay fixed at the top, outside the
         // scrolling list, so they're always reachable rather than scrolling
         // away with the results or recent searches beneath them.
@@ -749,13 +769,91 @@ private fun LazyListScope.recentSearches(
         }
     }
     items(history, key = { "recent:${it.id}" }) { entity ->
-        RecentSearchEntityRow(
+        DismissibleRecentSearchRow(
             entity = entity,
             isCurrent = entity.entityType == EntityType.TRACK && entity.id == currentSong?.videoId,
             isPlaying = isPlaying,
             onClick = { onClick(entity) },
             onRemove = { onRemove(entity.id) },
+            modifier = Modifier.animateItem(),
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DismissibleRecentSearchRow(
+    entity: SearchHistoryEntity,
+    isCurrent: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    val currentOnRemove by rememberUpdatedState(onRemove)
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                haptics.play(Haptic.Select)
+                currentOnRemove()
+                true
+            } else {
+                false
+            }
+        },
+        positionalThreshold = { distance -> distance * 0.35f },
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = false,
+        modifier = modifier,
+        backgroundContent = {
+            RecentSearchSwipeBackground(dismissState)
+        },
+    ) {
+        RecentSearchEntityRow(
+            entity = entity,
+            isCurrent = isCurrent,
+            isPlaying = isPlaying,
+            onClick = onClick,
+            onRemove = onRemove,
+            modifier = Modifier.background(MaterialTheme.colorScheme.background),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecentSearchSwipeBackground(swipeState: SwipeToDismissBoxState) {
+    val offset = try { swipeState.requireOffset() } catch (e: Exception) { 0f }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithContent {
+                if (offset > 0f) {
+                    clipRect(left = 0f, top = 0f, right = offset, bottom = size.height) {
+                        this@drawWithContent.drawContent()
+                    }
+                }
+            }
+            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.22f))
+            .padding(horizontal = PAGE_GUTTER),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(22.dp),
+            )
+        }
     }
 }
 
@@ -770,9 +868,10 @@ private fun RecentSearchEntityRow(
     isPlaying: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(start = PAGE_GUTTER, end = 8.dp, top = 6.dp, bottom = 6.dp),
@@ -881,6 +980,7 @@ private fun BrowseRow(item: BrowseItem, onClick: () -> Unit, onLongPress: (() ->
 @Composable
 private fun SearchFilterTabs(filter: SearchFilter, onFilterChange: (SearchFilter) -> Unit) {
     val haptics = rememberHaptics()
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -891,29 +991,40 @@ private fun SearchFilterTabs(filter: SearchFilter, onFilterChange: (SearchFilter
     ) {
         SearchFilter.entries.forEach { entry ->
             val selected = entry == filter
-            Box(
-                modifier = Modifier
-                    .clip(FILTER_PILL_SHAPE)
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.onBackground
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                    // Only the pill that isn't already selected has anything to
-                    // report — re-tapping the current filter changes nothing, so
-                    // buzzing for it would be feedback for a no-op.
-                    .clickable {
+            if (nothingOsMode) {
+                NothingPill(
+                    text = entry.label.uppercase(),
+                    isActive = selected,
+                    onClick = {
                         if (!selected) haptics.play(Haptic.Select)
                         onFilterChange(entry)
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    text = entry.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) MaterialTheme.colorScheme.background
-                    else MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
+                    },
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(FILTER_PILL_SHAPE)
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.onBackground
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        // Only the pill that isn't already selected has anything to
+                        // report — re-tapping the current filter changes nothing, so
+                        // buzzing for it would be feedback for a no-op.
+                        .clickable {
+                            if (!selected) haptics.play(Haptic.Select)
+                            onFilterChange(entry)
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = entry.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) MaterialTheme.colorScheme.background
+                        else MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

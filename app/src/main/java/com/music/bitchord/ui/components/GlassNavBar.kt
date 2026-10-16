@@ -16,6 +16,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -51,10 +52,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
@@ -107,9 +111,10 @@ fun GlassNavBar(
     // this shape, and a fresh RoundedCornerShape each pass means a fresh factory
     // lambda, which the tab bar sees as a changed argument and recomposes on.
     val pillShape = remember { RoundedCornerShape(percent = 50) }
-    val contentColor = glassContentColor()
-    val selectedColor = contentColor
-    val unselectedColor = contentColor.copy(alpha = 0.65f)
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val contentColor = if (nothingOsMode) NothingThemeTokens.White else glassContentColor()
+    val selectedColor = if (nothingOsMode) NothingThemeTokens.Red else contentColor
+    val unselectedColor = if (nothingOsMode) NothingThemeTokens.MutedText else contentColor.copy(alpha = 0.65f)
     val haptics = rememberHaptics()
 
     // The tab content lambdas below are captured once per contentKey and held
@@ -126,7 +131,15 @@ fun GlassNavBar(
 
     // A factory, not a value — see the note in FloatingTabBar's header. Each of
     // the three surfaces gets its own glass modifier and so its own shape cache.
-    val glassSurface: @Composable () -> Modifier = { Modifier.liquidGlass(shape = pillShape) }
+    val glassSurface: @Composable () -> Modifier = {
+        if (nothingOsMode) {
+            Modifier
+                .background(NothingThemeTokens.Black, shape = pillShape)
+                .border(1.dp, NothingThemeTokens.Border, shape = pillShape)
+        } else {
+            Modifier.liquidGlass(shape = pillShape)
+        }
+    }
 
     FloatingTabBar(
         selectedTabKey = selectedIndex,
@@ -145,6 +158,7 @@ fun GlassNavBar(
                     isPlaying = isPlaying,
                     isLoading = isLoading,
                     contentColor = contentColor,
+                    nothingOsMode = nothingOsMode,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     onPrevious = onPrevious,
@@ -165,6 +179,7 @@ fun GlassNavBar(
                     isPlaying = isPlaying,
                     isLoading = isLoading,
                     contentColor = contentColor,
+                    nothingOsMode = nothingOsMode,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     onPrevious = onPrevious,
@@ -182,7 +197,11 @@ fun GlassNavBar(
         colors = FloatingTabBarDefaults.colors(
             backgroundColor = Color.Transparent,
             accessoryBackgroundColor = Color.Transparent,
-            indicatorColor = glassIndicatorColor().copy(alpha = 0.5f),
+            indicatorColor = if (nothingOsMode) {
+                NothingThemeTokens.Red.copy(alpha = 0.22f)
+            } else {
+                glassIndicatorColor().copy(alpha = 0.5f)
+            },
         ),
         // Flat, because the glass is not. Every surface here already draws its
         // own [Shadow.Default] as part of the backdrop pass, and the library's
@@ -281,6 +300,7 @@ private fun GlassNowPlaying(
     isPlaying: Boolean,
     isLoading: Boolean,
     contentColor: Color,
+    nothingOsMode: Boolean = false,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -352,6 +372,7 @@ private fun GlassNowPlaying(
                     vertical = if (isInline) 4.dp else 8.dp,
                 ),
         ) {
+            val artCorner = if (isInline) 6.dp else 8.dp
             AsyncImage(
                 model = rememberRemoteArtworkUrl(song)?.artworkAt(ROW_ART_PX),
                 contentDescription = null,
@@ -359,9 +380,12 @@ private fun GlassNowPlaying(
                     .size(artSize)
                     // Whichever of the two densities is on screen is the one
                     // the player flies to: only one is composed at rest.
-                    .playerDockArt(dock, if (isInline) 6.dp else 8.dp)
-                    .clip(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .playerDockArt(dock, artCorner)
+                    .clip(RoundedCornerShape(artCorner))
+                    .then(
+                        if (nothingOsMode) Modifier.border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(artCorner)) else Modifier
+                    )
+                    .background(if (nothingOsMode) NothingThemeTokens.SurfaceElevated else MaterialTheme.colorScheme.surfaceVariant),
             )
             Spacer(Modifier.width(if (isInline) 8.dp else 10.dp))
             if (isInline) {
@@ -396,16 +420,17 @@ private fun GlassNowPlaying(
                     Text(
                         text = song.artist,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.7f),
+                        color = if (nothingOsMode) NothingThemeTokens.MutedText else contentColor.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
+            val playTint = if (nothingOsMode) NothingThemeTokens.Red else contentColor
             if (isLoading) {
                 Box(Modifier.size(glyphSlot), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        color = contentColor,
+                        color = playTint,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(if (isInline) 18.dp else 22.dp),
                     )
@@ -421,7 +446,7 @@ private fun GlassNowPlaying(
                     Icon(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                        tint = contentColor,
+                        tint = playTint,
                         modifier = Modifier.size(glyphSize),
                     )
                 }

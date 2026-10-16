@@ -64,9 +64,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.MoreHoriz
+import com.music.bitchord.ui.AppUi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -713,6 +716,7 @@ fun NowPlayingScreen(
     onQueueDragActiveChange: (Boolean) -> Unit = {},
     onClearQueue: () -> Unit,
     onAddToQueue: ((Song) -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
     onOpenMenu: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     /**
@@ -1905,6 +1909,7 @@ fun NowPlayingScreen(
                                 likeStatus = likeStatus,
                                 showRevertCue = showRevertCue,
                                 onToggleLike = onToggleLike,
+                                onDownload = onDownload,
                                 onOpenMenu = onOpenMenu,
                                 onOpenAlbum = onOpenAlbum,
                                 onOpenArtist = onOpenArtist,
@@ -1971,6 +1976,8 @@ fun NowPlayingScreen(
                                 onPlayPause = onPlayPause,
                                 onNext = onNext,
                                 compact = compact,
+                                currentPositionMs = { position.positionMs },
+                                onSeek = onSeek,
                             )
                         },
                         volume = if (hideVolumeBar) {
@@ -3339,6 +3346,24 @@ fun NowPlayingScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
+                    if (onDownload != null && song.localUri == null) {
+                        val downloaded = song.videoId in AppUi.host.downloadedIds()
+                        CircleGlyph(
+                            icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                            contentDescription = stringResource(
+                                if (downloaded) Res.string.downloaded else Res.string.download,
+                            ),
+                            onClick = {
+                                if (downloaded) {
+                                    onOpenMenu()
+                                } else {
+                                    onDownload()
+                                }
+                            },
+                            active = downloaded,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     CircleGlyph(
                         icon = Icons.Rounded.Bedtime,
                         contentDescription = stringResource(Res.string.sleep_timer),
@@ -3693,6 +3718,8 @@ fun NowPlayingScreen(
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
                 onNext = onNext,
+                currentPositionMs = { position.positionMs },
+                onSeek = onSeek,
             )
 
             // Keep the volume slot's full footprint when its contents are

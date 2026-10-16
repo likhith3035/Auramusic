@@ -1,7 +1,11 @@
 package com.music.bitchord.ui.screens
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.stats.DailyHighlightsSummary
+import com.music.bitchord.ui.library.DailyHighlightsCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Download
@@ -141,18 +145,34 @@ fun LibraryReplayEntry(
     loading: Boolean,
     holder: String,
     memberSince: String?,
+    dailyHighlights: DailyHighlightsSummary? = null,
+    onPlaySong: (Song) -> Unit = {},
+    onPlayTodayMix: () -> Unit = {},
     onOpenReplay: (ReplayStoryPage) -> Unit,
 ) {
     if (loading) {
         ReplayCardRowSkeleton()
-    } else if (cards.isNotEmpty()) {
-        ReplayCardRow(
-            cards = cards,
-            holder = holder,
-            memberSince = memberSince,
-            onCardClick = onOpenReplay,
-            modifier = Modifier.padding(vertical = 6.dp),
-            contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
-        )
+    } else {
+        Column {
+            if (dailyHighlights != null && !dailyHighlights.isEmpty) {
+                DailyHighlightsCard(
+                    summary = dailyHighlights,
+                    onPlaySong = onPlaySong,
+                    onPlayTodayMix = onPlayTodayMix,
+                    onOpenReplay = { onOpenReplay(ReplayStoryPage.SUMMARY) },
+                    modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
+                )
+            }
+            if (cards.isNotEmpty()) {
+                ReplayCardRow(
+                    cards = cards,
+                    holder = holder,
+                    memberSince = memberSince,
+                    onCardClick = onOpenReplay,
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
+                )
+            }
+        }
     }
 }

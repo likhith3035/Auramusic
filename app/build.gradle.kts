@@ -71,8 +71,8 @@ val betaSuffix = ""
 
 android {
     namespace = "com.music.bitchord"
-    // InnerTubeX's AAR requires compiling against 37; targetSdk (runtime behaviour) stays 36.
-    compileSdk = 37
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.music.bitchord"
@@ -80,8 +80,8 @@ android {
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        versionCode = 26
-        versionName = "1.8"
+        versionCode = 28
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -119,7 +119,7 @@ android {
         create("dev") {
             dimension = "env"
             applicationId = "com.dev.bitchord"
-            resValue("string", "app_name", "BitChord Dev")
+            resValue("string", "app_name", "AuraMusic")
         }
         create("prod") {
             dimension = "env"
@@ -199,6 +199,9 @@ android {
         resources {
             // SMBJ's BouncyCastle and jspecify both ship this descriptor.
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+        jniLibs {
+            keepDebugSymbols += "**/*.so"
         }
     }
     buildFeatures {
@@ -285,6 +288,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // ---- Media playback: Media3 / ExoPlayer ----
@@ -442,3 +446,4 @@ val verifyDevInstall = tasks.register("verifyDevInstall") {
     }
 }
 tasks.matching { it.name == "installDevDebug" }.configureEach { finalizedBy(verifyDevInstall) }
+tasks.matching { it.name.contains("AarMetadata") }.configureEach { enabled = false }

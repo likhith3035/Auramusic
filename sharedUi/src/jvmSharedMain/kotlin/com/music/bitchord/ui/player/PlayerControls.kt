@@ -9,7 +9,9 @@ import com.music.bitchord.data.model.ArtistCredit
 import com.music.bitchord.data.model.CreditSegment
 import com.music.bitchord.data.model.creditSegments
 import com.music.bitchord.sharedui.resources.*
-
+import com.music.bitchord.ui.theme.NothingGlyphTimer
+import com.music.bitchord.ui.theme.NothingThemeTokens
+import com.music.bitchord.ui.theme.NothingGlyphEqualizer
 import org.jetbrains.compose.resources.DrawableResource
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.Crossfade
@@ -17,7 +19,24 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -206,6 +225,7 @@ internal fun PlayerScrubber(
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
     // One clock for the bar and the "Mixing" label, so they breathe on the same beat.
     val mixPulse = rememberMixPulse({ mixBlend.value }, enabled = !reduceAnimation)
+    val nothingOsMode by PlayerSettings.nothingOsMode.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth()) {
         ThinSlider(
             value = shown,
@@ -224,19 +244,33 @@ internal fun PlayerScrubber(
                 .offset(y = (-9).dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = formatTime((shown * durationMs).toLong()),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.55f),
-                )
-                Text(
-                    text = "-" + formatTime(durationMs - (shown * durationMs).toLong()),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.55f),
-                )
+                if (nothingOsMode) {
+                    NothingGlyphTimer(
+                        timeText = formatTime((shown * durationMs).toLong()),
+                        modifier = Modifier.height(13.dp),
+                        dotRadiusDp = 1.15.dp,
+                    )
+                    NothingGlyphTimer(
+                        timeText = "-" + formatTime(durationMs - (shown * durationMs).toLong()),
+                        modifier = Modifier.height(13.dp),
+                        dotRadiusDp = 1.15.dp,
+                    )
+                } else {
+                    Text(
+                        text = formatTime((shown * durationMs).toLong()),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.55f),
+                    )
+                    Text(
+                        text = "-" + formatTime(durationMs - (shown * durationMs).toLong()),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.55f),
+                    )
+                }
             }
             // Pinned to the box's own centre rather than squeezed into the gap
             // between the two timestamps: that gap's width changes by a digit's
@@ -419,57 +453,196 @@ internal fun TransportRow(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     compact: Boolean = false,
+    currentPositionMs: () -> Long = { 0L },
+    onSeek: ((Long) -> Unit)? = null,
 ) {
     val playSize = if (compact) 58.dp else 74.dp
     val playTouch = if (compact) 76.dp else 92.dp
     val skipSize = if (compact) 44.dp else PLAYER_SKIP_ICON_SIZE
-    Row(
+    val nothingOsMode by PlayerSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val fastForwardHoldSpeed by PlayerSettings.fastForwardHoldSpeed.collectAsStateWithLifecycle()
+    val rewindHoldSpeed by PlayerSettings.rewindHoldSpeed.collectAsStateWithLifecycle()
+    val haptics = rememberHaptics()
+    val coroutineScope = rememberCoroutineScope()
+
+    var activeHoldLabel by remember { mutableStateOf<String?>(null) }
+    var isNextHeld by remember { mutableStateOf(false) }
+    var isPrevHeld by remember { mutableStateOf(false) }
+    var rewindScrubJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            rewindScrubJob?.cancel()
+            PlayerPlatform.host.restorePlaybackSpeed()
+        }
+    }
+
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        // SpaceAround, not SpaceEvenly: the outer margins take half a gap, so
-        // the three buttons spread a little further apart from each other.
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
-        TransportGlyph(
-            icon = Res.drawable.ic_player_previous,
-            contentDescription = stringResource(Res.string.widget_previous),
-            size = skipSize,
-            touchSize = PLAYER_SKIP_TOUCH_SIZE,
-            heightScale = PLAYER_SKIP_HEIGHT_SCALE,
-            onClick = onPrevious,
-            enabled = previousEnabled,
-            haptic = Haptic.SkipPrevious,
-        )
-        if (isLoading) {
-            // Same footprint as the play/pause target — a smaller box here
-            // would shunt everything below it on every load.
-            Box(Modifier.size(playTouch), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(if (compact) 30.dp else 38.dp),
+        AnimatedVisibility(
+            visible = activeHoldLabel != null,
+            enter = fadeIn(tween(140)) + scaleIn(tween(140), initialScale = 0.85f) + slideInVertically(tween(140)) { it / 2 },
+            exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = 0.85f) + slideOutVertically(tween(140)) { it / 2 },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-40).dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (nothingOsMode) Color.Black else Color(0xFF1E1E22).copy(alpha = 0.95f),
+                border = BorderStroke(
+                    1.dp,
+                    if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.22f),
+                ),
+                shadowElevation = 8.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (nothingOsMode) NothingThemeTokens.Red else Color(0xFFFF5252)),
+                    )
+                    Text(
+                        text = activeHoldLabel.orEmpty(),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                        ),
+                        color = Color.White,
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            // SpaceAround, not SpaceEvenly: the outer margins take half a gap, so
+            // the three buttons spread a little further apart from each other.
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TransportGlyph(
+                icon = Res.drawable.ic_player_previous,
+                contentDescription = stringResource(Res.string.widget_previous),
+                size = skipSize,
+                touchSize = PLAYER_SKIP_TOUCH_SIZE,
+                heightScale = PLAYER_SKIP_HEIGHT_SCALE,
+                onClick = onPrevious,
+                enabled = previousEnabled,
+                haptic = Haptic.SkipPrevious,
+                isHeld = isPrevHeld,
+                onHoldStart = {
+                    if (!previousEnabled) return@TransportGlyph
+                    isPrevHeld = true
+                    haptics.play(Haptic.ToggleOn)
+                    if (rewindHoldSpeed <= 0f) {
+                        activeHoldLabel = "Rewinding..."
+                        var currentTarget = currentPositionMs()
+                        rewindScrubJob = coroutineScope.launch {
+                            while (isActive) {
+                                currentTarget = (currentTarget - 3_000L).coerceAtLeast(0L)
+                                onSeek?.invoke(currentTarget)
+                                haptics.play(Haptic.Tick)
+                                delay(160L)
+                            }
+                        }
+                    } else {
+                        val formatted = if (rewindHoldSpeed % 1f == 0f) "${rewindHoldSpeed.toInt()}×" else "${rewindHoldSpeed}×"
+                        activeHoldLabel = "$formatted Slow Motion"
+                        PlayerPlatform.host.setTemporaryPlaybackSpeed(rewindHoldSpeed)
+                    }
+                },
+                onHoldEnd = {
+                    isPrevHeld = false
+                    rewindScrubJob?.cancel()
+                    rewindScrubJob = null
+                    haptics.play(Haptic.ToggleOff)
+                    PlayerPlatform.host.restorePlaybackSpeed()
+                    activeHoldLabel = null
+                },
+            )
+            if (isLoading) {
+                // Same footprint as the play/pause target — a smaller box here
+                // would shunt everything below it on every load.
+                Box(Modifier.size(playTouch), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        color = if (nothingOsMode) NothingThemeTokens.Red else Color.White,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(if (compact) 30.dp else 38.dp),
+                    )
+                }
+            } else if (nothingOsMode) {
+                Box(
+                    modifier = Modifier
+                        .size(playTouch)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            haptics.play(if (isPlaying) Haptic.Pause else Haptic.Resume)
+                            onPlayPause()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(playSize)
+                            .clip(CircleShape)
+                            .background(NothingThemeTokens.Red)
+                            .border(1.5.dp, Color.White.copy(alpha = 0.28f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(if (isPlaying) Res.drawable.ic_player_pause else Res.drawable.ic_player_play),
+                            contentDescription = stringResource(if (isPlaying) Res.string.pause else Res.string.play),
+                            tint = Color.White,
+                            modifier = Modifier.size(if (compact) 26.dp else 34.dp),
+                        )
+                    }
+                }
+            } else {
+                TransportGlyph(
+                    icon = if (isPlaying) Res.drawable.ic_player_pause else Res.drawable.ic_player_play,
+                    contentDescription = stringResource(if (isPlaying) Res.string.pause else Res.string.play),
+                    size = playSize,
+                    touchSize = playTouch,
+                    onClick = onPlayPause,
+                    haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                 )
             }
-        } else {
             TransportGlyph(
-                icon = if (isPlaying) Res.drawable.ic_player_pause else Res.drawable.ic_player_play,
-                contentDescription = stringResource(if (isPlaying) Res.string.pause else Res.string.play),
-                size = playSize,
-                touchSize = playTouch,
-                onClick = onPlayPause,
-                haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
+                icon = Res.drawable.ic_player_next,
+                contentDescription = stringResource(Res.string.widget_next),
+                size = skipSize,
+                touchSize = PLAYER_SKIP_TOUCH_SIZE,
+                heightScale = PLAYER_SKIP_HEIGHT_SCALE,
+                onClick = onNext,
+                enabled = nextEnabled,
+                haptic = Haptic.SkipNext,
+                isHeld = isNextHeld,
+                onHoldStart = {
+                    if (!nextEnabled) return@TransportGlyph
+                    isNextHeld = true
+                    haptics.play(Haptic.ToggleOn)
+                    val formatted = if (fastForwardHoldSpeed % 1f == 0f) "${fastForwardHoldSpeed.toInt()}×" else "${fastForwardHoldSpeed}×"
+                    activeHoldLabel = "⚡ $formatted Fast Forward"
+                    PlayerPlatform.host.setTemporaryPlaybackSpeed(fastForwardHoldSpeed)
+                },
+                onHoldEnd = {
+                    isNextHeld = false
+                    haptics.play(Haptic.ToggleOff)
+                    PlayerPlatform.host.restorePlaybackSpeed()
+                    activeHoldLabel = null
+                },
             )
         }
-        TransportGlyph(
-            icon = Res.drawable.ic_player_next,
-            contentDescription = stringResource(Res.string.widget_next),
-            size = skipSize,
-            touchSize = PLAYER_SKIP_TOUCH_SIZE,
-            heightScale = PLAYER_SKIP_HEIGHT_SCALE,
-            onClick = onNext,
-            enabled = nextEnabled,
-            haptic = Haptic.SkipNext,
-        )
     }
 }
 
@@ -703,10 +876,13 @@ private fun TransportGlyph(
     size: androidx.compose.ui.unit.Dp,
     touchSize: androidx.compose.ui.unit.Dp = size,
     onClick: () -> Unit,
+    onHoldStart: (() -> Unit)? = null,
+    onHoldEnd: (() -> Unit)? = null,
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
     /** Vertical squash of the glyph alone; its width and touch box are untouched. */
     heightScale: Float = 1f,
+    isHeld: Boolean = false,
 ) {
     val haptics = rememberHaptics()
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
@@ -714,17 +890,59 @@ private fun TransportGlyph(
         targetValue = if (enabled) 1f else 0.3f,
         label = "transportAlpha",
     )
+    val scale by animateFloatAsState(
+        targetValue = if (isHeld) 1.2f else 1f,
+        label = "transportHoldScale",
+    )
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnHoldStart by rememberUpdatedState(onHoldStart)
+    val currentOnHoldEnd by rememberUpdatedState(onHoldEnd)
+    val scope = rememberCoroutineScope()
+
+    val gestureModifier = if (onHoldStart != null || onHoldEnd != null) {
+        Modifier.pointerInput(enabled) {
+            if (!enabled) return@pointerInput
+            var holdActive = false
+            detectTapGestures(
+                onPress = {
+                    holdActive = false
+                    val holdJob = scope.launch {
+                        delay(240L)
+                        holdActive = true
+                        currentOnHoldStart?.invoke()
+                    }
+                    try {
+                        tryAwaitRelease()
+                    } finally {
+                        holdJob.cancel()
+                        if (holdActive) {
+                            currentOnHoldEnd?.invoke()
+                        }
+                    }
+                },
+                onLongPress = {},
+                onTap = {
+                    if (!holdActive) {
+                        haptics.play(haptic)
+                        currentOnClick()
+                    }
+                },
+            )
+        }
+    } else {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            enabled = enabled,
+        ) {
+            haptics.play(haptic)
+            onClick()
+        }
+    }
     Box(
         modifier = Modifier
             .size(touchSize)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = enabled,
-            ) {
-                haptics.play(haptic)
-                onClick()
-            },
+            .then(gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -733,7 +951,10 @@ private fun TransportGlyph(
             tint = Color.White.copy(alpha = alpha),
             modifier = Modifier
                 .size(size)
-                .then(if (heightScale != 1f) Modifier.graphicsLayer { scaleY = heightScale } else Modifier),
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale * (if (heightScale != 1f) heightScale else 1f)
+                },
         )
     }
 }
@@ -900,11 +1121,14 @@ private fun PillSegment(
 ) {
     val haptics = rememberHaptics()
     val lastTap = remember { mutableLongStateOf(-tapWindowMs) }
+    val nothingOsMode by PlayerSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val activeBg = if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.14f)
+    val activeTint = if (nothingOsMode) NothingThemeTokens.Red else Color.White
     Box(
         modifier = Modifier
             .width(width)
             .height(BOTTOM_ACTION_SIZE)
-            .background(if (highlighted) Color.White.copy(alpha = 0.14f) else Color.Transparent)
+            .background(if (highlighted) activeBg else Color.Transparent)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -920,7 +1144,7 @@ private fun PillSegment(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        val tint = Color.White.copy(alpha = if (highlighted) 1f else 0.75f)
+        val tint = if (highlighted) activeTint else Color.White.copy(alpha = 0.75f)
         Crossfade(
             targetState = loading,
             animationSpec = tween(durationMillis = 200),

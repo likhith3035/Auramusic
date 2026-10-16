@@ -31,6 +31,11 @@ interface AppUiHost {
     /** Video ids of the tracks already downloaded, for the mark on their rows. */
     @Composable
     fun downloadedIds(): Set<String>
+
+    /** Whether Nothing OS UI mode (AMOLED pitch black + dot-matrix styling) is enabled. */
+    val nothingOsMode: StateFlow<Boolean>
+
+    fun setNothingOsMode(value: Boolean)
 }
 
 object AppUi {

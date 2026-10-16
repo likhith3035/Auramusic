@@ -2,6 +2,7 @@ package com.music.bitchord.ui.components
 
 import com.music.bitchord.R
 
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -714,11 +716,40 @@ private fun DownloadRow(song: Song, palette: ArtworkPalette, isOffline: Boolean,
         null -> if (file != null) {
             ActionRow(
                 icon = Icons.Rounded.DownloadDone,
-                label = stringResource(R.string.saved_to_downloads),
+                label = stringResource(R.string.saved_to_auramusic_folder),
                 value = stringResource(R.string.delete),
                 tint = palette.accent,
                 accent = palette.accent,
             ) { scope.launch { Downloads.delete(context, song.videoId) } }
+            ActionRow(
+                icon = Icons.Rounded.Share,
+                label = stringResource(R.string.share_audio_file),
+                accent = palette.accent,
+                onClick = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "audio/*"
+                        putExtra(Intent.EXTRA_STREAM, file)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    runCatching {
+                        context.startActivity(Intent.createChooser(shareIntent, song.title))
+                    }
+                },
+            )
+            ActionRow(
+                icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                label = stringResource(R.string.play_in_external_app),
+                accent = palette.accent,
+                onClick = {
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(file, "audio/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    runCatching {
+                        context.startActivity(viewIntent)
+                    }
+                },
+            )
         } else if (!isOffline) {
             ActionRow(
                 icon = Icons.Rounded.Download,

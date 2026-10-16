@@ -2762,6 +2762,9 @@ fun BitChordDesktopApp() {
             volume = it
             persistence.saveString("volume", it.toString())
         }
+        DesktopPlayerHost.onTemporarySpeedChange = {
+            playbackEngine.setPlaybackSpeed(it)
+        }
     }
 
     // The engine's measured stream, as the player's quality badge and stats line read it.
@@ -5609,6 +5612,35 @@ private fun DesktopSettingsScreen(
                             else -> 0.5f
                         }
                         onPlaybackSpeedChange(next)
+                    }
+                    val ffHoldSpeed by DesktopPlayerSettings.fastForwardHoldSpeed.collectAsState()
+                    SettingsRow(
+                        Icons.Rounded.FastForward,
+                        "Fast-forward hold speed",
+                        "${if (ffHoldSpeed % 1f == 0f) "${ffHoldSpeed.toInt()}" else "$ffHoldSpeed"}×",
+                    ) {
+                        val next = when {
+                            ffHoldSpeed < 1.4f -> 1.5f
+                            ffHoldSpeed < 1.6f -> 1.75f
+                            ffHoldSpeed < 1.9f -> 2.0f
+                            ffHoldSpeed < 2.3f -> 2.5f
+                            ffHoldSpeed < 2.8f -> 3.0f
+                            else -> 1.25f
+                        }
+                        DesktopPlayerSettings.setFastForwardHoldSpeed(next)
+                    }
+                    val rwHoldSpeed by DesktopPlayerSettings.rewindHoldSpeed.collectAsState()
+                    SettingsRow(
+                        Icons.Rounded.FastRewind,
+                        "Rewind hold action",
+                        if (rwHoldSpeed <= 0f) "Continuous rewind scrub" else "${if (rwHoldSpeed % 1f == 0f) "${rwHoldSpeed.toInt()}" else "$rwHoldSpeed"}× slow-mo",
+                    ) {
+                        val next = when {
+                            rwHoldSpeed <= 0f -> 0.5f
+                            rwHoldSpeed < 0.65f -> 0.75f
+                            else -> -1.0f
+                        }
+                        DesktopPlayerSettings.setRewindHoldSpeed(next)
                     }
                     SettingsRow(
                         Icons.Rounded.Bedtime,

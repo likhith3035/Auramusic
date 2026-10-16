@@ -1,7 +1,6 @@
 package com.music.bitchord.ui.replay
 
 import com.music.bitchord.R
-
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -307,7 +306,7 @@ internal suspend fun saveToGallery(
     context: Context,
     bitmap: Bitmap,
     label: String,
-    prefix: String = "bitchord-replay",
+    prefix: String = "auramusic-replay",
 ): Boolean = withContext(Dispatchers.IO) {
     val name = "$prefix-${label.replace(' ', '-').lowercase(Locale.ROOT)}.png"
     runCatching {
@@ -317,7 +316,7 @@ internal suspend fun saveToGallery(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Images.Media.RELATIVE_PATH,
-                    "${Environment.DIRECTORY_PICTURES}/BitChord",
+                    "${Environment.DIRECTORY_PICTURES}/AuraMusic",
                 )
             }
         }

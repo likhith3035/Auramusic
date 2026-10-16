@@ -78,6 +78,20 @@ internal object DesktopPlayerHost : PlayerHost {
         override fun refresh() = Unit
     }
 
+    @Volatile
+    var onTemporarySpeedChange: ((Float) -> Unit)? = null
+
+    override fun setTemporaryPlaybackSpeed(speed: Float) {
+        DesktopPlayerSettings.playbackSpeed.value = speed
+        onTemporarySpeedChange?.invoke(speed)
+    }
+
+    override fun restorePlaybackSpeed() {
+        val base = DesktopPlayerSettings.persistenceInstance.string("playback_speed", "1.0").toFloatOrNull() ?: 1.0f
+        DesktopPlayerSettings.playbackSpeed.value = base
+        onTemporarySpeedChange?.invoke(base)
+    }
+
     /** The last list handed to the drawer, for turning a row's id back into a mixer. */
     @Volatile
     private var listed: List<String> = emptyList()
@@ -199,6 +213,7 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
 
     // A desktop is never on a metered link as far as this app can tell.
     override val meteredConnection = MutableStateFlow<Boolean?>(false)
+    override val nothingOsMode = MutableStateFlow(persistence.boolean(KEY_NOTHING_OS_MODE, false))
     override val preferUsbDac = MutableStateFlow(false)
     override val prioritizeSpotifyCanvas = MutableStateFlow(false)
     override val reduceAnimation = MutableStateFlow(false)
@@ -213,6 +228,16 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     override val syncedLyrics = MutableStateFlow(true)
     override val translationLanguage = MutableStateFlow("")
     override val versionAlignmentInProgress = MutableStateFlow(false)
+    val persistenceInstance by lazy { persistence }
+    override val playbackSpeed = MutableStateFlow(
+        persistence.string("playback_speed", "1.0").toFloatOrNull() ?: 1.0f,
+    )
+    override val fastForwardHoldSpeed = MutableStateFlow(
+        persistence.string(KEY_FAST_FORWARD_HOLD_SPEED, "2.0").toFloatOrNull() ?: 2.0f,
+    )
+    override val rewindHoldSpeed = MutableStateFlow(
+        persistence.string(KEY_REWIND_HOLD_SPEED, "0.5").toFloatOrNull() ?: 0.5f,
+    )
 
     override fun setLastPlayerScreen(value: LastPlayerScreen) {
         lastPlayerScreen.value = value
@@ -225,8 +250,31 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
         persistence.saveInt(KEY_LYRICS_OFFSET, clamped)
     }
 
+    override fun setNothingOsMode(value: Boolean) {
+        nothingOsMode.value = value
+        persistence.saveBoolean(KEY_NOTHING_OS_MODE, value)
+    }
+
+    override fun setPlaybackSpeed(value: Float) {
+        playbackSpeed.value = value
+        persistence.saveString("playback_speed", value.toString())
+    }
+
+    override fun setFastForwardHoldSpeed(value: Float) {
+        fastForwardHoldSpeed.value = value
+        persistence.saveString(KEY_FAST_FORWARD_HOLD_SPEED, value.toString())
+    }
+
+    override fun setRewindHoldSpeed(value: Float) {
+        rewindHoldSpeed.value = value
+        persistence.saveString(KEY_REWIND_HOLD_SPEED, value.toString())
+    }
+
     private const val KEY_LAST_SCREEN = "last_player_screen"
     private const val KEY_LYRICS_OFFSET = "lyrics_offset_ms"
+    private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
+    private const val KEY_FAST_FORWARD_HOLD_SPEED = "fast_forward_hold_speed"
+    private const val KEY_REWIND_HOLD_SPEED = "rewind_hold_speed"
 }
 
 /** Which glyph a mixer gets, from the only thing Java Sound says about it: its name. */

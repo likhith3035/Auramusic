@@ -28,21 +28,37 @@ object DesktopDownloadManager {
         return try {
             require(song.localPath == null) { "This track is already local" }
             val stream = DesktopMusicSources.resolve(song, quality, forDownload = true).getOrThrow()
-            val directory = Path.of(System.getProperty("user.home"), "Music", "BitChord")
+            val directory = Path.of(System.getProperty("user.home"), "Music", "AuraMusic")
             Files.createDirectories(directory)
             val safeName = buildString {
-                append(song.artist)
-                append(" - ")
-                append(song.title)
-            }.replace(ILLEGAL_FILENAME, "_").trim().take(180).ifBlank { song.videoId }
+                val artist = song.artist.trim()
+                val title = song.title.trim()
+                when {
+                    artist.isEmpty() -> append(title)
+                    title.isEmpty() -> append(artist)
+                    else -> {
+                        append(artist)
+                        append(" - ")
+                        append(title)
+                    }
+                }
+                if (!endsWith("[AuraMusic]", ignoreCase = true)) {
+                    append(" [AuraMusic]")
+                }
+            }.replace(ILLEGAL_FILENAME, "_").trim().take(180).ifBlank { "${song.videoId} [AuraMusic]" }
             // A manifest is an index of the audio, not the audio: fetched as a file it saved a few
             // KB of XML as `.flac`. Its segments are fMP4, so it can only become FLAC or M4A.
             val manifest = DesktopManifestDownload.isManifest(stream)
             val extension = stream.format.fileExtension().let { if (manifest && it != "flac") "m4a" else it }
             val target = directory.resolve("$safeName.$extension")
+            val legacyName = safeName.removeSuffix(" [AuraMusic]")
+            val legacyTarget = directory.resolve("$legacyName.$extension")
             val temporary = directory.resolve(".$safeName.$extension.part")
             if (Files.isRegularFile(target) && Files.size(target) > 0L) {
                 return Result.success(song.copy(localUri = target.toUri().toString(), localPath = target.toString()))
+            }
+            if (Files.isRegularFile(legacyTarget) && Files.size(legacyTarget) > 0L) {
+                return Result.success(song.copy(localUri = legacyTarget.toUri().toString(), localPath = legacyTarget.toString()))
             }
 
             if (manifest) {

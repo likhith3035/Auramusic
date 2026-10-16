@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -159,6 +160,7 @@ fun FloatingBottomBar(
 ) {
     val pillShape = RoundedCornerShape(percent = 50)
     val container = MaterialTheme.colorScheme.surface
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
@@ -219,7 +221,9 @@ fun FloatingBottomBar(
             .fillMaxWidth()
             .clip(pillShape)
             .then(
-                if (reduceDynamicBlur) {
+                if (nothingOsMode) {
+                    Modifier.background(NothingThemeTokens.Black)
+                } else if (reduceDynamicBlur) {
                     Modifier.background(container)
                 } else if (useGlass) {
                     Modifier.liquidGlass(shape = pillShape)
@@ -230,7 +234,11 @@ fun FloatingBottomBar(
                     )
                 },
             )
-            .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, pillShape)
+            .border(
+                if (nothingOsMode) 1.dp else GLASS_EDGE_WIDTH,
+                if (nothingOsMode) NothingThemeTokens.Border else GLASS_EDGE_COLOR,
+                pillShape,
+            )
             .padding(horizontal = PILL_INSET, vertical = PILL_INSET),
     ) {
         if (tabWidthPx > 0f) {
@@ -249,7 +257,18 @@ fun FloatingBottomBar(
                         scaleY = 1f - lag * STRETCH * SQUASH
                     }
                     .clip(pillShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    .background(
+                        if (nothingOsMode) {
+                            NothingThemeTokens.Red.copy(alpha = 0.22f)
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        }
+                    )
+                    .then(
+                        if (nothingOsMode) {
+                            Modifier.border(1.dp, NothingThemeTokens.Red.copy(alpha = 0.6f), pillShape)
+                        } else Modifier
+                    ),
             )
         }
 
@@ -308,14 +327,23 @@ fun FloatingBottomBar(
             // color instead and picks pure black or white, same as the tint
             // Echo's floating nav bar uses for its own liquid glass.
             val glassTint = glassContentColor()
-            val adaptiveTint = if (useGlass) glassTint else null
+            val adaptiveTint = when {
+                nothingOsMode -> NothingThemeTokens.Red
+                useGlass -> glassTint
+                else -> null
+            }
+            val adaptiveUnselectedTint = when {
+                nothingOsMode -> NothingThemeTokens.MutedText
+                useGlass -> glassTint.copy(alpha = 0.65f)
+                else -> null
+            }
             tabs.forEachIndexed { index, tab ->
                 BottomBarItem(
                     tab = tab,
                     selected = index == selectedIndex,
                     glassSpec = glassSpec,
                     selectedTint = adaptiveTint,
-                    unselectedTint = adaptiveTint?.copy(alpha = 0.65f),
+                    unselectedTint = adaptiveUnselectedTint,
                     onClick = { onTabSelected(index) },
                     modifier = Modifier.weight(1f),
                 )

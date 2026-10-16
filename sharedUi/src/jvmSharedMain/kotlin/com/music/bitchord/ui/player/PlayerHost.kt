@@ -108,6 +108,17 @@ interface PlayerHost {
      */
     @Composable
     fun LyricsShareSheet(hazeState: HazeState, request: LyricsShareRequest, onDismiss: () -> Unit) = Unit
+
+    /**
+     * Temporarily sets playback speed (e.g. during transport hold),
+     * without overwriting user's persistent preference.
+     */
+    fun setTemporaryPlaybackSpeed(speed: Float) {}
+
+    /**
+     * Restores playback speed back to the user's configured normal speed.
+     */
+    fun restorePlaybackSpeed() {}
 }
 
 private val NoCast = MutableStateFlow(CastUi())
@@ -149,6 +160,7 @@ interface PlayerSettingsSource {
     val lyricsOffsetMs: StateFlow<Int>
     val lyricsSourceOrder: StateFlow<List<LyricsSource>>
     val meteredConnection: StateFlow<Boolean?>
+    val nothingOsMode: StateFlow<Boolean>
     val preferUsbDac: StateFlow<Boolean>
     val prioritizeSpotifyCanvas: StateFlow<Boolean>
     val reduceAnimation: StateFlow<Boolean>
@@ -165,9 +177,16 @@ interface PlayerSettingsSource {
     val syncedLyrics: StateFlow<Boolean>
     val translationLanguage: StateFlow<String>
     val versionAlignmentInProgress: StateFlow<Boolean>
+    val playbackSpeed: StateFlow<Float>
+    val fastForwardHoldSpeed: StateFlow<Float>
+    val rewindHoldSpeed: StateFlow<Float>
 
     fun setLastPlayerScreen(value: LastPlayerScreen)
     fun setLyricsOffsetMs(value: Int)
+    fun setNothingOsMode(value: Boolean)
+    fun setPlaybackSpeed(value: Float) {}
+    fun setFastForwardHoldSpeed(value: Float) {}
+    fun setRewindHoldSpeed(value: Float) {}
 }
 
 /** The player's name for the installed host's settings, read where AppSettings used to be. */

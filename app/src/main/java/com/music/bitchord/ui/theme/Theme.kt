@@ -22,6 +22,22 @@ import com.music.bitchord.R
 // spots (Replay's rank badge) that want that specific red regardless of theme.
 val AccentRed = Color(0xFFFA2D48)
 
+// Nothing OS signature aesthetic: True pitch black and iconic Nothing Red accent
+val NothingRed = Color(0xFFD71921)
+val NothingBlack = Color(0xFF000000)
+
+private val NothingDarkColors = darkColorScheme(
+    primary = NothingRed,
+    onPrimary = Color.White,
+    background = NothingBlack,
+    onBackground = Color.White,
+    surface = NothingBlack,
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF121215),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    outline = Color(0xFF26262B),
+)
+
 private val DarkColors = darkColorScheme(
     primary = Color.White,
     onPrimary = Color.Black,
@@ -94,10 +110,16 @@ private fun Typography.withFamily(family: FontFamily) = Typography(
 @Composable
 fun BitChordTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    nothingOs: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val colors = when {
+        nothingOs -> NothingDarkColors
+        darkTheme -> DarkColors
+        else -> LightColors
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = colors,
         typography = BitChordTypography,
         content = content,
     )

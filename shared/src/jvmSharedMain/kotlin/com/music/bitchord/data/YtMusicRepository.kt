@@ -789,6 +789,14 @@ object YtMusicRepository {
 
     private suspend fun libraryItemsPaged(browseId: String): List<ShelfItem> = itemsPaged(browseId, null)
 
+    /**
+     * The user's subscribed artists from the library ("Subscriptions" feed).
+     * Signed-in only.
+     */
+    suspend fun subscribedArtists(): Result<List<ShelfItem>> = call("library:subscriptions") {
+        libraryItemsPaged("FEmusic_library_corpus_artists")
+    }
+
     const val MAX_PAGES = 10
 
     /**

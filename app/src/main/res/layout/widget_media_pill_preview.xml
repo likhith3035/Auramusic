@@ -27,10 +27,6 @@
             android:paddingLeft="7dp"
             android:paddingRight="12dp">
 
-            <!--
-              The bitmap arrives already cut to a circle — see MediaWidgetPill. The
-              oval background is only what shows before it does.
-            -->
             <ImageView
                 android:layout_width="@dimen/widget_pill_art"
                 android:layout_height="@dimen/widget_pill_art"
@@ -41,38 +37,69 @@
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="6dp"
-                android:layout_marginTop="4dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginTop="2dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
-                <!--
-                  Inset by the heart's own inset inside its button (9dp of padding
-                  plus the glyph's side bearing), so the text starts exactly above
-                  the heart rather than to the left of it.
-                -->
-                <TextView
+                <!-- Header Row: Title & Artist on left, Equalizer on right -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:fontFamily="@font/sf_pro_display_semibold"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:text="@string/widget_preview_pill"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="16sp" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/sf_pro_display_semibold"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="@string/widget_preview_title"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/sf_pro_display_regular"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="Likhith • AuraMusic"
+                            android:textColor="#A0B4DE"
+                            android:textSize="11.5sp" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="22dp"
+                        android:layout_marginLeft="6dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_widget_equalizer" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/widget_button_pill"
+                    android:layout_marginTop="2dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <ImageView
                         android:layout_width="@dimen/widget_button_pill"
                         android:layout_height="@dimen/widget_button_pill"
+                        android:background="@drawable/widget_transport_button"
                         android:contentDescription="@string/like"
                         android:padding="9dp"
                         android:src="@drawable/ic_widget_heart" />
@@ -85,6 +112,7 @@
                     <ImageView
                         android:layout_width="@dimen/widget_button_pill"
                         android:layout_height="@dimen/widget_button_pill"
+                        android:background="@drawable/widget_transport_button"
                         android:contentDescription="@string/widget_previous"
                         android:padding="6dp"
                         android:src="@drawable/ic_widget_previous" />
@@ -97,8 +125,9 @@
                     <ImageView
                         android:layout_width="@dimen/widget_button_pill"
                         android:layout_height="@dimen/widget_button_pill"
+                        android:background="@drawable/widget_hero_toggle_button"
                         android:contentDescription="@string/widget_play"
-                        android:padding="4dp"
+                        android:padding="6dp"
                         android:src="@drawable/ic_widget_play" />
 
                     <FrameLayout
@@ -109,6 +138,7 @@
                     <ImageView
                         android:layout_width="@dimen/widget_button_pill"
                         android:layout_height="@dimen/widget_button_pill"
+                        android:background="@drawable/widget_transport_button"
                         android:contentDescription="@string/widget_next"
                         android:padding="6dp"
                         android:src="@drawable/ic_widget_next" />
@@ -121,6 +151,7 @@
                     <ImageView
                         android:layout_width="@dimen/widget_button_pill"
                         android:layout_height="@dimen/widget_button_pill"
+                        android:background="@drawable/widget_transport_button"
                         android:contentDescription="@string/shuffle_off"
                         android:padding="8dp"
                         android:src="@drawable/ic_widget_shuffle" />

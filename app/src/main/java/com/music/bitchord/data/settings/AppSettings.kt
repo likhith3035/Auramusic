@@ -202,12 +202,12 @@ object AppSettings {
     val wifiOnlyDownloads = MutableStateFlow(true)
 
     /**
-     * Keep ordinary downloads in Music/BitChord where other music apps can see
-     * them. Off (the default) keeps downloads in this app's private storage.
+     * Keep ordinary downloads in Music/AuraMusic where other music apps can see
+     * them. On (the default) keeps downloads in the device's public Music folder.
      * HLS downloads always stay private because they are a playlist package,
      * not one portable audio file.
      */
-    val exportDownloads = MutableStateFlow(false)
+    val exportDownloads = MutableStateFlow(true)
     val newReleaseAlertsEnabled = MutableStateFlow(true)
     val newReleaseAlertFrequencyHours = MutableStateFlow(12)
 
@@ -344,6 +344,12 @@ object AppSettings {
     val equalizerPreset = MutableStateFlow(EqualizerPreset.FLAT)
 
     val playbackSpeed = MutableStateFlow(1.0f)
+
+    /** Speed multiplier when holding the fast-forward (>>) transport button. */
+    val fastForwardHoldSpeed = MutableStateFlow(2.0f)
+
+    /** Speed or behavior when holding the rewind (<<) transport button: > 0f is slow motion, 0f is rewind scrub. */
+    val rewindHoldSpeed = MutableStateFlow(0.5f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
 
     /** Nothing OS UI mode: true pitch-black AMOLED, Nothing Red accents, dot-matrix & glyph widgets. */
@@ -790,7 +796,15 @@ object AppSettings {
         migrateDownloadQuality()
         downloadQuality.value = readDownloadQuality()
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
-        exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
+        if (!prefs.contains(KEY_EXPORT_DOWNLOADS_V2_SET)) {
+            prefs.edit()
+                .putBoolean(KEY_EXPORT_DOWNLOADS_V2_SET, true)
+                .putBoolean(KEY_EXPORT_DOWNLOADS, true)
+                .apply()
+            exportDownloads.value = true
+        } else {
+            exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, true)
+        }
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE, 0)
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
         automixPerformanceMode.value = runCatching {
@@ -823,6 +837,8 @@ object AppSettings {
         equalizerBands.value = readEqualizerBands()
         equalizerPreset.value = EqualizerPreset.matching(equalizerBands.value)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f)
+        fastForwardHoldSpeed.value = prefs.getFloat(KEY_FAST_FORWARD_HOLD_SPEED, 2.0f)
+        rewindHoldSpeed.value = prefs.getFloat(KEY_REWIND_HOLD_SPEED, 0.5f)
         themeMode.value = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
@@ -1195,6 +1211,24 @@ object AppSettings {
     fun setPlaybackSpeed(value: Float) {
         playbackSpeed.value = value
         prefs.edit().putFloat(KEY_SPEED, value).apply()
+    }
+
+    fun setFastForwardHoldSpeed(value: Float) {
+        fastForwardHoldSpeed.value = value
+        prefs.edit().putFloat(KEY_FAST_FORWARD_HOLD_SPEED, value).apply()
+    }
+
+    fun setRewindHoldSpeed(value: Float) {
+        rewindHoldSpeed.value = value
+        prefs.edit().putFloat(KEY_REWIND_HOLD_SPEED, value).apply()
+    }
+
+    fun setTemporaryPlaybackSpeed(speed: Float) {
+        playbackSpeed.value = speed
+    }
+
+    fun restorePlaybackSpeed() {
+        playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f)
     }
 
     fun setShowNerdStats(value: Boolean) {
@@ -1976,6 +2010,7 @@ object AppSettings {
     private const val KEY_QUALITY_DOWNLOAD = "audio_quality_download"
     private const val KEY_WIFI_ONLY_DOWNLOADS = "wifi_only_downloads"
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
+    private const val KEY_EXPORT_DOWNLOADS_V2_SET = "export_downloads_v2_set"
     private const val KEY_LOSSLESS = "lossless_audio"
     private const val KEY_CROSSFADE = "crossfade_seconds"
     private const val KEY_SMART_FADE = "smart_fade_enabled"
@@ -1995,6 +2030,8 @@ object AppSettings {
     private const val KEY_EQ_BALANCE = "equalizer_balance"
     private const val KEY_EQ_BANDS = "equalizer_bands"
     private const val KEY_SPEED = "playback_speed"
+    private const val KEY_FAST_FORWARD_HOLD_SPEED = "fast_forward_hold_speed"
+    private const val KEY_REWIND_HOLD_SPEED = "rewind_hold_speed"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"

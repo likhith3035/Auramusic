@@ -21,7 +21,7 @@
       it stacks the title over the buttons, where the wide one has the room to
       set them side by side.
     -->
-    <dimen name="widget_band_compact">66dp</dimen>
+    <dimen name="widget_band_compact">80dp</dimen>
     <dimen name="widget_band_wide">60dp</dimen>
 
     <!-- Inset of the transport from the widget's edges. -->

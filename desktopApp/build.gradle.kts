@@ -463,9 +463,13 @@ val windowsPortable by tasks.registering(Zip::class) {
     description = "Zips the portable Windows folder for copying to a Windows machine."
     dependsOn(windowsPortableAssemble)
     from(windowsPortableDir)
-    archiveFileName.set("BitChord-$appVersion-windows-portable.zip")
+    archiveFileName.set("AuraMusic-$appVersion-windows-portable.zip")
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
     doLast { logger.lifecycle("windowsPortable: ${archiveFile.get().asFile.absolutePath}") }
+}
+
+compose.resources {
+    packageOfResClass = "bitchord.desktopapp.generated.resources"
 }
 
 val composeMainClass = "com.music.bitchord.desktop.MainKt"
@@ -500,11 +504,11 @@ compose.desktop {
                 TargetFormat.Deb,
                 TargetFormat.Rpm,
             )
-            packageName = "BitChord"
+            packageName = "AuraMusic"
             packageVersion = nativePackageVersion
-            description = if (targetOs == "windows") "BitChord" else "Aesthetic YouTube Music client"
-            vendor = "BitChord contributors"
-            copyright = "Copyright © 2026 BitChord contributors"
+            description = if (targetOs == "windows") "AuraMusic" else "Aesthetic YouTube Music client"
+            vendor = "AuraMusic contributors"
+            copyright = "Copyright © 2026 AuraMusic contributors"
 
             modules(
                 "java.base",
@@ -541,7 +545,7 @@ compose.desktop {
             windows {
                 iconFile.set(project.file("packaging/icons/AppIcon.ico"))
                 upgradeUuid = "8f3c1d24-6a2b-4f5e-9c17-2b8d54e0a913"
-                menuGroup = "BitChord"
+                menuGroup = "AuraMusic"
                 shortcut = true
                 dirChooser = false
                 perUserInstall = true

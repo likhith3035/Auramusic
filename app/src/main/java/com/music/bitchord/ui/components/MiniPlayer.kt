@@ -60,6 +60,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.sharedui.resources.Res as SharedRes
 import com.music.bitchord.sharedui.resources.ic_player_next
 import com.music.bitchord.ui.components.thumbnailBorder
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.player.PlayerDock
@@ -360,6 +361,7 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     // percent rather than a dp figure, so the corner stays exactly half the
     // height if the row's contents ever change it — which is what keeps a pill
@@ -385,16 +387,20 @@ fun MiniPlayer(
             )
             .clip(shape)
             .then(
-                if (reduceDynamicBlur) {
+                if (nothingOsMode) {
+                    Modifier
+                        .background(NothingThemeTokens.Black)
+                        .border(1.dp, NothingThemeTokens.Border, shape)
+                } else if (reduceDynamicBlur) {
                     Modifier.background(MaterialTheme.colorScheme.surface)
+                        .border(0.5.dp, Color.White.copy(alpha = 0.10f), shape)
                 } else {
                     Modifier.optimizedHazeEffect(
                         state = hazeState,
                         style = HazeMaterials.thin(MaterialTheme.colorScheme.surface),
-                    )
+                    ).border(0.5.dp, Color.White.copy(alpha = 0.10f), shape)
                 },
             )
-            .border(0.5.dp, Color.White.copy(alpha = 0.10f), shape)
             // Deliberately silent: the whole bar is the target, so it catches
             // stray taps meant for the page behind it, and the sheet rising is
             // its own confirmation. The glyphs on it still buzz.
@@ -416,20 +422,26 @@ fun MiniPlayer(
                     .size(40.dp)
                     .playerDockArt(dock, ART_CORNER)
                     .clip(RoundedCornerShape(ART_CORNER))
-                    .thumbnailBorder(RoundedCornerShape(ART_CORNER))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .then(
+                        if (nothingOsMode) {
+                            Modifier.border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(ART_CORNER))
+                        } else {
+                            Modifier.thumbnailBorder(RoundedCornerShape(ART_CORNER))
+                        }
+                    )
+                    .background(if (nothingOsMode) NothingThemeTokens.SurfaceElevated else MaterialTheme.colorScheme.surfaceVariant),
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 ExplicitSongTitle(
                     song = song,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
                     text = song.artist,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (nothingOsMode) NothingThemeTokens.MutedText else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -437,7 +449,7 @@ fun MiniPlayer(
             if (isLoading) {
                 Box(Modifier.size(GLYPH_SLOT), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = if (nothingOsMode) NothingThemeTokens.Red else MaterialTheme.colorScheme.onBackground,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(SPINNER_SIZE),
                     )
@@ -453,7 +465,7 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                        tint = MaterialTheme.colorScheme.onBackground,
+                        tint = if (nothingOsMode) NothingThemeTokens.Red else MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(GLYPH_SIZE),
                     )
                 }
@@ -470,7 +482,7 @@ fun MiniPlayer(
                 modifier = Modifier.size(GLYPH_SLOT),
             ) {
                 MiniPlayerNextGlyph(
-                    tint = MaterialTheme.colorScheme.onBackground
+                    tint = (if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onBackground)
                         .copy(alpha = if (controlsLocked) 0.3f else 1f),
                 )
             }

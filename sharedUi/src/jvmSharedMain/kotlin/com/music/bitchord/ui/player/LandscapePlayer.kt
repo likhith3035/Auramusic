@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,7 +33,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.MoreHoriz
+import com.music.bitchord.ui.AppUi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -412,6 +416,7 @@ internal fun LandscapeCredits(
     /** The menu glyph is briefly the undo arrow after a quality upgrade. */
     showRevertCue: Boolean,
     onToggleLike: () -> Unit,
+    onDownload: (() -> Unit)? = null,
     onOpenMenu: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     /** Null browse id for anyone but the lead credit — see [NowPlayingScreen]. */
@@ -471,6 +476,24 @@ internal fun LandscapeCredits(
             )
             Spacer(Modifier.width(8.dp))
         }
+        if (onDownload != null && song.localUri == null) {
+            val downloaded = song.videoId in AppUi.host.downloadedIds()
+            CircleGlyph(
+                icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                contentDescription = stringResource(
+                    if (downloaded) Res.string.downloaded else Res.string.download,
+                ),
+                onClick = {
+                    if (downloaded) {
+                        onOpenMenu()
+                    } else {
+                        onDownload()
+                    }
+                },
+                active = downloaded,
+            )
+            Spacer(Modifier.width(8.dp))
+        }
         CircleGlyph(
             icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),
@@ -501,6 +524,7 @@ internal fun LandscapeLyricsPane(
     pickBar: @Composable () -> Unit = {},
     romanizationToggle: @Composable () -> Unit,
     translationToggle: @Composable () -> Unit,
+    shareToggle: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     panel: @Composable (Modifier) -> Unit,
 ) {
@@ -553,7 +577,13 @@ internal fun LandscapeLyricsPane(
                     onStatusClick = onStatusClick,
                 )
             }
-            Box(Modifier.size(34.dp)) { if (hasLyrics) translationToggle() }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                shareToggle()
+                Box(Modifier.size(34.dp)) { if (hasLyrics) translationToggle() }
+            }
         }
         }
     }

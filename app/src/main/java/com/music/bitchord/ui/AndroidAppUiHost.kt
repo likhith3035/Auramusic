@@ -15,6 +15,9 @@ object AndroidAppUiHost : AppUiHost {
     override val pinnedPlaylists = AppSettings.pinnedPlaylists
     override val librarySort = AppSettings.librarySort
 
+    override val nothingOsMode get() = AppSettings.nothingOsMode
+    override fun setNothingOsMode(value: Boolean) = AppSettings.setNothingOsMode(value)
+
     @Composable
     override fun downloadedIds(): Set<String> {
         val saved by Downloads.saved.collectAsStateWithLifecycle()

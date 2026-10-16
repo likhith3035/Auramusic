@@ -40,6 +40,38 @@
         android:contentDescription="@string/widget_artwork"
         android:scaleType="fitXY" />
 
+    <!-- Top-Right AuraMusic Brand Badge -->
+    <LinearLayout
+        android:id="@+id/widget_brand_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="10dp"
+        android:background="@drawable/widget_brand_badge_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="7dp"
+        android:paddingTop="3dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="3dp">
+
+        <ImageView
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_widget_waveform" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="4dp"
+            android:fontFamily="@font/sf_pro_display_semibold"
+            android:includeFontPadding="false"
+            android:text="AuraMusic"
+            android:textColor="#EEFFFFFF"
+            android:textSize="10.5sp" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/widget_band"
         android:layout_width="match_parent"
@@ -51,37 +83,40 @@
         android:paddingRight="@dimen/widget_band_padding"
         android:paddingBottom="4dp">
 
-        <!--
-          Centred, and padded in past the band's own inset: at this width a title
-          runs to the ellipsis more often than not, and one that ended flush with
-          the widget's edge would read as clipped rather than as shortened.
-        -->
         <TextView
             android:id="@+id/widget_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="3dp"
             android:ellipsize="end"
-            android:fontFamily="@font/sf_pro_display_semibold"
+            android:fontFamily="@font/sf_pro_display_bold"
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingLeft="4dp"
             android:paddingRight="4dp"
             android:textColor="#FFFFFFFF"
-            android:textSize="13sp" />
+            android:textSize="13.5sp" />
 
-        <!--
-          Weighted rather than three fixed 40dp buttons centred: at two cells the
-          band has 94dp of content width and three of those want 120, so a fixed
-          row overflows and the launcher clips the last glyph off. Sharing the
-          width out instead means the buttons spread as the widget grows and
-          close up as it shrinks, and the glyphs — which are padded in, not sized
-          by the box — hold 22dp until there is genuinely no room.
-        -->
+        <TextView
+            android:id="@+id/widget_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:layout_marginBottom="4dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/sf_pro_display_regular"
+            android:gravity="center_horizontal"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:textColor="#A0B4DE"
+            android:textSize="11sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <ImageView
@@ -99,9 +134,9 @@
                 android:layout_width="0dp"
                 android:layout_height="@dimen/widget_button_compact"
                 android:layout_weight="1"
-                android:background="@drawable/widget_transport_button"
+                android:background="@drawable/widget_hero_toggle_button"
                 android:contentDescription="@string/widget_play"
-                android:padding="9dp"
+                android:padding="7dp"
                 android:src="@drawable/ic_widget_play" />
 
             <ImageView

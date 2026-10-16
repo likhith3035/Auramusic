@@ -47,6 +47,8 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.FilterAlt
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gradient
@@ -61,7 +63,9 @@ import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SmartDisplay
@@ -124,6 +128,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import com.music.bitchord.ui.about.AuraChangelogDialog
+import com.music.bitchord.ui.about.DeveloperProfileCard
 import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.ui.components.languageDisplayNameRes
 import com.music.bitchord.ui.components.MessageState
@@ -210,6 +216,7 @@ fun SettingsScreen(
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val translationLanguage by AppSettings.translationLanguage.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
@@ -228,10 +235,14 @@ fun SettingsScreen(
     val hideSongStatus by AppSettings.hideSongStatus.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
+    val fastForwardHoldSpeed by AppSettings.fastForwardHoldSpeed.collectAsStateWithLifecycle()
+    val rewindHoldSpeed by AppSettings.rewindHoldSpeed.collectAsStateWithLifecycle()
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
     val smartVersionAlignment by AppSettings.smartVersionAlignment.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val localMusicFolderUri by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
+    val newReleaseAlerts by AppSettings.newReleaseAlertsEnabled.collectAsStateWithLifecycle()
+    val newReleaseAlertFrequency by AppSettings.newReleaseAlertFrequencyHours.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
     val currentDisplay = LocalView.current.display
@@ -278,6 +289,7 @@ fun SettingsScreen(
     // result reports itself under the word "Export".
     var exportStatus by remember { mutableStateOf<String?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    var showChangelog by remember { mutableStateOf(false) }
     var confirmImport by remember { mutableStateOf(false) }
     var confirmClearSongCache by remember { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
@@ -530,7 +542,7 @@ fun SettingsScreen(
                     title = exportDownloadsTitle,
                     checked = exportDownloads,
                     onCheckedChange = AppSettings::setExportDownloads,
-                    subtitle = "Music/BitChord".takeIf { exportDownloads },
+                    subtitle = "Music/AuraMusic".takeIf { exportDownloads },
                 )
             }
         }
@@ -738,6 +750,42 @@ fun SettingsScreen(
                     onClick = onEqualizer,
                 )
             }
+
+            val ffOptions = listOf("1.25×", "1.5×", "1.75×", "2.0×", "2.5×", "3.0×")
+            val ffValues = listOf(1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+            val ffIndex = ffValues.indexOf(fastForwardHoldSpeed).let { if (it >= 0) it else 3 }
+            val ffHoldTitle = stringResource(R.string.fast_forward_hold_speed)
+            row(ffHoldTitle, "speed", "fast forward", "hold", "2x", "seek") {
+                SettingsRow(
+                    icon = Icons.Rounded.FastForward,
+                    title = ffHoldTitle,
+                    subtitle = stringResource(R.string.fast_forward_hold_speed_subtitle),
+                )
+                SegmentedControl(
+                    options = ffOptions,
+                    selectedIndex = ffIndex,
+                    onSelect = { AppSettings.setFastForwardHoldSpeed(ffValues[it]) },
+                    modifier = Modifier.padding(start = TEXT_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
+
+            val rwOptions = listOf("0.5× Slow", "0.75× Slow", "Rewind Scrub")
+            val rwValues = listOf(0.5f, 0.75f, 0.0f)
+            val rwIndex = rwValues.indexOf(rewindHoldSpeed).let { if (it >= 0) it else 0 }
+            val rwHoldTitle = stringResource(R.string.rewind_hold_action)
+            row(rwHoldTitle, "rewind", "slow motion", "hold", "0.5x", "scrub") {
+                SettingsRow(
+                    icon = Icons.Rounded.FastRewind,
+                    title = rwHoldTitle,
+                    subtitle = stringResource(R.string.rewind_hold_action_subtitle),
+                )
+                SegmentedControl(
+                    options = rwOptions,
+                    selectedIndex = rwIndex,
+                    onSelect = { AppSettings.setRewindHoldSpeed(rwValues[it]) },
+                    modifier = Modifier.padding(start = TEXT_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
         }
 
         SearchableSettingsGroup(search, header = stringResource(R.string.appearance)) {
@@ -749,6 +797,26 @@ fun SettingsScreen(
                     selectedIndex = ThemeMode.entries.indexOf(theme),
                     onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
                     modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
+            val nothingOsTitle = stringResource(R.string.nothing_os_mode)
+            row(nothingOsTitle, "nothing", "glyph", "oled", "pitch black") {
+                SettingsRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = nothingOsTitle,
+                    subtitle = stringResource(R.string.nothing_os_mode_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = nothingOsMode,
+                            onCheckedChange = AppSettings::setNothingOsMode,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFFD71921),
+                                checkedBorderColor = Color(0xFFD71921),
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setNothingOsMode(!nothingOsMode) },
                 )
             }
             val reduceAnimationTitle = stringResource(R.string.reduce_animation)
@@ -1224,6 +1292,48 @@ fun SettingsScreen(
         // No footer: it only restated the stop-on-close row's own subtitle,
         // which sits four rows above it and says the same thing in fewer words.
         SearchableSettingsGroup(search, header = stringResource(R.string.miscellaneous)) {
+            val newReleaseAlertsTitle = stringResource(R.string.settings_new_releases_title)
+            row(newReleaseAlertsTitle, "notification", "releases", "artists", "new") {
+                SettingsRow(
+                    icon = Icons.Rounded.Notifications,
+                    title = newReleaseAlertsTitle,
+                    subtitle = stringResource(R.string.settings_new_releases_desc),
+                    trailing = {
+                        Switch(
+                            checked = newReleaseAlerts,
+                            onCheckedChange = { AppSettings.setNewReleaseAlertsEnabled(context, it) },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setNewReleaseAlertsEnabled(context, !newReleaseAlerts) },
+                )
+            }
+            if (newReleaseAlerts) {
+                val freqTitle = stringResource(R.string.settings_new_releases_freq_title)
+                row(freqTitle, "notification", "frequency", "hours") {
+                    val freqSubtitle = when (newReleaseAlertFrequency) {
+                        6 -> stringResource(R.string.settings_new_releases_freq_6h)
+                        24 -> stringResource(R.string.settings_new_releases_freq_24h)
+                        else -> stringResource(R.string.settings_new_releases_freq_12h)
+                    }
+                    SettingsRow(
+                        icon = Icons.Rounded.Schedule,
+                        title = freqTitle,
+                        subtitle = freqSubtitle,
+                        onClick = {
+                            val next = when (newReleaseAlertFrequency) {
+                                6 -> 12
+                                12 -> 24
+                                else -> 6
+                            }
+                            AppSettings.setNewReleaseAlertFrequencyHours(context, next)
+                        },
+                    )
+                }
+            }
             val playNextOnSwipeTitle = stringResource(R.string.play_next_on_swipe)
             row(playNextOnSwipeTitle, "swipe", "queue") {
                 SettingsRow(
@@ -1389,39 +1499,39 @@ fun SettingsScreen(
         // The version line is the page's colophon, not a setting: it belongs to
         // the whole list, so it goes when the list is narrowed to a few rows.
         if (searchQuery.isBlank()) {
-        Text(
-            text = buildAnnotatedString {
-                append("bitchord $version  ")
-                val linkStyles = TextLinkStyles(
-                    style = SpanStyle(
-                        color = MaterialTheme.colorScheme.primary,
-                        textDecoration = TextDecoration.Underline,
-                    ),
-                )
-                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx/BitChord", linkStyles)) {
-                    append("GitHub")
-                }
-                append("  ")
-                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx", linkStyles)) {
-                    append("Developer")
-                }
-                append("  ")
-                withLink(LinkAnnotation.Url("https://discord.gg/pDdKfrdHY6", linkStyles)) {
-                    append("Discord")
-                }
-                append("  ")
-                withLink(LinkAnnotation.Url("https://bitchord.kushagrasingh.in/", linkStyles)) {
-                    append("Website")
-                }
-                append("\n~YouTube Music & Listen Together Backend")
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 8.dp),
-        )
+            DeveloperProfileCard(
+                developerName = "kami likhith",
+                onOpenChangelog = { showChangelog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 28.dp, bottom = 12.dp),
+            )
+
+            Text(
+                text = buildAnnotatedString {
+                    append("AuraMusic $version by likhith  ")
+                    val linkStyles = TextLinkStyles(
+                        style = SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    )
+                    withLink(LinkAnnotation.Url("https://github.com/likhith3035", linkStyles)) {
+                        append("GitHub")
+                    }
+                    append("  ")
+                    withLink(LinkAnnotation.Url("https://devlikhith.vercel.app/", linkStyles)) {
+                        append("Developer")
+                    }
+                    append("\n~YouTube Music & Listen Together Backend")
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 8.dp),
+            )
         }
     }
 
@@ -1694,6 +1804,11 @@ fun SettingsScreen(
         )
     }
 
+    if (showChangelog) {
+        AuraChangelogDialog(
+            onDismissRequest = { showChangelog = false },
+        )
+    }
 }
 
 /** "3 months of listening" — the unit a backup is actually measured in. */

@@ -2409,6 +2409,7 @@ private fun BitChordApp(
             onRemoveFromQueue = { controller?.removeMediaItem(it) },
             onMoveInQueue = { from, to -> controller?.moveMediaItem(from, to) },
             onQueueDragActiveChange = { active -> controller?.setQueueDragActive(active) },
+            onDownload = { downloadSong(displayedSong) },
             // The enriched copy, not player.song — otherwise the menu
             // hides the album and artist rows even once their browse
             // ids have been resolved.

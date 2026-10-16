@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import com.music.bitchord.ui.replay.Fonts
 import com.music.bitchord.ui.replay.drawArtwork
 import com.music.bitchord.ui.replay.drawBackdrop
@@ -49,44 +51,66 @@ import kotlinx.coroutines.withContext
  * in, so a passage too long for the frame lengthens the card instead of being
  * cut, or made small enough to hold a phone at arm's length to read.
  */
+internal enum class ShareCardTheme {
+    DYNAMIC,
+    DARK_OLED,
+    VIBRANT,
+}
+
 internal suspend fun renderLyricsShareCard(
     context: Context,
     card: LyricsShareRequest,
     /** Pad out to the full 1080×1920 frame, the passage centred in the room. */
     story: Boolean = false,
+    theme: ShareCardTheme = ShareCardTheme.DYNAMIC,
 ): Bitmap = withContext(Dispatchers.Default) {
     val type = Fonts(context)
     val cover = card.artworkUrl?.let { loadBitmap(context, it) }
 
-    // ── Sizing ──────────────────────────────────────────────────────────────
-    // No room is reserved for the words to sit in: they get their own height,
-    // and the card is built down from that number. A chorus comes out a strip
-    // barely taller than its own text instead of a 9:16 sheet with a paragraph
-    // floating in the middle of it, and the size comes down only as far as the
-    // ladder goes — past that the frame gives rather than the type does.
+    val hasLyrics = card.lines.isNotEmpty()
     val headTop = HEADER_BOTTOM + GAP_ABOVE_BODY
     val frameRoom = MAX_CARD_H - FOOTER_THUMB - FOOTER_PAD - GAP_BELOW_BODY - headTop
-    val plan = fittestPlan(type, card.lines, frameRoom)
-    // A story is always the whole frame, so the spare room is split above and
-    // below the passage; otherwise the card is only as tall as its words.
-    val spare = if (story) (frameRoom - plan.content).coerceAtLeast(0f) else 0f
+    val plan = if (hasLyrics) fittestPlan(type, card.lines, frameRoom) else null
+
+    val spare = if (story) {
+        val contentH = plan?.content ?: 0f
+        (frameRoom - contentH).coerceAtLeast(0f)
+    } else 0f
+
     val bodyTop = headTop + spare / 2
-    // The passage ends where its own rows end, and everything under it — the
-    // gap, the sleeve credit, the foot — hangs off that. Because the card is
-    // measured from the same sum the rows are drawn from, no line can ever
-    // land past the bottom by a rounding error and be replaced by a mark
-    // saying something was left out.
-    val bodyBottom = bodyTop + plan.content
-    val cardH = bodyBottom + spare / 2 + GAP_BELOW_BODY + FOOTER_THUMB + FOOTER_PAD
+    val bodyBottom = bodyTop + (plan?.content ?: 0f)
+    val cardH = if (!hasLyrics) {
+        if (story) MAX_CARD_H else 1350f
+    } else {
+        bodyBottom + spare / 2 + GAP_BELOW_BODY + FOOTER_THUMB + FOOTER_PAD
+    }
 
     val bitmap = Bitmap.createBitmap(CARD_W, cardH.roundToInt(), Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    drawBackdrop(canvas, cover, 0f, cardH)
+
+    when (theme) {
+        ShareCardTheme.DYNAMIC -> drawBackdrop(canvas, cover, 0f, cardH)
+        ShareCardTheme.DARK_OLED -> {
+            canvas.drawColor(0xFF0C0C0E.toInt())
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val cx = CARD_W / 2f
+            val cy = cardH * 0.45f
+            val radius = CARD_W * 0.85f
+            paint.shader = RadialGradient(
+                cx,
+                cy,
+                radius,
+                intArrayOf(0x33FFFFFF, 0x00000000),
+                floatArrayOf(0f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawCircle(cx, cy, radius, paint)
+            paint.shader = null
+        }
+        ShareCardTheme.VIBRANT -> drawBackdrop(canvas, cover, 50f, cardH)
+    }
 
     // ── Header ──────────────────────────────────────────────────────────────
-    // The mark alone, at the top right — the same one the Replay carries, so
-    // two of these cards still read as one family. Nothing else goes above
-    // the passage: the picture is the verse, not a caption for it.
     val brand = type.heading(46f, 0xE6FFFFFF.toInt()).apply {
         textAlign = Paint.Align.RIGHT
     }
@@ -98,29 +122,57 @@ internal suspend fun renderLyricsShareCard(
         HEADER_BASELINE,
     )
 
-    // ── The passage ─────────────────────────────────────────────────────────
-    // Every row that exists is drawn: the frame below is measured from
-    // wherever these rows end, so there is never room to be short of and
-    // nothing that has to be cut to make it.
-    var y = bodyTop
-    for (row in plan.rows) {
-        val baseline = y + row.gapBefore - row.paint.ascent() +
-            if (row.isGap) row.paint.textSize * GAP_MARKER_OFFSET else 0f
-        val x = if (row.centered) CARD_W / 2f else CARD_MARGIN
-        canvas.drawText(row.text, x, baseline, row.paint)
-        y += row.gapBefore + row.height
-    }
+    if (hasLyrics && plan != null) {
+        // ── The passage ─────────────────────────────────────────────────────
+        var y = bodyTop
+        for (row in plan.rows) {
+            val baseline = y + row.gapBefore - row.paint.ascent() +
+                if (row.isGap) row.paint.textSize * GAP_MARKER_OFFSET else 0f
+            val x = if (row.centered) CARD_W / 2f else CARD_MARGIN
+            canvas.drawText(row.text, x, baseline, row.paint)
+            y += row.gapBefore + row.height
+        }
 
-    // ── Footer ──────────────────────────────────────────────────────────────
-    // Which song this is — which only the backdrop had been saying until now.
-    val thumbY = cardH - FOOTER_PAD - FOOTER_THUMB
-    drawArtwork(canvas, cover, card.song.title, CARD_MARGIN, thumbY, FOOTER_THUMB, false)
-    val textX = CARD_MARGIN + FOOTER_THUMB + 34f
-    val room = CARD_W - CARD_MARGIN - textX
-    val title = type.body(50f, Color.WHITE, bold = true)
-    canvas.drawText(ellipsised(card.song.title, title, room), textX, thumbY + 74f, title)
-    val artist = type.body(42f, 0x99FFFFFF.toInt())
-    canvas.drawText(ellipsised(card.song.artist, artist, room), textX, thumbY + 132f, artist)
+        // ── Footer ──────────────────────────────────────────────────────────
+        val thumbY = cardH - FOOTER_PAD - FOOTER_THUMB
+        drawArtwork(canvas, cover, card.song.title, CARD_MARGIN, thumbY, FOOTER_THUMB, false)
+        val textX = CARD_MARGIN + FOOTER_THUMB + 34f
+        val room = CARD_W - CARD_MARGIN - textX
+        val title = type.body(50f, Color.WHITE, bold = true)
+        canvas.drawText(ellipsised(card.song.title, title, room), textX, thumbY + 74f, title)
+        val artist = type.body(42f, 0x99FFFFFF.toInt())
+        canvas.drawText(ellipsised(card.song.artist, artist, room), textX, thumbY + 132f, artist)
+    } else {
+        // ── Track Story View (Album Art + Title + Artist + Waveform) ─────────
+        val artSize = 620f
+        val artX = (CARD_W - artSize) / 2f
+        val artY = (cardH - artSize) / 2f - 90f
+        drawArtwork(canvas, cover, card.song.title, artX, artY, artSize, false)
+
+        val titleY = artY + artSize + 85f
+        val titlePaint = type.heading(58f, Color.WHITE).apply { textAlign = Paint.Align.CENTER }
+        val titleText = ellipsised(card.song.title, titlePaint, CARD_W - CARD_MARGIN * 2)
+        canvas.drawText(titleText, CARD_W / 2f, titleY, titlePaint)
+
+        val artistY = titleY + 65f
+        val artistPaint = type.body(44f, 0xCCFFFFFF.toInt()).apply { textAlign = Paint.Align.CENTER }
+        val artistText = ellipsised(card.song.artist, artistPaint, CARD_W - CARD_MARGIN * 2)
+        canvas.drawText(artistText, CARD_W / 2f, artistY, artistPaint)
+
+        val waveY = artistY + 55f
+        val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0x80FFFFFF.toInt()
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = 7f
+        }
+        val barHeights = floatArrayOf(18f, 32f, 48f, 26f, 60f, 38f, 52f, 30f, 65f, 42f, 24f, 45f, 58f, 34f, 20f)
+        val totalWaveW = barHeights.size * 22f
+        val waveStartX = (CARD_W - totalWaveW) / 2f
+        barHeights.forEachIndexed { i, h ->
+            val bx = waveStartX + i * 22f
+            canvas.drawLine(bx, waveY + (65f - h) / 2f, bx, waveY + (65f + h) / 2f, wavePaint)
+        }
+    }
 
     bitmap
 }
@@ -267,7 +319,7 @@ private const val CARD_MARGIN = 72f
 private const val CARD_CONTENT_W = CARD_W - CARD_MARGIN * 2
 
 private const val LOGO_GAP = 20f
-private const val BRAND = "BitChord"
+private const val BRAND = "AuraMusic"
 
 /** Baseline of the mark at the top right, and just under it where the gap starts. */
 private const val HEADER_BASELINE = 132f

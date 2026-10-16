@@ -18,7 +18,7 @@ import java.util.Locale
 /**
  * Where a downloaded track goes, and how it gets there.
  *
- * The destination is the device's own Music folder, in a `BitChord`
+ * The destination is the device's own Music folder, in an `AuraMusic`
  * subfolder — somewhere the file manager lists, other players can open, and a
  * user can back up or delete without going through this app. That choice is
  * what makes this class necessary at all: an app-private directory would be
@@ -56,7 +56,7 @@ object DownloadStore {
     private const val TAG = "BitChord"
 
     /** The subfolder of Music that everything lands in. */
-    const val FOLDER = "BitChord"
+    const val FOLDER = "AuraMusic"
 
     private val relativePath = "${Environment.DIRECTORY_MUSIC}/$FOLDER"
 
@@ -78,11 +78,12 @@ object DownloadStore {
     // ---- Naming -------------------------------------------------------------
 
     /**
-     * What the file is called: `Artist - Title.ext`.
+     * What the file is called: `Artist - Title [AuraMusic].ext`.
      *
      * Artist first because a Music folder is sorted by name and nothing
      * else — no tags to group by — so leading with the artist is the only thing
-     * that puts an album back together in the listing.
+     * that puts an album back together in the listing. Appends the `[AuraMusic]`
+     * watermark so downloaded files are clearly recognized in local storage.
      */
     fun fileNameFor(song: Song, extension: String): String {
         val artist = sanitise(song.artist)
@@ -92,7 +93,9 @@ object DownloadStore {
             title.isEmpty() -> artist
             else -> "$artist - $title"
         }.ifEmpty { song.videoId }
-        return "${stem.take(MAX_STEM_CHARS).trimEnd()}.$extension"
+        val base = stem.take(MAX_STEM_CHARS).trimEnd()
+        val tagged = if (base.endsWith("[AuraMusic]", ignoreCase = true)) base else "$base [AuraMusic]"
+        return "$tagged.$extension"
     }
 
     /**
@@ -148,7 +151,18 @@ object DownloadStore {
      * taps download twice gets two copies rather than being told they already
      * have one.
      */
-    fun existing(context: Context, name: String): Uri? =
+    fun existing(context: Context, name: String): Uri? {
+        val found = lookup(context, name)
+        if (found != null) return found
+        // Backwards compatibility: check legacy file name without " [AuraMusic]"
+        val legacyName = name.replace(" [AuraMusic].", ".")
+        if (legacyName != name) {
+            return lookup(context, legacyName)
+        }
+        return null
+    }
+
+    private fun lookup(context: Context, name: String): Uri? =
         if (!AppSettings.exportDownloads.value) {
             privateFile(context, name).takeIf { it.exists() }?.let(Uri::fromFile)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -162,9 +176,10 @@ object DownloadStore {
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
-            arrayOf(name, "%$FOLDER%"),
+            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND (" +
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? OR " +
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?)",
+            arrayOf(name, "%$FOLDER%", "%BitChord%"),
             null,
         )?.use { cursor ->
             if (!cursor.moveToFirst()) return@use null
@@ -304,10 +319,19 @@ object DownloadStore {
     }
 
     @Suppress("DEPRECATION")
-    private fun legacyFile(name: String) = File(
-        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), FOLDER),
-        name,
-    )
+    private fun legacyFile(name: String): File {
+        val aura = File(
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), FOLDER),
+            name,
+        )
+        if (aura.exists()) return aura
+        val legacy = File(
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "BitChord"),
+            name,
+        )
+        if (legacy.exists()) return legacy
+        return aura
+    }
 
     private fun privateFile(context: Context, name: String) =
         File(File(context.filesDir, "downloads"), name)

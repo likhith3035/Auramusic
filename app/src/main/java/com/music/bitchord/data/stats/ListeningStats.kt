@@ -77,6 +77,10 @@ object ListeningStats {
     /** Set when [open] has changes not yet on disk. */
     private var dirty = false
 
+    /** 24-hour rolling daily playback events for Library daily highlights and Today replay. */
+    private val dailyPlays = mutableListOf<DailyPlayRecord>()
+    private var dailyDirty = false
+
     /**
      * Where every write to this folder happens.
      *
@@ -112,7 +116,24 @@ object ListeningStats {
         // ask for one is the playback sampler — on the main thread, a few
         // seconds into the first track. Done here instead, it has happened long
         // before anything is playing.
-        writer.launch { synchronized(lock) { bucketFor(YearMonth.now()) } }
+        writer.launch {
+            synchronized(lock) {
+                bucketFor(YearMonth.now())
+                loadDailyPlaysLocked()
+            }
+        }
+    }
+
+    private fun loadDailyPlaysLocked() {
+        runCatching {
+            val dailyFile = File(directory, "daily_log.json")
+            if (dailyFile.exists()) {
+                val records = json.decodeFromString<List<DailyPlayRecord>>(dailyFile.readText())
+                val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                dailyPlays.clear()
+                dailyPlays.addAll(records.filter { it.timestamp >= cutoff })
+            }
+        }.onFailure { Log.w(TAG, "Could not load daily listening log", it) }
     }
 
     private val ready: Boolean get() = this::directory.isInitialized
@@ -135,6 +156,26 @@ object ListeningStats {
         val now = System.currentTimeMillis()
         val at = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
         synchronized(lock) {
+            // Record 24-hour rolling daily play event
+            val roles = MusicDirectorClassifier.classify(song.artist, song.artists.map { it.name })
+            val cutoff = now - 24 * 60 * 60 * 1000L
+            dailyPlays.removeAll { it.timestamp < cutoff }
+            dailyPlays.add(
+                DailyPlayRecord(
+                    videoId = song.videoId,
+                    title = song.title,
+                    artist = song.artist,
+                    art = song.thumbnailUrl,
+                    durationText = song.durationText,
+                    timestamp = now,
+                    playedMs = playedMs,
+                    countsAsPlay = countsAsPlay,
+                    singer = roles.singer,
+                    musicDirector = roles.musicDirector,
+                )
+            )
+            dailyDirty = true
+
             val bucket = bucketFor(YearMonth.from(at))
             val track = bucket.tracks.getOrPut(song.videoId) {
                 TrackEntry(
@@ -211,11 +252,20 @@ object ListeningStats {
      */
     fun flush() {
         pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) } }
+        if (dailyDirty) {
+            writer.launch { writeLock.withLock { writeDailyLocked() } }
+        }
     }
 
     /** As [flush], for a caller that is about to read back what it wrote. */
     private suspend fun flushAndAwait() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) }.join() }
+        val p = pending()
+        if (p != null) {
+            writer.launch { write(p.first, p.second) }.join()
+        }
+        if (dailyDirty) {
+            writer.launch { writeLock.withLock { writeDailyLocked() } }.join()
+        }
     }
 
     /** The open month as bytes-to-be, or null when nothing has changed. */
@@ -227,6 +277,21 @@ object ListeningStats {
             dirty = false
             bucket.key to bucket.snapshot()
         }
+    }
+
+    private fun writeDailyLocked() {
+        if (!dailyDirty) return
+        dailyDirty = false
+        val snapshot = synchronized(lock) { dailyPlays.toList() }
+        runCatching {
+            directory.mkdirs()
+            val file = File(directory, "daily_log.json")
+            val temporary = File(directory, "daily_log.json.tmp")
+            temporary.writeText(json.encodeToString(snapshot))
+            if (!temporary.renameTo(file)) {
+                if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
+            }
+        }.onFailure { Log.w(TAG, "Could not write daily log", it) }
     }
 
     /**
@@ -252,6 +317,7 @@ object ListeningStats {
                 // the only thing standing between that and a .tmp per flush.
                 if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
             }
+            writeDailyLocked()
             version++
         }.onFailure { Log.w(TAG, "Could not write listening bucket $key", it) }
     }
@@ -276,6 +342,144 @@ object ListeningStats {
     // ── Reading ─────────────────────────────────────────────────────────────
 
     /**
+     * Aggregated 1-Day (24-Hour) listening highlights for LibraryScreen.
+     */
+    suspend fun dailyHighlights(): DailyHighlightsSummary = withContext(Dispatchers.IO) {
+        flushAndAwait()
+        val now = System.currentTimeMillis()
+        val cutoff = now - 24 * 60 * 60 * 1000L
+
+        val recentRecords = synchronized(lock) {
+            dailyPlays.filter { it.timestamp >= cutoff }
+        }
+
+        if (recentRecords.isNotEmpty()) {
+            val songGroups = recentRecords.groupBy { it.videoId }
+            val topSongGroup = songGroups.maxByOrNull { group ->
+                val plays = group.value.count { it.countsAsPlay }
+                val ms = group.value.sumOf { it.playedMs }
+                plays * 10_000L + ms / 1000L
+            }
+
+            val topSongRecord = topSongGroup?.value?.lastOrNull()
+            val topSongRepeatedCount = topSongGroup?.value?.count { it.countsAsPlay } ?: 0
+            val topRepeatedSong = topSongRecord?.let {
+                Song(
+                    videoId = it.videoId,
+                    title = it.title,
+                    artist = it.artist,
+                    thumbnailUrl = it.art,
+                    durationText = it.durationText,
+                )
+            }
+
+            val singerGroups = recentRecords.groupBy { it.singer }
+            val topSingerGroup = singerGroups.maxByOrNull { group ->
+                group.value.sumOf { it.playedMs }
+            }
+            val topSinger = topSingerGroup?.key
+            val topSingerMs = topSingerGroup?.value?.sumOf { it.playedMs } ?: 0L
+            val topSingerPlays = topSingerGroup?.value?.count { it.countsAsPlay } ?: 0
+
+            val directorGroups = recentRecords.filter { it.musicDirector != null }.groupBy { it.musicDirector!! }
+            val topDirectorGroup = directorGroups.maxByOrNull { group ->
+                group.value.sumOf { it.playedMs }
+            }
+            val topDirector = topDirectorGroup?.key
+            val topDirectorMs = topDirectorGroup?.value?.sumOf { it.playedMs } ?: 0L
+            val topDirectorPlays = topDirectorGroup?.value?.count { it.countsAsPlay } ?: 0
+
+            val totalPlayedMs = recentRecords.sumOf { it.playedMs }
+            val totalPlays = recentRecords.count { it.countsAsPlay }
+
+            val hoursCount = IntArray(24)
+            recentRecords.forEach {
+                val hour = Instant.ofEpochMilli(it.timestamp).atZone(ZoneId.systemDefault()).hour
+                hoursCount[hour]++
+            }
+            val peakHour = hoursCount.withIndex().filter { it.value > 0 }.maxByOrNull { it.value }?.index
+
+            val todaySongs = songGroups.values
+                .sortedByDescending { it.count { rec -> rec.countsAsPlay } * 10_000L + it.sumOf { rec -> rec.playedMs } / 1000L }
+                .mapNotNull { group ->
+                    val rec = group.lastOrNull() ?: return@mapNotNull null
+                    Song(
+                        videoId = rec.videoId,
+                        title = rec.title,
+                        artist = rec.artist,
+                        thumbnailUrl = rec.art,
+                        durationText = rec.durationText,
+                    )
+                }
+
+            return@withContext DailyHighlightsSummary(
+                topRepeatedSong = topRepeatedSong,
+                topRepeatedCount = maxOf(1, topSongRepeatedCount),
+                topSinger = topSinger,
+                topSingerMinutes = topSingerMs / 60_000L,
+                topSingerPlays = topSingerPlays,
+                topMusicDirector = topDirector ?: topSinger,
+                topMusicDirectorMinutes = topDirectorMs / 60_000L,
+                topMusicDirectorPlays = topDirectorPlays,
+                totalPlayedMs = totalPlayedMs,
+                totalPlays = totalPlays,
+                totalTracksCount = todaySongs.size,
+                peakHour = peakHour,
+                todaySongs = todaySongs,
+            )
+        }
+
+        // Fallback: Check tracks played in the last 24h from the current open bucket
+        val openTracks = synchronized(lock) {
+            open?.tracks?.values?.filter { it.last >= cutoff } ?: emptyList()
+        }
+        if (openTracks.isNotEmpty()) {
+            val topTrack = openTracks.maxByOrNull { it.plays * 10_000L + it.ms / 1000L }
+            val topSong = topTrack?.let {
+                Song(
+                    videoId = it.id,
+                    title = it.title,
+                    artist = it.artist,
+                    thumbnailUrl = it.art,
+                    albumName = it.album,
+                    albumId = it.albumId,
+                    artistId = it.artistId,
+                )
+            }
+            val roles = topTrack?.let { MusicDirectorClassifier.classify(it.artist) }
+
+            val todaySongs = openTracks.sortedByDescending { it.plays * 10_000L + it.ms / 1000L }.map {
+                Song(
+                    videoId = it.id,
+                    title = it.title,
+                    artist = it.artist,
+                    thumbnailUrl = it.art,
+                    albumName = it.album,
+                    albumId = it.albumId,
+                    artistId = it.artistId,
+                )
+            }
+            return@withContext DailyHighlightsSummary(
+                topRepeatedSong = topSong,
+                topRepeatedCount = maxOf(1, topTrack?.plays ?: 1),
+                topSinger = roles?.singer ?: topTrack?.artist,
+                topSingerMinutes = (topTrack?.ms ?: 0L) / 60_000L,
+                topSingerPlays = topTrack?.plays ?: 1,
+                topMusicDirector = roles?.musicDirector ?: roles?.singer ?: topTrack?.artist,
+                topMusicDirectorMinutes = (topTrack?.ms ?: 0L) / 60_000L,
+                topMusicDirectorPlays = topTrack?.plays ?: 1,
+                totalPlayedMs = openTracks.sumOf { it.ms },
+                totalPlays = openTracks.sumOf { it.plays },
+                totalTracksCount = openTracks.size,
+                peakHour = null,
+                todaySongs = todaySongs,
+            )
+        }
+
+        DailyHighlightsSummary()
+    }
+
+    /**
      * The Replay for [period], merged off disk.
      *
      * Off the main thread and off the open bucket both: the months it needs are
@@ -295,6 +499,44 @@ object ListeningStats {
         cached?.takeIf {
             it.period == period && it.version == version && it.facts == facts && it.day == today
         }?.let { return@withContext it.summary }
+
+        if (period == ReplayPeriod.TODAY) {
+            val daily = dailyHighlights()
+            if (!daily.isEmpty) {
+                val rankedSongs = daily.todaySongs.map { s ->
+                    val plays = if (s.videoId == daily.topRepeatedSong?.videoId) daily.topRepeatedCount else 1
+                    RankedSong(song = s, ms = 180_000L * plays, plays = plays)
+                }
+                val rankedArtists = listOfNotNull(
+                    daily.topSinger?.let {
+                        RankedEntry(title = it, subtitle = "Lead Singer", artworkUrl = daily.topRepeatedSong?.thumbnailUrl, browseId = null, ms = daily.topSingerMinutes * 60_000L, plays = daily.topSingerPlays)
+                    },
+                    daily.topMusicDirector?.takeIf { it != daily.topSinger }?.let {
+                        RankedEntry(title = it, subtitle = "Music Director", artworkUrl = null, browseId = null, ms = daily.topMusicDirectorMinutes * 60_000L, plays = daily.topMusicDirectorPlays)
+                    }
+                )
+                val hoursList = List(24) { h -> if (h == daily.peakHour) 60_000L else 0L }
+                val summary = ReplaySummary(
+                    period = ReplayPeriod.TODAY,
+                    label = "Today",
+                    totalMs = daily.totalPlayedMs,
+                    totalPlays = daily.totalPlays,
+                    songs = rankedSongs,
+                    artists = rankedArtists,
+                    albums = emptyList(),
+                    genres = emptyList(),
+                    hourOfDay = hoursList,
+                    busiestDay = today.toString(),
+                    busiestDayMs = daily.totalPlayedMs,
+                    distinctSongs = daily.totalTracksCount,
+                    distinctArtists = rankedArtists.size,
+                    distinctAlbums = 0,
+                    since = today.toString(),
+                )
+                cached = Cached(period, version, facts, today, summary)
+                return@withContext summary
+            }
+        }
 
         val merged = MergedBucket()
         months().filter { period.covers(it, today) }
@@ -746,18 +988,21 @@ data class RankedSong(val song: Song, val ms: Long, val plays: Int)
 
 /** How far back a Replay reaches. */
 enum class ReplayPeriod(val chip: String) {
+    TODAY("Today"),
     THIS_MONTH("This month"),
     THIS_YEAR("This year"),
     ALL_TIME("All time"),
     ;
 
     fun covers(month: YearMonth, today: LocalDate): Boolean = when (this) {
+        TODAY -> month == YearMonth.from(today)
         THIS_MONTH -> month == YearMonth.from(today)
         THIS_YEAR -> month.year == today.year
         ALL_TIME -> true
     }
 
     fun label(today: LocalDate): String = when (this) {
+        TODAY -> "Today"
         THIS_MONTH -> YearMonth.from(today).month.name.lowercase(Locale.ROOT)
             .replaceFirstChar { it.uppercase(Locale.ROOT) } + " ${today.year}"
         THIS_YEAR -> today.year.toString()
