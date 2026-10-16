@@ -1,395 +1,340 @@
 /**
- * AuraMusic TV Main Application Controller
- * Handles view switching, shelf rendering, virtual TV remote keyboard, modals, and drawers.
+ * AuraMusic Desktop-Style Application Controller
+ * Handles Desktop navigation, quick picks, carousels, LandscapePlayer overlay, and panels.
  */
 
 class AuraAppController {
   constructor() {
     this.currentView = 'home';
-    this.previousView = 'home';
     this.searchQuery = '';
     this.init();
   }
 
   init() {
     this.setupGreeting();
-    this.populateShelves();
-    this.bindActionButtons();
-    this.setupVirtualKeyboard();
+    this.populateHomeFeed();
+    this.bindEvents();
+    this.setupKeyboard();
   }
 
   setupGreeting() {
-    const greetingEl = document.getElementById('heroGreeting');
-    if (!greetingEl) return;
+    const el = document.getElementById('greetingTitle');
+    if (!el) return;
     const hour = new Date().getHours();
-    let text = "Good Evening, Audiophile";
-    if (hour >= 5 && hour < 12) text = "Good Morning, Audiophile";
-    else if (hour >= 12 && hour < 17) text = "Good Afternoon, Audiophile";
-    greetingEl.textContent = text;
+    let text = "Good evening, Audiophile";
+    if (hour >= 5 && hour < 12) text = "Good morning, Audiophile";
+    else if (hour >= 12 && hour < 17) text = "Good afternoon, Audiophile";
+    el.textContent = text;
   }
 
-  populateShelves() {
-    const dailyMixes = [
-      {
-        id: 'mix-1',
-        title: 'Midnight Echoes',
-        artist: 'Aura Sound Lab',
-        art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=500&auto=format&fit=crop&q=80',
-        badge: 'HI-RES'
-      },
-      {
-        id: 'mix-2',
-        title: 'Neon Horizon',
-        artist: 'The Cyber Waves',
-        art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
-        badge: 'LOSSLESS'
-      },
-      {
-        id: 'mix-3',
-        title: 'Tokyo Rain Walk',
-        artist: 'Komorebi Quartet',
-        art: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=80',
-        badge: 'FLAC'
-      },
-      {
-        id: 'mix-4',
-        title: 'Starlight Odyssey',
-        artist: 'Aura Symphony',
-        art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=500&auto=format&fit=crop&q=80',
-        badge: '24-BIT'
-      },
-      {
-        id: 'mix-5',
-        title: 'Velvet Sunset',
-        artist: 'Solaris Duo',
-        art: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80',
-        badge: 'HI-RES'
-      }
+  populateHomeFeed() {
+    // 1. Quick Picks (4-column compact track rows like Desktop HomeScreen.kt)
+    const quickPicks = [
+      { id: 'qp-1', title: 'Midnight Echoes', artist: 'Aura Sound Lab', art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=200' },
+      { id: 'qp-2', title: 'Neon Horizon', artist: 'The Cyber Waves', art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200' },
+      { id: 'qp-3', title: 'Tokyo Rain Walk', artist: 'Komorebi Quartet', art: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200' },
+      { id: 'qp-4', title: 'Starlight Odyssey', artist: 'Aura Symphony', art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=200' },
+      { id: 'qp-5', title: 'Blinding Lights', artist: 'The Weeknd', art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200' },
+      { id: 'qp-6', title: 'Birds of a Feather', artist: 'Billie Eilish', art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200' },
+      { id: 'qp-7', title: 'Espresso', artist: 'Sabrina Carpenter', art: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=200' },
+      { id: 'qp-8', title: 'Velvet Sunset', artist: 'Solaris Duo', art: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200' }
     ];
 
-    const trending = [
-      {
-        id: 'trend-1',
-        title: 'Starboy Euphoria',
-        artist: 'The Weeknd & Daft Punk',
-        art: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
-        badge: 'TOP #1'
-      },
-      {
-        id: 'trend-2',
-        title: 'Blinding Lights',
-        artist: 'The Weeknd',
-        art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80',
-        badge: 'POPULAR'
-      },
-      {
-        id: 'trend-3',
-        title: 'Birds of a Feather',
-        artist: 'Billie Eilish',
-        art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=500&auto=format&fit=crop&q=80',
-        badge: 'CHART'
-      },
-      {
-        id: 'trend-4',
-        title: 'Espresso',
-        artist: 'Sabrina Carpenter',
-        art: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=500&auto=format&fit=crop&q=80',
-        badge: 'VIRAL'
-      }
+    const qpGrid = document.getElementById('grid-quick-picks');
+    if (qpGrid) {
+      qpGrid.innerHTML = '';
+      quickPicks.forEach(track => {
+        const row = document.createElement('div');
+        row.className = 'track-row-card focusable';
+        row.tabIndex = 0;
+        row.innerHTML = `
+          <img class="track-row-thumb" src="${track.art}" alt="${track.title}">
+          <div class="track-row-details">
+            <div class="track-row-title">${track.title}</div>
+            <div class="track-row-artist">${track.artist}</div>
+          </div>
+        `;
+        row.addEventListener('click', () => {
+          if (window.AuraPlayer) {
+            const match = window.AuraPlayer.tracks.find(t => t.title === track.title) || window.AuraPlayer.tracks[0];
+            window.AuraPlayer.loadTrack(match, true);
+          }
+        });
+        qpGrid.appendChild(row);
+      });
+    }
+
+    // 2. Listen Again (Square album covers)
+    const listenAgain = [
+      { title: 'Spatial Acoustics', sub: 'Album • Aura Sound Lab', art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400' },
+      { title: 'Nothing Synthwave', sub: 'Album • The Cyber Waves', art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400' },
+      { title: 'Chill Sessions', sub: 'Playlist • 45 songs', art: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400' },
+      { title: 'Deep Space', sub: 'EP • 6 tracks', art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400' },
+      { title: 'Late Night Lo-Fi', sub: 'Playlist • Curated', art: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400' }
     ];
 
-    const ambient = [
-      {
-        id: 'amb-1',
-        title: 'Rain on Nordic Pines',
-        artist: 'Fjord Audio',
-        art: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&auto=format&fit=crop&q=80',
-        badge: 'SLEEP'
-      },
-      {
-        id: 'amb-2',
-        title: 'Deep Theta Waves',
-        artist: 'Delta Frequency',
-        art: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=80',
-        badge: 'REST'
-      },
-      {
-        id: 'amb-3',
-        title: 'Coffeehouse Midnight',
-        artist: 'Aura Chill Room',
-        art: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=500&auto=format&fit=crop&q=80',
-        badge: 'LO-FI'
-      }
+    this.renderCarousel('carousel-listen-again', listenAgain);
+
+    // 3. Forgotten Favorites
+    const forgotten = [
+      { title: 'After Hours', sub: 'Album • The Weeknd', art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400' },
+      { title: 'Happier Than Ever', sub: 'Album • Billie Eilish', art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400' },
+      { title: 'Coffeehouse Acoustic', sub: 'Playlist • Relax', art: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=400' },
+      { title: 'Nordic Forest Ambient', sub: 'Album • Fjord Audio', art: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400' }
     ];
 
-    this.renderShelf('shelf-daily-mixes', dailyMixes);
-    this.renderShelf('shelf-trending', trending);
-    this.renderShelf('shelf-ambient', ambient);
+    this.renderCarousel('carousel-forgotten', forgotten);
   }
 
-  renderShelf(shelfId, items) {
-    const track = document.getElementById(shelfId);
-    if (!track) return;
-    track.innerHTML = '';
+  renderCarousel(carouselId, items) {
+    const el = document.getElementById(carouselId);
+    if (!el) return;
+    el.innerHTML = '';
 
     items.forEach(item => {
       const card = document.createElement('div');
-      card.className = 'tv-card focusable';
+      card.className = 'album-square-card focusable';
       card.tabIndex = 0;
       card.innerHTML = `
-        <div class="card-thumb-wrap">
-          <img class="card-thumb" src="${item.art}" alt="${item.title}">
-          <div class="card-overlay-badge">${item.badge}</div>
-        </div>
-        <div class="card-title">${item.title}</div>
-        <div class="card-artist">${item.artist}</div>
+        <img class="album-cover-img" src="${item.art}" alt="${item.title}">
+        <div class="album-card-title">${item.title}</div>
+        <div class="album-card-sub">${item.sub}</div>
       `;
-
       card.addEventListener('click', () => {
         if (window.AuraPlayer) {
-          // Check if track is in sampleTracks
-          const matched = window.AuraPlayer.sampleTracks.find(t => t.title.toLowerCase().includes(item.title.toLowerCase())) || window.AuraPlayer.sampleTracks[0];
-          window.AuraPlayer.loadTrack(matched, true);
-          this.switchView('player');
+          window.AuraPlayer.loadTrack(window.AuraPlayer.tracks[0], true);
         }
       });
-
-      track.appendChild(card);
+      el.appendChild(card);
     });
   }
 
   switchView(viewName) {
-    if (this.currentView === viewName) return;
-    this.previousView = this.currentView;
     this.currentView = viewName;
+    const views = document.querySelectorAll('.feed-view');
+    views.forEach(v => v.classList.remove('active'));
 
-    const allViews = document.querySelectorAll('.tv-view');
-    allViews.forEach(v => v.classList.remove('active'));
+    const target = document.getElementById(`view-${viewName}`);
+    if (target) target.classList.add('active');
 
-    const targetView = document.getElementById(`view-${viewName}`);
-    if (targetView) targetView.classList.add('active');
-
-    // Update nav items
-    const allNavs = document.querySelectorAll('.nav-item');
-    allNavs.forEach(n => {
-      if (n.getAttribute('data-nav') === viewName) {
-        n.classList.add('active');
-      } else {
-        n.classList.remove('active');
-      }
+    const navs = document.querySelectorAll('.nav-btn');
+    navs.forEach(n => {
+      if (n.getAttribute('data-view') === viewName) n.classList.add('active');
+      else n.classList.remove('active');
     });
 
-    // Close drawers and modals on view switch
-    this.closeDrawer();
-    this.closeModal();
-
-    // Auto-focus first element in new view
-    setTimeout(() => {
-      if (window.SpatialNav) {
-        window.SpatialNav.refreshFocusables();
-        if (viewName === 'player') {
-          const playBtn = document.getElementById('btn-play-pause');
-          if (playBtn) window.SpatialNav.setFocus(playBtn);
-        } else if (viewName === 'search') {
-          const firstKey = document.querySelector('.key-btn');
-          if (firstKey) window.SpatialNav.setFocus(firstKey);
-        } else {
-          const heroPlay = document.getElementById('btn-hero-play');
-          if (heroPlay) window.SpatialNav.setFocus(heroPlay);
-        }
-      }
-    }, 150);
+    if (window.SpatialNav) window.SpatialNav.refreshFocusables();
   }
 
-  toggleQueue() {
-    const drawer = document.getElementById('queueDrawer');
-    if (!drawer) return;
-    drawer.classList.toggle('open');
-    if (drawer.classList.contains('open')) {
+  openFullscreenPlayer() {
+    const fs = document.getElementById('fullscreenPlayer');
+    if (fs) {
+      fs.classList.add('open');
       setTimeout(() => {
         if (window.SpatialNav) {
           window.SpatialNav.refreshFocusables();
-          const firstQueueItem = drawer.querySelector('.queue-item');
-          if (firstQueueItem) window.SpatialNav.setFocus(firstQueueItem);
+          const closeBtn = document.getElementById('btn-fs-close');
+          if (closeBtn) window.SpatialNav.setFocus(closeBtn);
         }
-      }, 150);
-    } else {
+      }, 100);
+    }
+  }
+
+  closeFullscreenPlayer() {
+    const fs = document.getElementById('fullscreenPlayer');
+    if (fs) {
+      fs.classList.remove('open');
       if (window.SpatialNav) window.SpatialNav.refreshFocusables();
     }
   }
 
-  closeDrawer() {
-    const drawer = document.getElementById('queueDrawer');
-    if (drawer) drawer.classList.remove('open');
+  toggleQueuePanel() {
+    const p = document.getElementById('desktopQueuePanel');
+    if (p) {
+      p.classList.toggle('open');
+      if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+    }
   }
 
   toggleSleepTimer() {
-    const modal = document.getElementById('sleepTimerModal');
-    if (!modal) return;
-    modal.classList.toggle('open');
-    if (modal.classList.contains('open')) {
-      setTimeout(() => {
-        if (window.SpatialNav) {
-          window.SpatialNav.refreshFocusables();
-          const firstTimer = modal.querySelector('.timer-card');
-          if (firstTimer) window.SpatialNav.setFocus(firstTimer);
-        }
-      }, 150);
-    } else {
+    const modal = document.getElementById('sleepTimerSheet');
+    if (modal) {
+      modal.classList.toggle('open');
       if (window.SpatialNav) window.SpatialNav.refreshFocusables();
     }
   }
 
-  closeModal() {
-    const modal = document.getElementById('sleepTimerModal');
-    if (modal) modal.classList.remove('open');
+  closeSleepTimer() {
+    const modal = document.getElementById('sleepTimerSheet');
+    if (modal) {
+      modal.classList.remove('open');
+      if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+    }
   }
 
   handleBack() {
-    // If a modal is open, close it
-    const modal = document.getElementById('sleepTimerModal');
+    const modal = document.getElementById('sleepTimerSheet');
     if (modal && modal.classList.contains('open')) {
-      this.closeModal();
+      this.closeSleepTimer();
       return;
     }
-
-    // If queue drawer is open, close it
-    const drawer = document.getElementById('queueDrawer');
-    if (drawer && drawer.classList.contains('open')) {
-      this.closeDrawer();
+    const qp = document.getElementById('desktopQueuePanel');
+    if (qp && qp.classList.contains('open')) {
+      this.toggleQueuePanel();
       return;
     }
-
-    // If in Player or Search, go back to Home
+    const fs = document.getElementById('fullscreenPlayer');
+    if (fs && fs.classList.contains('open')) {
+      this.closeFullscreenPlayer();
+      return;
+    }
     if (this.currentView !== 'home') {
       this.switchView('home');
     }
   }
 
-  setupVirtualKeyboard() {
-    const keys = document.querySelectorAll('.key-btn');
-    const display = document.getElementById('searchDisplay');
+  setupKeyboard() {
+    const keys = document.querySelectorAll('.kbd-key');
+    const input = document.getElementById('searchInput');
 
-    keys.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const val = btn.getAttribute('data-key');
-        if (val === 'SPACE') {
-          this.searchQuery += ' ';
-        } else if (val === 'BACKSPACE') {
-          this.searchQuery = this.searchQuery.slice(0, -1);
-        } else if (val === 'SEARCH') {
-          this.executeSearch(this.searchQuery);
-        } else {
-          this.searchQuery += val;
-        }
+    keys.forEach(k => {
+      k.addEventListener('click', () => {
+        const ch = k.getAttribute('data-char');
+        if (ch === 'SPACE') this.searchQuery += ' ';
+        else if (ch === 'BACKSPACE') this.searchQuery = this.searchQuery.slice(0, -1);
+        else this.searchQuery += ch;
 
-        if (display) {
-          display.textContent = this.searchQuery.length > 0 ? this.searchQuery : "Search artists, songs, or albums...";
-        }
-        this.executeSearch(this.searchQuery);
+        if (input) input.value = this.searchQuery;
+        this.runSearch(this.searchQuery);
       });
     });
   }
 
-  executeSearch(query) {
-    const resultsContainer = document.getElementById('shelf-search-results');
-    if (!resultsContainer) return;
-    resultsContainer.innerHTML = '';
-    if (!query || query.trim() === '') return;
+  runSearch(query) {
+    const container = document.getElementById('search-results-grid');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!query) return;
 
     if (window.AuraPlayer) {
-      const filtered = window.AuraPlayer.sampleTracks.filter(t => 
+      const matches = window.AuraPlayer.tracks.filter(t => 
         t.title.toLowerCase().includes(query.toLowerCase()) || 
         t.artist.toLowerCase().includes(query.toLowerCase())
       );
-
-      filtered.forEach(track => {
-        const card = document.createElement('div');
-        card.className = 'tv-card focusable';
-        card.tabIndex = 0;
-        card.innerHTML = `
-          <div class="card-thumb-wrap">
-            <img class="card-thumb" src="${track.art}" alt="${track.title}">
-            <div class="card-overlay-badge">MATCH</div>
+      matches.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'track-row-card focusable';
+        row.tabIndex = 0;
+        row.innerHTML = `
+          <img class="track-row-thumb" src="${t.art}" alt="${t.title}">
+          <div class="track-row-details">
+            <div class="track-row-title">${t.title}</div>
+            <div class="track-row-artist">${t.artist}</div>
           </div>
-          <div class="card-title">${track.title}</div>
-          <div class="card-artist">${track.artist}</div>
         `;
-        card.addEventListener('click', () => {
-          window.AuraPlayer.loadTrack(track, true);
-          this.switchView('player');
+        row.addEventListener('click', () => {
+          window.AuraPlayer.loadTrack(t, true);
         });
-        resultsContainer.appendChild(card);
+        container.appendChild(row);
       });
     }
   }
 
-  bindActionButtons() {
-    // Navigation bar click listeners
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-      item.addEventListener('click', () => {
-        const action = item.getAttribute('data-action');
-        const nav = item.getAttribute('data-nav');
-        if (action === 'switchView') this.switchView(nav);
-        else if (action === 'toggleQueue') this.toggleQueue();
-        else if (action === 'toggleSleepTimer') this.toggleSleepTimer();
+  bindEvents() {
+    // Navigation
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.switchView(btn.getAttribute('data-view'));
       });
     });
 
-    // Hero buttons
-    const heroPlay = document.getElementById('btn-hero-play');
-    if (heroPlay) {
-      heroPlay.addEventListener('click', () => {
-        if (window.AuraPlayer) {
-          window.AuraPlayer.loadTrack(window.AuraPlayer.sampleTracks[0], true);
-          this.switchView('player');
-        }
-      });
-    }
+    // Topbar search click
+    const topSearch = document.getElementById('topbarSearch');
+    if (topSearch) topSearch.addEventListener('click', () => this.switchView('search'));
 
-    const heroLyrics = document.getElementById('btn-hero-lyrics');
-    if (heroLyrics) {
-      heroLyrics.addEventListener('click', () => {
-        this.switchView('player');
-      });
-    }
+    // Persistent player bar controls
+    const miniCard = document.getElementById('playerMiniCard');
+    if (miniCard) miniCard.addEventListener('click', () => this.openFullscreenPlayer());
 
-    // Player action buttons
-    const playPause = document.getElementById('btn-play-pause');
+    const playPause = document.getElementById('barPlayPauseBtn');
     if (playPause) playPause.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.togglePlay());
 
-    const nextBtn = document.getElementById('btn-next');
-    if (nextBtn) nextBtn.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.nextTrack());
+    const next = document.getElementById('barNextBtn');
+    if (next) next.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.nextTrack());
 
-    const prevBtn = document.getElementById('btn-prev');
-    if (prevBtn) prevBtn.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.prevTrack());
+    const prev = document.getElementById('barPrevBtn');
+    if (prev) prev.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.prevTrack());
 
-    const shuffleBtn = document.getElementById('btn-shuffle');
-    if (shuffleBtn) shuffleBtn.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.toggleShuffle());
+    const shuffle = document.getElementById('barShuffleBtn');
+    if (shuffle) shuffle.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.toggleShuffle());
 
-    // Timer modal buttons
-    const timerCards = document.querySelectorAll('.timer-card');
-    timerCards.forEach(card => {
-      card.addEventListener('click', () => {
-        const timerVal = card.getAttribute('data-timer');
+    const lyricsBtn = document.getElementById('barLyricsBtn');
+    if (lyricsBtn) lyricsBtn.addEventListener('click', () => this.openFullscreenPlayer());
+
+    const queueBtn = document.getElementById('barQueueBtn');
+    if (queueBtn) queueBtn.addEventListener('click', () => this.toggleQueuePanel());
+
+    const timerBtn = document.getElementById('barTimerBtn');
+    if (timerBtn) timerBtn.addEventListener('click', () => this.toggleSleepTimer());
+
+    // Fullscreen controls
+    const fsPlay = document.getElementById('fsPlayPauseBtn');
+    if (fsPlay) fsPlay.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.togglePlay());
+
+    const fsNext = document.getElementById('fsNextBtn');
+    if (fsNext) fsNext.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.nextTrack());
+
+    const fsPrev = document.getElementById('fsPrevBtn');
+    if (fsPrev) fsPrev.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.prevTrack());
+
+    const fsShuffle = document.getElementById('fsShuffleBtn');
+    if (fsShuffle) fsShuffle.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.toggleShuffle());
+
+    // Fullscreen Tabs (Lyrics vs Up Next Queue)
+    const tabLyrics = document.getElementById('tab-fs-lyrics');
+    const tabQueue = document.getElementById('tab-fs-queue');
+    const containerLyrics = document.getElementById('fsLyricsContainer');
+    const containerQueue = document.getElementById('fsQueueContainer');
+
+    if (tabLyrics && tabQueue) {
+      tabLyrics.addEventListener('click', () => {
+        tabLyrics.classList.add('active');
+        tabQueue.classList.remove('active');
+        if (containerLyrics) containerLyrics.style.display = 'flex';
+        if (containerQueue) containerQueue.style.display = 'none';
+        if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+      });
+
+      tabQueue.addEventListener('click', () => {
+        tabQueue.classList.add('active');
+        tabLyrics.classList.remove('active');
+        if (containerLyrics) containerLyrics.style.display = 'none';
+        if (containerQueue) containerQueue.style.display = 'flex';
+        if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+      });
+    }
+
+    // Fullscreen close
+    const fsClose = document.getElementById('btn-fs-close');
+    if (fsClose) fsClose.addEventListener('click', () => this.closeFullscreenPlayer());
+
+    const qClose = document.getElementById('btn-queue-close');
+    if (qClose) qClose.addEventListener('click', () => this.toggleQueuePanel());
+
+    const tCancel = document.getElementById('btn-timer-cancel');
+    if (tCancel) tCancel.addEventListener('click', () => this.closeSleepTimer());
+
+    // Timer pills
+    document.querySelectorAll('.timer-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const mins = pill.getAttribute('data-mins');
         if (window.AuraPlayer) {
-          if (timerVal === 'screen-off') {
-            alert("🌙 Screen saver activated: Audio continues while display minimizes energy.");
-          } else if (timerVal === 'end-of-album') {
-            window.AuraPlayer.setSleepTimer(45);
-          } else {
-            window.AuraPlayer.setSleepTimer(parseInt(timerVal, 10));
-          }
+          if (mins === 'album') window.AuraPlayer.setSleepTimer(45);
+          else window.AuraPlayer.setSleepTimer(parseInt(mins, 10));
         }
-        this.closeModal();
+        this.closeSleepTimer();
       });
     });
-
-    const cancelTimer = document.getElementById('btn-cancel-timer');
-    if (cancelTimer) {
-      cancelTimer.addEventListener('click', () => this.closeModal());
-    }
   }
 }
 
