@@ -3,6 +3,7 @@ package com.music.bitchord.ui.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -382,3 +384,35 @@ private fun RowScope.PickAction(
         )
     }
 }
+
+/** Quick button to open lyrics sharing mode or story card generator. */
+@Composable
+internal fun ShareLyricsToggleButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    Box(
+        modifier = modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = if (enabled) 0.18f else 0.08f))
+            .clickable(
+                enabled = enabled,
+                onClick = {
+                    haptics.play(Haptic.Tap)
+                    onClick()
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.IosShare,
+            contentDescription = stringResource(Res.string.share),
+            tint = if (enabled) Color.White.copy(alpha = 0.78f) else Color.White.copy(alpha = 0.42f),
+            modifier = Modifier.size(19.dp),
+        )
+    }
+}
+
