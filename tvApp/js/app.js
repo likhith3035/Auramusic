@@ -318,6 +318,22 @@ class AuraAppController {
     const timerBtn = document.getElementById('barTimerBtn');
     if (timerBtn) timerBtn.addEventListener('click', () => this.toggleSleepTimer());
 
+    // Scrubber click seeking
+    const handleScrub = (trackEl, evt) => {
+      if (!window.AuraPlayer) return;
+      const rect = trackEl.getBoundingClientRect();
+      const clickX = evt.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      const dur = window.AuraPlayer.getDuration();
+      window.AuraPlayer.seekTo(pct * dur);
+    };
+
+    const barTrack = document.getElementById('barScrubTrack');
+    if (barTrack) barTrack.addEventListener('click', (e) => handleScrub(barTrack, e));
+
+    const fsTrack = document.getElementById('fsScrubTrack');
+    if (fsTrack) fsTrack.addEventListener('click', (e) => handleScrub(fsTrack, e));
+
     // Fullscreen controls
     const fsPlay = document.getElementById('fsPlayPauseBtn');
     if (fsPlay) fsPlay.addEventListener('click', () => window.AuraPlayer && window.AuraPlayer.togglePlay());

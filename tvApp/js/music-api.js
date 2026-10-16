@@ -6,6 +6,40 @@
 class AuraMusicApi {
   constructor() {
     this.lyricsCache = new Map();
+    this.videoIdCache = new Map([
+      ['blinding lights__the weeknd', '4NRXx6U8ABQ'],
+      ['yellow__coldplay', 'yKNxeF4KMsY'],
+      ['birds of a feather__billie eilish', 'd5gf9dXHevw'],
+      ['die for you__the weeknd', 'uPD0QOGChkY'],
+      ['viva la vida__coldplay', 'dvgZkm1xWPE'],
+      ['starboy__the weeknd', 'dMMUH_ZpbB0'],
+      ['espresso__sabrina carpenter', 'eVli-tstM5E']
+    ]);
+  }
+
+  /**
+   * Resolve a track's title & artist to a playable YouTube video ID
+   */
+  async getYoutubeVideoId(title, artist) {
+    const key = `${(title || '').toLowerCase().trim()}__${(artist || '').toLowerCase().trim()}`;
+    for (const [k, v] of this.videoIdCache.entries()) {
+      if (key.includes(k) || k.includes(key)) return v;
+    }
+
+    try {
+      const q = encodeURIComponent(`${title} ${artist} audio`);
+      const res = await fetch(`https://invidious.f5.si/api/v1/search?q=${q}&type=video`);
+      if (res.ok) {
+        const items = await res.json();
+        if (items && items.length > 0 && items[0].videoId) {
+          this.videoIdCache.set(key, items[0].videoId);
+          return items[0].videoId;
+        }
+      }
+    } catch (e) {
+      console.log('Video ID lookup error, using fallback');
+    }
+    return null;
   }
 
   /**

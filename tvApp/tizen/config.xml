@@ -14,5 +14,7 @@
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation href="*"/>
     <tizen:setting screen-orientation="landscape" context-menu="enable" background-support="enable" encryption="disable" install-location="auto"/>
 </widget>

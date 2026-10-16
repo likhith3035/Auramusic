@@ -1,11 +1,16 @@
 /**
- * AuraMusic Desktop-Style Player & Synced Lyrics Engine
+ * AuraMusic Desktop-Style Player & Synced Lyrics Engine for Smart TV
+ * Dual-engine: Powered by hidden YouTube Audio Player with HTML5 Audio fallback.
  * Keeps persistent bottom bar and fullscreen LandscapePlayer synchronized.
  */
 
 class AuraMusicPlayer {
   constructor() {
     this.audio = new Audio();
+    this.ytPlayer = null;
+    this.isYtReady = false;
+    this.playbackEngine = 'html5'; // 'yt' or 'html5'
+
     this.currentTrack = null;
     this.queue = [];
     this.queueIndex = 0;
@@ -15,79 +20,47 @@ class AuraMusicPlayer {
     this.sleepTimerEndTimestamp = null;
     this.lyricsData = [];
     this.currentLyricIndex = -1;
+    this.timerInterval = null;
 
     this.tracks = [
       {
         id: 'track-1',
-        title: 'Midnight Echoes',
-        artist: 'Aura Sound Lab',
-        album: 'Spatial Acoustics',
-        art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800&auto=format&fit=crop&q=80',
+        title: 'Blinding Lights',
+        artist: 'The Weeknd',
+        album: 'After Hours',
+        art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800',
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
-        duration: 164,
-        lyrics: [
-          { time: 0, text: "♪ Ambient instrumental opening..." },
-          { time: 10, text: "Dim the living room lights softly" },
-          { time: 18, text: "Let the soundwaves fill every corner" },
-          { time: 26, text: "Lossless frequencies in 24-bit clarity" },
-          { time: 35, text: "Sink deep into the couch tonight" },
-          { time: 45, text: "No rushing, just pure acoustic aura" },
-          { time: 58, text: "Midnight echoes through the room" },
-          { time: 70, text: "Floating between the drums and keys" },
-          { time: 82, text: "Nothing in between, just the music" },
-          { time: 98, text: "Relax, breathe in, let it drift..." },
-          { time: 120, text: "♪ Gentle outro fades into quietude..." }
-        ]
+        videoId: '4NRXx6U8ABQ',
+        duration: 200
       },
       {
         id: 'track-2',
-        title: 'Neon Horizon',
-        artist: 'The Cyber Waves',
-        album: 'Nothing Synthwave',
-        art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
+        title: 'Yellow',
+        artist: 'Coldplay',
+        album: 'Parachutes',
+        art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lifelike-126735.mp3',
-        duration: 142,
-        lyrics: [
-          { time: 0, text: "♪ Heavy analog synthesizers pulse..." },
-          { time: 12, text: "Rays of magenta across the glass" },
-          { time: 22, text: "Electric memories from yesterday" },
-          { time: 34, text: "High fidelity in motion" },
-          { time: 46, text: "Speeding towards the neon horizon" },
-          { time: 60, text: "Feel the sub-bass reverberate" },
-          { time: 75, text: "Pure atmosphere, pure rhythm" }
-        ]
+        videoId: 'yKNxeF4KMsY',
+        duration: 269
       },
       {
         id: 'track-3',
-        title: 'Tokyo Rain Walk',
-        artist: 'Komorebi Quartet',
-        album: 'Chill Ambient Sessions',
-        art: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80',
+        title: 'Birds of a Feather',
+        artist: 'Billie Eilish',
+        album: 'HIT ME HARD AND SOFT',
+        art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800',
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77cb7.mp3?filename=chill-abstract-intention-12099.mp3',
-        duration: 188,
-        lyrics: [
-          { time: 0, text: "♪ Raindrops falling on quiet pavement..." },
-          { time: 14, text: "Soft piano chords in the night" },
-          { time: 28, text: "Walking slow through Shibuya streets" },
-          { time: 42, text: "Warm tea and headphones on" },
-          { time: 59, text: "The city sleeps while the melody plays" },
-          { time: 80, text: "Drifting in tranquility..." }
-        ]
+        videoId: 'd5gf9dXHevw',
+        duration: 196
       },
       {
         id: 'track-4',
-        title: 'Starlight Odyssey',
-        artist: 'Aura Symphony',
-        album: 'Deep Space Reverie',
-        art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=800&auto=format&fit=crop&q=80',
-        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=solitude-dark-ambient-electronic-10777.mp3',
-        duration: 210,
-        lyrics: [
-          { time: 0, text: "♪ Cosmic drone fills the space..." },
-          { time: 20, text: "Beyond the clouds, past the moon" },
-          { time: 40, text: "Endless galaxies in silence" },
-          { time: 65, text: "Music without gravity" }
-        ]
+        title: 'Midnight Echoes',
+        artist: 'Aura Sound Lab',
+        album: 'Spatial Acoustics',
+        art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800',
+        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
+        duration: 164
       }
     ];
 
@@ -97,13 +70,81 @@ class AuraMusicPlayer {
 
   init() {
     this.bindAudioEvents();
+    this.initYouTubeBridge();
+    this.startScrubTimer();
     this.loadTrack(this.queue[0], false);
+  }
+
+  initYouTubeBridge() {
+    window.onYouTubeIframeAPIReady = () => {
+      this.setupYtPlayer();
+    };
+
+    if (window.YT && window.YT.Player) {
+      this.setupYtPlayer();
+    }
+  }
+
+  setupYtPlayer() {
+    try {
+      this.ytPlayer = new YT.Player('yt-player-container', {
+        height: '200',
+        width: '200',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          rel: 0,
+          enablejsapi: 1
+        },
+        events: {
+          onReady: () => {
+            this.isYtReady = true;
+            console.log('YouTube Audio Engine Ready on TV');
+            if (this.currentTrack && this.currentTrack.videoId && this.isPlaying) {
+              this.ytPlayer.loadVideoById(this.currentTrack.videoId);
+            }
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.PLAYING) {
+              this.isPlaying = true;
+              this.playbackEngine = 'yt';
+              this.audio.pause();
+              document.body.classList.add('playing');
+            } else if (event.data === YT.PlayerState.PAUSED) {
+              this.isPlaying = false;
+              document.body.classList.remove('playing');
+            } else if (event.data === YT.PlayerState.ENDED) {
+              this.nextTrack();
+            }
+          },
+          onError: (err) => {
+            console.warn('YouTube engine error, falling back to direct audio stream:', err);
+            if (this.currentTrack && this.currentTrack.audioUrl) {
+              this.playbackEngine = 'html5';
+              this.audio.play().catch(e => console.warn(e));
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('YT Player init error:', e);
+    }
+  }
+
+  startScrubTimer() {
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.timerInterval = setInterval(() => {
+      if (this.isPlaying) {
+        this.onTimeUpdate();
+      }
+    }, 250);
   }
 
   loadTrack(track, autoPlay = true) {
     if (!track) return;
     this.currentTrack = track;
-    this.audio.src = track.audioUrl;
     this.lyricsData = track.lyrics || [];
     this.currentLyricIndex = -1;
 
@@ -138,20 +179,69 @@ class AuraMusicPlayer {
       });
     }
 
-    if (autoPlay) {
-      this.play();
+    // Playback Engine Resolution
+    const startPlayback = () => {
+      if (track.videoId && this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
+        this.playbackEngine = 'yt';
+        this.audio.pause();
+        this.ytPlayer.loadVideoById(track.videoId);
+        if (!autoPlay) this.ytPlayer.pauseVideo();
+      } else if (track.audioUrl) {
+        this.playbackEngine = 'html5';
+        this.audio.src = track.audioUrl;
+        if (autoPlay) this.play();
+      }
+    };
+
+    if (track.videoId) {
+      startPlayback();
+    } else if (window.AuraMusicApi) {
+      // Resolve YouTube video ID in background
+      window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
+        if (vid) {
+          track.videoId = vid;
+          if (this.currentTrack && this.currentTrack.id === track.id) {
+            startPlayback();
+          }
+        } else if (track.audioUrl) {
+          this.playbackEngine = 'html5';
+          this.audio.src = track.audioUrl;
+          if (autoPlay) this.play();
+        }
+      });
+
+      // While resolving YouTube, start HTML5 audio preview immediately if present
+      if (track.audioUrl) {
+        this.playbackEngine = 'html5';
+        this.audio.src = track.audioUrl;
+        if (autoPlay) this.play();
+      }
+    } else if (track.audioUrl) {
+      this.playbackEngine = 'html5';
+      this.audio.src = track.audioUrl;
+      if (autoPlay) this.play();
     }
   }
 
   play() {
-    this.audio.play().then(() => {
+    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.playVideo) {
+      this.ytPlayer.playVideo();
       this.isPlaying = true;
       document.body.classList.add('playing');
-    }).catch(e => console.warn('Audio play policy:', e));
+    } else {
+      this.audio.play().then(() => {
+        this.isPlaying = true;
+        document.body.classList.add('playing');
+      }).catch(e => console.warn('Audio play policy:', e));
+    }
   }
 
   pause() {
-    this.audio.pause();
+    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.pauseVideo) {
+      this.ytPlayer.pauseVideo();
+    } else {
+      this.audio.pause();
+    }
     this.isPlaying = false;
     document.body.classList.remove('playing');
   }
@@ -161,6 +251,14 @@ class AuraMusicPlayer {
     else this.play();
   }
 
+  seekTo(sec) {
+    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.seekTo) {
+      this.ytPlayer.seekTo(sec, true);
+    } else {
+      this.audio.currentTime = sec;
+    }
+  }
+
   nextTrack() {
     if (this.queue.length === 0) return;
     this.queueIndex = (this.queueIndex + 1) % this.queue.length;
@@ -168,8 +266,9 @@ class AuraMusicPlayer {
   }
 
   prevTrack() {
-    if (this.audio.currentTime > 3) {
-      this.audio.currentTime = 0;
+    let cur = this.getCurrentTime();
+    if (cur > 3) {
+      this.seekTo(0);
       return;
     }
     if (this.queue.length === 0) return;
@@ -180,11 +279,17 @@ class AuraMusicPlayer {
   toggleShuffle() {
     this.isShuffle = !this.isShuffle;
     const btn = document.getElementById('barShuffleBtn');
-    if (btn) btn.style.color = this.isShuffle ? 'var(--nt-red)' : 'var(--nt-muted)';
+    const fsBtn = document.getElementById('fsShuffleBtn');
+    [btn, fsBtn].forEach(b => {
+      if (b) b.style.color = this.isShuffle ? 'var(--nt-red)' : 'var(--nt-muted)';
+    });
   }
 
   bindAudioEvents() {
-    this.audio.addEventListener('timeupdate', () => this.onTimeUpdate());
+    this.audio.addEventListener('timeupdate', () => {
+      if (this.playbackEngine === 'html5') this.onTimeUpdate();
+    });
+
     this.audio.addEventListener('ended', () => {
       if (this.sleepTimerEndTimestamp && Date.now() >= this.sleepTimerEndTimestamp) {
         this.pause();
@@ -196,9 +301,24 @@ class AuraMusicPlayer {
     });
   }
 
+  getCurrentTime() {
+    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.getCurrentTime) {
+      return this.ytPlayer.getCurrentTime() || 0;
+    }
+    return this.audio.currentTime || 0;
+  }
+
+  getDuration() {
+    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.getDuration) {
+      const d = this.ytPlayer.getDuration();
+      if (d && d > 0) return d;
+    }
+    return this.audio.duration || this.currentTrack?.duration || 180;
+  }
+
   onTimeUpdate() {
-    const cur = this.audio.currentTime || 0;
-    const dur = this.audio.duration || this.currentTrack?.duration || 1;
+    const cur = this.getCurrentTime();
+    const dur = this.getDuration();
     const percent = Math.min((cur / dur) * 100, 100);
 
     // Update Persistent Bottom Bar
@@ -244,7 +364,7 @@ class AuraMusicPlayer {
       line.id = `fs-lyric-${idx}`;
       line.textContent = item.text;
       line.addEventListener('click', () => {
-        this.audio.currentTime = item.time;
+        this.seekTo(item.time);
       });
       stack.appendChild(line);
     });
