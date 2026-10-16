@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Frosted glass pill background for AuraMusic widget brand badge -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="#59080B14" />
+    <stroke
+        android:width="1dp"
+        android:color="#4D38BDF8" />
+</shape>

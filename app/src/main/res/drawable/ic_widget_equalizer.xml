@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Stylized Equalizer Visualizer Bars for AuraMusic Widgets.
+  Drawn with electric cyan-to-purple gradient fills and round caps.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="28dp"
+    android:height="24dp"
+    android:viewportWidth="28"
+    android:viewportHeight="24">
+
+    <!-- Bar 1 -->
+    <path
+        android:pathData="M4,17 L4,7"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:angle="90"
+                android:endColor="#818CF8"
+                android:startColor="#38BDF8"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 2 -->
+    <path
+        android:pathData="M9.5,21 L9.5,3"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:angle="90"
+                android:endColor="#A78BFA"
+                android:startColor="#38BDF8"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 3 (Center Peak) -->
+    <path
+        android:pathData="M15,22 L15,2"
+        android:strokeLineCap="round"
+        android:strokeWidth="3.0">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:angle="90"
+                android:endColor="#C084FC"
+                android:startColor="#00F0FF"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 4 -->
+    <path
+        android:pathData="M20.5,19 L20.5,5"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:angle="90"
+                android:endColor="#818CF8"
+                android:startColor="#38BDF8"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 5 -->
+    <path
+        android:pathData="M26,16 L26,8"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:angle="90"
+                android:endColor="#A855F7"
+                android:startColor="#00F0FF"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+</vector>
