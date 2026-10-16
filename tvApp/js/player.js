@@ -128,6 +128,16 @@ class AuraMusicPlayer {
     this.renderLyrics();
     this.renderQueue();
 
+    // Dynamically fetch live synced lyrics if missing
+    if ((!track.lyrics || track.lyrics.length === 0) && window.AuraMusicApi) {
+      window.AuraMusicApi.fetchSyncedLyrics(track.title, track.artist).then(lyrics => {
+        if (this.currentTrack && this.currentTrack.id === track.id) {
+          this.lyricsData = lyrics;
+          this.renderLyrics();
+        }
+      });
+    }
+
     if (autoPlay) {
       this.play();
     }
