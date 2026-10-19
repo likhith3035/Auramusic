@@ -358,6 +358,9 @@ object AppSettings {
     /** Whether the first-launch interactive onboarding tour has been completed. */
     val onboardingCompleted = MutableStateFlow(true)
 
+    /** Highest version code of the "What's New" showcase seen by the user. */
+    val lastSeenWhatsNewVersion = MutableStateFlow(0)
+
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
 
@@ -857,6 +860,7 @@ object AppSettings {
         } else {
             prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         }
+        lastSeenWhatsNewVersion.value = prefs.getInt(KEY_LAST_SEEN_WHATS_NEW_VERSION, 0)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
@@ -1263,6 +1267,11 @@ object AppSettings {
     fun setOnboardingCompleted(value: Boolean) {
         onboardingCompleted.value = value
         prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
+    }
+
+    fun setLastSeenWhatsNewVersion(value: Int) {
+        lastSeenWhatsNewVersion.value = value
+        prefs.edit().putInt(KEY_LAST_SEEN_WHATS_NEW_VERSION, value).apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -2002,6 +2011,7 @@ object AppSettings {
         "downloaded_collections",
         KEY_LOCAL_MUSIC_FOLDER_URI,
         KEY_LAST_VERSION_CODE,
+        KEY_LAST_SEEN_WHATS_NEW_VERSION,
     )
 
     const val DEFAULT_CACHE_LIMIT_BYTES = 512L * 1024 * 1024
@@ -2071,6 +2081,7 @@ object AppSettings {
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
     private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed_v1"
+    private const val KEY_LAST_SEEN_WHATS_NEW_VERSION = "last_seen_whats_new_version"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"
     private const val KEY_TRANSLATION_LANGUAGE = "translation_language"

@@ -171,6 +171,7 @@ import com.music.bitchord.ui.screens.SettingsScreen
 import com.music.bitchord.ui.screens.SourceEditorAlert
 import com.music.bitchord.ui.screens.SourcesScreen
 import com.music.bitchord.ui.screens.AuraOfflineScreen
+import com.music.bitchord.ui.about.AuraV3WhatsNewDialog
 import com.music.bitchord.ui.splash.AuraSplashScreen
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.ui.screens.SpotifyCanvasAuthScreen
@@ -409,6 +410,7 @@ class MainActivity : AppCompatActivity() {
                 // the split is about to be laid out in.
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     var showOnboarding by rememberSaveable { mutableStateOf(false) }
+                    var showWhatsNew by rememberSaveable { mutableStateOf(false) }
                     BitChordApp(
                         darkTheme = darkTheme,
                         windowWidth = maxWidth,
@@ -417,6 +419,7 @@ class MainActivity : AppCompatActivity() {
                         onOpenOnboarding = { showOnboarding = true },
                     )
                     val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
+                    val lastSeenWhatsNewVersion by AppSettings.lastSeenWhatsNewVersion.collectAsStateWithLifecycle()
                     var showSplash by rememberSaveable { mutableStateOf(true) }
                     if (showSplash) {
                         AuraSplashScreen(
@@ -424,6 +427,8 @@ class MainActivity : AppCompatActivity() {
                                 showSplash = false
                                 if (!onboardingCompleted) {
                                     showOnboarding = true
+                                } else if (lastSeenWhatsNewVersion < 3) {
+                                    showWhatsNew = true
                                 }
                             },
                             onPlayIntroCue = {
@@ -435,6 +440,20 @@ class MainActivity : AppCompatActivity() {
                             onFinished = {
                                 AppSettings.setOnboardingCompleted(true)
                                 showOnboarding = false
+                                if (lastSeenWhatsNewVersion < 3) {
+                                    showWhatsNew = true
+                                }
+                            },
+                        )
+                    } else if (showWhatsNew) {
+                        AuraV3WhatsNewDialog(
+                            onDismissRequest = {
+                                AppSettings.setLastSeenWhatsNewVersion(3)
+                                showWhatsNew = false
+                            },
+                            onExploreParty = {
+                                AppSettings.setLastSeenWhatsNewVersion(3)
+                                showWhatsNew = false
                             },
                         )
                     }

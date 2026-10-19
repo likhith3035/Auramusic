@@ -45,6 +45,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +81,23 @@ data class ChangelogEntry(
  * Chronological log of recent enhancements and features in AuraMusic from October 5 to October 6, 2026.
  */
 val AURA_CHANGELOG_ENTRIES: List<ChangelogEntry> = listOf(
+    ChangelogEntry(
+        id = "auramusic-v3-cloud-party",
+        date = "October 19, 2026",
+        time = "6:30 PM IST",
+        title = "AuraMusic 3.0: Cloud Party & Live Sync",
+        tag = "Major Release 3.0",
+        tagColor = Color(0xFF8B5CF6),
+        description = "Major generational upgrade introducing a dedicated Render cloud backend, real-time party chat with zero lag, floating emoji reactions, live soundbites, collaborative song suggestions, and official auramusic:// deep linking.",
+        highlights = listOf(
+            "Dedicated Cloud Sync: High-speed low-latency WebSocket party server hosted on Render.",
+            "In-Party Live Chat: Instant messaging with optimistic rendering and preserved history.",
+            "Floating Reactions & Soundbites: Airhorn, cheer, and flying emoji bursts during playback.",
+            "Collaborative Democracy: Listeners can suggest songs and vote to skip tracks together.",
+            "AuraMusic Deep Links: Direct auramusic://party/<code> invite URLs with automatic app launch.",
+            "Smooth Bottom Sheets: Reworked party navigation preventing modal freezes or stuck states.",
+        ),
+    ),
     ChangelogEntry(
         id = "nothing-os-ui-mode",
         date = "October 6, 2026",
@@ -411,9 +432,78 @@ fun AuraChangelogTimeline(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        var showV3Showcase by remember { mutableStateOf(false) }
+
+        Spacer(Modifier.height(14.dp))
+
+        // V3.0 Highlights Spotlight Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFF7C3AED).copy(alpha = 0.25f), Color(0xFF2563EB).copy(alpha = 0.18f))
+                    )
+                )
+                .border(
+                    1.dp,
+                    Brush.horizontalGradient(listOf(Color(0xFFA78BFA).copy(alpha = 0.6f), Color(0xFF60A5FA).copy(alpha = 0.4f))),
+                    RoundedCornerShape(16.dp)
+                )
+                .clickable { showV3Showcase = true }
+                .padding(14.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF7C3AED).copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFFC4B5FD),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "AuraMusic 3.0 Showcase",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = "Tap to view interactive feature spotlight & cards",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                    )
+                }
+                Text(
+                    text = "View",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA78BFA),
+                    fontSize = 13.sp,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = Color(0xFF232330), thickness = 1.dp)
         Spacer(Modifier.height(16.dp))
+
+        if (showV3Showcase) {
+            AuraV3WhatsNewDialog(
+                onDismissRequest = { showV3Showcase = false },
+            )
+        }
 
         // Scrollable Timeline
         Column(

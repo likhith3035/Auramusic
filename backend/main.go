@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -42,6 +43,8 @@ var (
 			return origin == "" || config.IsAllowedOrigin(origin)
 		},
 	}
+	totalPartiesCreated atomic.Int64
+	totalChatMessages   atomic.Int64
 )
 
 func main() {
@@ -64,6 +67,7 @@ func main() {
 	mux.HandleFunc("POST /api/presence", handlePresence)
 	mux.HandleFunc("GET /api/stats/live", handleLiveStats)
 	mux.HandleFunc("GET /api/stats/live/badge.svg", handleLiveBadge)
+	mux.HandleFunc("GET /stats", handleStatsDashboard)
 
 	// Web invite endpoint
 	mux.HandleFunc("GET /invite/{code}", handleInviteLanding)
@@ -314,6 +318,230 @@ func handleLiveBadge(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(svg))
 }
 
+type statsPageData struct {
+	Online        int
+	Android       int
+	PC            int
+	ActiveParties int
+	PartyMembers  int
+	TotalParties  int64
+	TotalChats    int64
+	ServerTime    string
+}
+
+var statsTemplate = template.Must(template.New("stats").Parse(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="15">
+    <title>AuraMusic • Live Analytics</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #0b0b0f;
+            color: #f3f3f7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .container {
+            background: rgba(20, 20, 28, 0.85);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 28px;
+            max-width: 580px;
+            width: 100%;
+            padding: 36px 32px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 50px rgba(139, 92, 246, 0.1);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .title-group h1 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .title-group p {
+            font-size: 13px;
+            color: #9e9ea7;
+            margin-top: 4px;
+        }
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            letter-spacing: 0.5px;
+        }
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #10b981;
+        }
+        .banner {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            border-radius: 18px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .banner-left h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #c4b5fd;
+        }
+        .banner-left p {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+        .banner-badge {
+            background: rgba(139, 92, 246, 0.25);
+            color: #c4b5fd;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 8px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 18px;
+            padding: 18px 20px;
+        }
+        .card-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .card-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: #ffffff;
+            font-feature-settings: "tnum";
+        }
+        .card-sub {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.6;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            padding-top: 18px;
+        }
+        .footer a {
+            color: #a78bfa;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title-group">
+                <h1>AuraMusic Analytics</h1>
+                <p>Live Telemetry & Listener Insights</p>
+            </div>
+            <div class="live-indicator">
+                <span class="pulse-dot"></span>
+                <span>LIVE</span>
+            </div>
+        </div>
+
+        <div class="banner">
+            <div class="banner-left">
+                <h3>AuraMusic v3.0 by Likhith</h3>
+                <p>Render Service: auramusic-kjov</p>
+            </div>
+            <span class="banner-badge">Auto-Refresh 15s</span>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-label">Listening Now</div>
+                <div class="card-value">{{.Online}}</div>
+                <div class="card-sub">{{.Android}} Android • {{.PC}} PC</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Active Parties</div>
+                <div class="card-value">{{.ActiveParties}}</div>
+                <div class="card-sub">{{.PartyMembers}} in session</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Parties Hosted</div>
+                <div class="card-value">{{.TotalParties}}</div>
+                <div class="card-sub">Total since launch</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Party Messages</div>
+                <div class="card-value">{{.TotalChats}}</div>
+                <div class="card-sub">Real-time chat & reactions</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            AuraMusic Engine • Developed by <a href="https://devlikhith.vercel.app/" target="_blank">Kami Likhith</a><br>
+            Server Time: {{.ServerTime}}
+        </div>
+    </div>
+</body>
+</html>`))
+
+func handleStatsDashboard(w http.ResponseWriter, r *http.Request) {
+	counts := presenceTracker.Counts()
+	activeParties := store.Len()
+	partyMembers := store.MemberCount()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = statsTemplate.Execute(w, statsPageData{
+		Online:        counts.Online,
+		Android:       counts.Android,
+		PC:            counts.PC,
+		ActiveParties: activeParties,
+		PartyMembers:  partyMembers,
+		TotalParties:  totalPartiesCreated.Load(),
+		TotalChats:    totalChatMessages.Load(),
+		ServerTime:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+	})
+}
+
 func handleCreateParty(w http.ResponseWriter, r *http.Request) {
 	if !createLimiter.Allow(clientIP(r)) {
 		jsonError(w, http.StatusTooManyRequests, "create_rate_limited", "You can create up to two parties per minute. Please try again shortly.")
@@ -339,6 +567,7 @@ func handleCreateParty(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "server_error", "Failed to create party.")
 		return
 	}
+	totalPartiesCreated.Add(1)
 	// This must be present in the creation response. Waiting for the first
 	// WebSocket control can lose the setting before that socket is established.
 	if req.AutoplayEnabled != nil {
@@ -1005,11 +1234,13 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 			}
 		}
 		// Broadcast in-party chat message / song suggestion to all connected members
+		totalChatMessages.Add(1)
 		hubInst.Broadcast(p.Code, frame, "")
 
 	case protocol.FrameReaction:
 		reactionEmoji, _ := frame["emoji"].(string)
 		if reactionEmoji != "" {
+			totalChatMessages.Add(1)
 			hubInst.Broadcast(p.Code, map[string]interface{}{
 				"type":        protocol.FrameReaction,
 				"emoji":       reactionEmoji,
@@ -1022,6 +1253,7 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 	case protocol.FrameSoundbite:
 		sound, _ := frame["sound"].(string)
 		if sound != "" {
+			totalChatMessages.Add(1)
 			hubInst.Broadcast(p.Code, map[string]interface{}{
 				"type":        protocol.FrameSoundbite,
 				"sound":       sound,
