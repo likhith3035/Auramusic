@@ -334,61 +334,150 @@ var statsTemplate = template.Must(template.New("stats").Parse(`<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="15">
-    <title>AuraMusic • Live Analytics</title>
+    <title>AuraMusic Analytics • Live Telemetry & Listener Insights</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #07070a;
+            --surface: rgba(18, 18, 28, 0.72);
+            --surface-hover: rgba(26, 26, 40, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(167, 139, 250, 0.35);
+            --primary: #a78bfa;
+            --primary-glow: rgba(167, 139, 250, 0.25);
+            --cyan: #38bdf8;
+            --emerald: #10b981;
+            --rose: #f43f5e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            background-color: #0b0b0f;
-            color: #f3f3f7;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 24px;
+            padding: 32px 16px;
+            position: relative;
+            overflow-x: hidden;
         }
+
+        /* Ambient glowing orbs */
+        .ambient-glow {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(140px);
+            opacity: 0.18;
+            z-index: 0;
+            animation: floatGlow 18s ease-in-out infinite alternate;
+        }
+        .glow-1 { top: -100px; left: -100px; background: radial-gradient(circle, #8b5cf6, transparent); }
+        .glow-2 { bottom: -120px; right: -100px; background: radial-gradient(circle, #06b6d4, transparent); animation-delay: -9s; }
+        .glow-3 { top: 40%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: radial-gradient(circle, #6366f1, transparent); opacity: 0.10; }
+
+        @keyframes floatGlow {
+            0% { transform: scale(1) translate(0, 0); }
+            50% { transform: scale(1.15) translate(30px, -20px); }
+            100% { transform: scale(0.95) translate(-20px, 30px); }
+        }
+
         .container {
-            background: rgba(20, 20, 28, 0.85);
-            backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 28px;
-            max-width: 580px;
+            position: relative;
+            z-index: 1;
+            background: var(--surface);
+            backdrop-filter: blur(36px);
+            -webkit-backdrop-filter: blur(36px);
+            border: 1px solid var(--border);
+            border-radius: 32px;
+            max-width: 680px;
             width: 100%;
             padding: 36px 32px;
-            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 50px rgba(139, 92, 246, 0.1);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.75), 0 0 80px rgba(139, 92, 246, 0.08);
+            transition: border-color 0.3s ease;
         }
+        .container:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Top Bar & Wave Visualizer */
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 24px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            gap: 16px;
+            flex-wrap: wrap;
         }
+
+        .branding {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+            flex-shrink: 0;
+        }
+        .logo-icon svg {
+            width: 26px;
+            height: 26px;
+            fill: #ffffff;
+        }
+
         .title-group h1 {
-            font-size: 24px;
+            font-size: 23px;
             font-weight: 800;
-            letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+            letter-spacing: -0.6px;
+            background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            line-height: 1.2;
         }
         .title-group p {
             font-size: 13px;
-            color: #9e9ea7;
-            margin-top: 4px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            font-weight: 500;
         }
+
+        .header-badges {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .live-indicator {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(16, 185, 129, 0.15);
-            color: #10b981;
+            gap: 7px;
+            background: rgba(16, 185, 129, 0.12);
+            color: #34d399;
             font-size: 12px;
             font-weight: 700;
-            padding: 6px 12px;
+            padding: 7px 14px;
             border-radius: 9999px;
+            border: 1px solid rgba(16, 185, 129, 0.25);
             letter-spacing: 0.5px;
         }
         .pulse-dot {
@@ -396,130 +485,519 @@ var statsTemplate = template.Must(template.New("stats").Parse(`<!DOCTYPE html>
             height: 8px;
             background: #10b981;
             border-radius: 50%;
-            box-shadow: 0 0 10px #10b981;
+            box-shadow: 0 0 12px #10b981;
+            animation: radarPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
-        .banner {
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+        @keyframes radarPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .ping-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .ping-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--emerald);
+        }
+
+        /* Soundwave Canvas Banner */
+        .wave-banner {
+            position: relative;
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.14) 0%, rgba(56, 189, 248, 0.08) 100%);
             border: 1px solid rgba(139, 92, 246, 0.25);
-            border-radius: 18px;
-            padding: 16px 20px;
+            border-radius: 22px;
+            padding: 18px 22px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            overflow: hidden;
         }
-        .banner-left h3 {
+        .canvas-bg {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 240px;
+            pointer-events: none;
+            opacity: 0.45;
+        }
+        .banner-info {
+            position: relative;
+            z-index: 2;
+        }
+        .banner-info h3 {
             font-size: 15px;
             font-weight: 700;
-            color: #c4b5fd;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .banner-left p {
+        .banner-info p {
             font-size: 12px;
             color: #94a3b8;
-            margin-top: 2px;
+            margin-top: 3px;
+            font-family: 'JetBrains Mono', monospace;
         }
-        .banner-badge {
-            background: rgba(139, 92, 246, 0.25);
+        .sync-btn {
+            position: relative;
+            z-index: 2;
+            background: rgba(139, 92, 246, 0.22);
+            hover-background: rgba(139, 92, 246, 0.35);
+            border: 1px solid rgba(167, 139, 250, 0.3);
             color: #c4b5fd;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 4px 10px;
-            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 7px 14px;
+            border-radius: 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
         }
+        .sync-btn:hover {
+            background: rgba(139, 92, 246, 0.38);
+            border-color: rgba(167, 139, 250, 0.6);
+            transform: translateY(-1px);
+        }
+        .sync-btn.spinning svg {
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Metric Grid */
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
             margin-bottom: 24px;
         }
+        @media (max-width: 580px) {
+            .grid { grid-template-columns: 1fr; }
+            .container { padding: 24px 18px; }
+        }
+
         .card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 18px;
-            padding: 18px 20px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 22px 24px;
+            position: relative;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .card:hover {
+            background: var(--surface-hover);
+            border-color: var(--border-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 20px var(--primary-glow);
+        }
+        .card:hover::before { opacity: 1; }
+
+        .card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
         }
         .card-label {
             font-size: 11px;
-            font-weight: 600;
-            color: #9ca3af;
+            font-weight: 700;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 6px;
+            letter-spacing: 1.2px;
         }
+        .card-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card-icon svg { width: 17px; height: 17px; }
+        .icon-purple { background: rgba(167, 139, 250, 0.15); fill: #a78bfa; }
+        .icon-cyan { background: rgba(56, 189, 248, 0.15); fill: #38bdf8; }
+        .icon-emerald { background: rgba(16, 185, 129, 0.15); fill: #34d399; }
+        .icon-rose { background: rgba(244, 63, 94, 0.15); fill: #fb7185; }
+
         .card-value {
-            font-size: 32px;
+            font-size: 38px;
             font-weight: 800;
             color: #ffffff;
-            font-feature-settings: "tnum";
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -1px;
+            line-height: 1.1;
         }
         .card-sub {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 4px;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 8px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
+
+        /* Platform Breakdown Meter inside Card 1 */
+        .platform-meter {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .meter-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+            overflow: hidden;
+            display: flex;
+            margin-bottom: 6px;
+        }
+        .meter-android {
+            background: linear-gradient(90deg, #10b981, #059669);
+            width: 50%;
+            transition: width 0.6s ease;
+        }
+        .meter-pc {
+            background: linear-gradient(90deg, #6366f1, #3b82f6);
+            width: 50%;
+            transition: width 0.6s ease;
+        }
+        .meter-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Footer */
         .footer {
             text-align: center;
             font-size: 12px;
-            color: #6b7280;
-            line-height: 1.6;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            padding-top: 18px;
+            color: var(--text-muted);
+            line-height: 1.7;
+            border-top: 1px solid var(--border);
+            padding-top: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .footer-credits {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
         }
         .footer a {
-            color: #a78bfa;
+            color: var(--primary);
             text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+        .footer a:hover {
+            color: #c4b5fd;
+            text-decoration: underline;
+        }
+        .footer-sub {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
         }
     </style>
 </head>
 <body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
     <div class="container">
+        <!-- Header -->
         <div class="header">
-            <div class="title-group">
-                <h1>AuraMusic Analytics</h1>
-                <p>Live Telemetry & Listener Insights</p>
+            <div class="branding">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                </div>
+                <div class="title-group">
+                    <h1>AuraMusic Analytics</h1>
+                    <p>Live Telemetry & Global Listener Insights</p>
+                </div>
             </div>
-            <div class="live-indicator">
-                <span class="pulse-dot"></span>
-                <span>LIVE</span>
+            <div class="header-badges">
+                <div class="ping-pill">
+                    <span class="ping-dot"></span>
+                    <span id="ping-text">-- ms</span>
+                </div>
+                <div class="live-indicator">
+                    <span class="pulse-dot"></span>
+                    <span>LIVE</span>
+                </div>
             </div>
         </div>
 
-        <div class="banner">
-            <div class="banner-left">
-                <h3>AuraMusic v3.0 by Likhith</h3>
-                <p>Render Service: auramusic-kjov</p>
+        <!-- Banner with animated sound wave -->
+        <div class="wave-banner">
+            <canvas id="wave-canvas" class="canvas-bg" width="240" height="70"></canvas>
+            <div class="banner-info">
+                <h3>AuraMusic v3.0 by Kami Likhith</h3>
+                <p>Render Service: auramusic-kjov • <span id="last-updated">Updated just now</span></p>
             </div>
-            <span class="banner-badge">Auto-Refresh 15s</span>
+            <button class="sync-btn" id="refresh-btn" onclick="fetchLiveStats(true)">
+                <svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                Sync
+            </button>
         </div>
 
+        <!-- Metric Grid -->
         <div class="grid">
+            <!-- Listening Now -->
             <div class="card">
-                <div class="card-label">Listening Now</div>
-                <div class="card-value">{{.Online}}</div>
-                <div class="card-sub">{{.Android}} Android • {{.PC}} PC</div>
+                <div class="card-top">
+                    <span class="card-label">Listening Now</span>
+                    <div class="card-icon icon-purple">
+                        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+                    </div>
+                </div>
+                <div class="card-value" id="val-online">{{.Online}}</div>
+                <div class="card-sub" id="sub-devices">
+                    <span id="val-android">{{.Android}}</span> Android • <span id="val-pc">{{.PC}}</span> PC
+                </div>
+                <div class="platform-meter">
+                    <div class="meter-bar">
+                        <div class="meter-android" id="bar-android"></div>
+                        <div class="meter-pc" id="bar-pc"></div>
+                    </div>
+                    <div class="meter-labels">
+                        <span id="pct-android">Android</span>
+                        <span id="pct-pc">Desktop PC</span>
+                    </div>
+                </div>
             </div>
+
+            <!-- Active Parties -->
             <div class="card">
-                <div class="card-label">Active Parties</div>
-                <div class="card-value">{{.ActiveParties}}</div>
-                <div class="card-sub">{{.PartyMembers}} in session</div>
+                <div class="card-top">
+                    <span class="card-label">Active Parties</span>
+                    <div class="card-icon icon-cyan">
+                        <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </div>
+                </div>
+                <div class="card-value" id="val-parties">{{.ActiveParties}}</div>
+                <div class="card-sub"><span id="val-members">{{.PartyMembers}}</span> listeners in session</div>
             </div>
+
+            <!-- Parties Hosted -->
             <div class="card">
-                <div class="card-label">Parties Hosted</div>
-                <div class="card-value">{{.TotalParties}}</div>
-                <div class="card-sub">Total since launch</div>
+                <div class="card-top">
+                    <span class="card-label">Parties Hosted</span>
+                    <div class="card-icon icon-emerald">
+                        <svg viewBox="0 0 24 24"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94A5.01 5.01 0 0 0 11 15.9V19H7v2h10v-2h-4v-3.1c1.86-.48 3.25-1.99 3.61-3.96C19.08 11.63 21 9.55 21 7V5c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>
+                    </div>
+                </div>
+                <div class="card-value" id="val-total-parties">{{.TotalParties}}</div>
+                <div class="card-sub">Total rooms created</div>
             </div>
+
+            <!-- Party Messages -->
             <div class="card">
-                <div class="card-label">Party Messages</div>
-                <div class="card-value">{{.TotalChats}}</div>
+                <div class="card-top">
+                    <span class="card-label">Party Messages</span>
+                    <div class="card-icon icon-rose">
+                        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+                    </div>
+                </div>
+                <div class="card-value" id="val-total-chats">{{.TotalChats}}</div>
                 <div class="card-sub">Real-time chat & reactions</div>
             </div>
         </div>
 
+        <!-- Footer -->
         <div class="footer">
-            AuraMusic Engine • Developed by <a href="https://devlikhith.vercel.app/" target="_blank">Kami Likhith</a><br>
-            Server Time: {{.ServerTime}}
+            <div class="footer-credits">
+                AuraMusic Engine • Developed by <a href="https://devlikhith.vercel.app/" target="_blank">Kami Likhith</a> • <a href="https://github.com/likhith3035/Auramusic" target="_blank">GitHub</a>
+            </div>
+            <div class="footer-sub">
+                Server Time: <span id="server-time">{{.ServerTime}}</span>
+            </div>
         </div>
     </div>
+
+    <script>
+        // Smooth Number Animation
+        function animateValue(id, start, end, duration) {
+            if (start === end) return;
+            const el = document.getElementById(id);
+            if (!el) return;
+            const range = end - start;
+            let current = start;
+            const increment = end > start ? 1 : -1;
+            const stepTime = Math.abs(Math.floor(duration / (range || 1)));
+            const timer = setInterval(function() {
+                current += increment;
+                el.textContent = current;
+                if (current == end) {
+                    clearInterval(timer);
+                }
+            }, Math.max(stepTime, 20));
+        }
+
+        // Platform breakdown bar updater
+        function updatePlatformMeter(android, pc) {
+            const total = android + pc;
+            const barAndroid = document.getElementById('bar-android');
+            const barPc = document.getElementById('bar-pc');
+            const pctAndroid = document.getElementById('pct-android');
+            const pctPc = document.getElementById('pct-pc');
+
+            if (!barAndroid || !barPc) return;
+
+            if (total === 0) {
+                barAndroid.style.width = '50%';
+                barPc.style.width = '50%';
+                pctAndroid.textContent = 'Android 0%';
+                pctPc.textContent = 'PC 0%';
+                return;
+            }
+
+            const aPct = Math.round((android / total) * 100);
+            const pPct = 100 - aPct;
+            barAndroid.style.width = aPct + '%';
+            barPc.style.width = pPct + '%';
+            pctAndroid.textContent = 'Android ' + aPct + '%';
+            pctPc.textContent = 'PC ' + pPct + '%';
+        }
+
+        let lastFetchTime = Date.now();
+
+        async function fetchLiveStats(manual = false) {
+            const btn = document.getElementById('refresh-btn');
+            if (manual && btn) btn.classList.add('spinning');
+            const t0 = performance.now();
+
+            try {
+                const res = await fetch('/stats?format=json', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const t1 = performance.now();
+                const ping = Math.round(t1 - t0);
+                const pingText = document.getElementById('ping-text');
+                if (pingText) pingText.textContent = ping + ' ms';
+
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    const curOnline = parseInt(document.getElementById('val-online').textContent) || 0;
+                    animateValue('val-online', curOnline, data.online, 400);
+
+                    const curParties = parseInt(document.getElementById('val-parties').textContent) || 0;
+                    animateValue('val-parties', curParties, data.activeParties, 400);
+
+                    const curTotalParties = parseInt(document.getElementById('val-total-parties').textContent) || 0;
+                    animateValue('val-total-parties', curTotalParties, data.totalParties, 400);
+
+                    const curChats = parseInt(document.getElementById('val-total-chats').textContent) || 0;
+                    animateValue('val-total-chats', curChats, data.totalChats, 400);
+
+                    document.getElementById('val-android').textContent = data.android;
+                    document.getElementById('val-pc').textContent = data.pc;
+                    document.getElementById('val-members').textContent = data.partyMembers;
+                    if (data.serverTime) {
+                        document.getElementById('server-time').textContent = data.serverTime;
+                    }
+
+                    updatePlatformMeter(data.android, data.pc);
+                    lastFetchTime = Date.now();
+                    const updatedEl = document.getElementById('last-updated');
+                    if (updatedEl) updatedEl.textContent = 'Updated just now';
+                }
+            } catch (e) {
+                console.error('Failed to sync live stats:', e);
+            } finally {
+                if (btn) btn.classList.remove('spinning');
+            }
+        }
+
+        // Relative timestamp ticker
+        setInterval(() => {
+            const el = document.getElementById('last-updated');
+            if (!el) return;
+            const sec = Math.floor((Date.now() - lastFetchTime) / 1000);
+            if (sec < 4) {
+                el.textContent = 'Updated just now';
+            } else {
+                el.textContent = 'Updated ' + sec + 's ago';
+            }
+        }, 3000);
+
+        // Soundwave Canvas Animation
+        const canvas = document.getElementById('wave-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const numBars = 28;
+            let phase = 0;
+
+            function drawWave() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const barWidth = canvas.width / numBars - 2;
+
+                for (let i = 0; i < numBars; i++) {
+                    const hFactor = Math.sin(phase + i * 0.35) * 0.5 + 0.5;
+                    const barHeight = Math.max(6, hFactor * (canvas.height * 0.85));
+                    const x = i * (barWidth + 2);
+                    const y = (canvas.height - barHeight) / 2;
+
+                    const grad = ctx.createLinearGradient(0, y, 0, y + barHeight);
+                    grad.addColorStop(0, 'rgba(167, 139, 250, 0.7)');
+                    grad.addColorStop(1, 'rgba(56, 189, 248, 0.2)');
+
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, barWidth, barHeight, 3);
+                    ctx.fill();
+                }
+
+                phase += 0.055;
+                requestAnimationFrame(drawWave);
+            }
+            drawWave();
+        }
+
+        // Initialize platform meter on load
+        const initA = parseInt('{{.Android}}') || 0;
+        const initP = parseInt('{{.PC}}') || 0;
+        updatePlatformMeter(initA, initP);
+
+        // Auto-refresh every 5 seconds seamlessly
+        setInterval(() => fetchLiveStats(false), 5000);
+        // Initial ping check
+        setTimeout(() => fetchLiveStats(false), 800);
+    </script>
 </body>
 </html>`))
 
@@ -527,6 +1005,21 @@ func handleStatsDashboard(w http.ResponseWriter, r *http.Request) {
 	counts := presenceTracker.Counts()
 	activeParties := store.Len()
 	partyMembers := store.MemberCount()
+
+	if r.URL.Query().Get("format") == "json" || strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"online":        counts.Online,
+			"android":       counts.Android,
+			"pc":            counts.PC,
+			"activeParties": activeParties,
+			"partyMembers":  partyMembers,
+			"totalParties":  totalPartiesCreated.Load(),
+			"totalChats":    totalChatMessages.Load(),
+			"serverTime":    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		})
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

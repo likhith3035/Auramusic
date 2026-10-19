@@ -6231,6 +6231,59 @@ private fun DesktopSettingsFooter(onLicenses: () -> Unit) {
             }
         }
 
+        Spacer(Modifier.height(10.dp))
+
+        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF14141E),
+            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clickable { uriHandler.openUri("https://auramusic-kjov.onrender.com/stats") },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF10B981).copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.GraphicEq,
+                        contentDescription = null,
+                        tint = Color(0xFF34D399),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Live Network & Listener Pulse",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = "Real-time global listeners, party rooms & telemetry",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = DesktopSecondary,
+                    )
+                }
+                Text(
+                    text = "• LIVE →",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF34D399),
+                )
+            }
+        }
+
         Spacer(Modifier.height(14.dp))
 
         DeveloperProfileCard(

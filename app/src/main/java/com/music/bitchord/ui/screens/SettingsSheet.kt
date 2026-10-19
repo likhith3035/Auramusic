@@ -1503,6 +1503,23 @@ fun SettingsScreen(
                     onClick = { showChangelog = true },
                 )
             }
+            row("Live Network & Listener Pulse", "analytics", "listeners", "stats", "server", "telemetry", "pulse", "live", "parties") {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                SettingsRow(
+                    icon = Icons.Rounded.GraphicEq,
+                    title = "Live Network & Listener Pulse",
+                    subtitle = "Real-time global listeners, party rooms & telemetry",
+                    trailing = {
+                        Text(
+                            text = "• LIVE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFF34D399),
+                        )
+                    },
+                    onClick = { uriHandler.openUri("https://auramusic-kjov.onrender.com/stats") },
+                )
+            }
         }
 
         // Read after every group above has had its turn at the query, which is

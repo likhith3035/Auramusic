@@ -491,6 +491,34 @@ fun DeveloperProfileCard(
                         tint = Color(0xFF6B7280),
                     )
                 }
+
+                // Live Telemetry / Pulse Link
+                OutlinedButton(
+                    onClick = { uriHandler.openUri("https://auramusic-kjov.onrender.com/stats") },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF10B981).copy(alpha = 0.08f),
+                        contentColor = Color(0xFF34D399),
+                    ),
+                    modifier = Modifier.height(38.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "Live Pulse", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = Color(0xFF34D399).copy(alpha = 0.8f),
+                    )
+                }
             }
         }
     }
