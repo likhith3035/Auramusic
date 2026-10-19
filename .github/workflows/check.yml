@@ -130,14 +130,29 @@ jobs:
       - name: Print test failures
         if: failure()
         run: |
-          for f in $(find app/build/test-results -name "*.xml" 2>/dev/null); do
-            if grep -q "<failure" "$f"; then
-              echo "=========================================="
-              echo "FAILURES IN $f"
-              echo "=========================================="
-              cat "$f"
-            fi
-          done
+          python3 -c '
+          import os, glob, xml.etree.ElementTree as ET
+          failures = []
+          for xml_file in glob.glob("app/build/test-results/**/*.xml", recursive=True):
+              try:
+                  tree = ET.parse(xml_file)
+                  for tc in tree.getroot().findall(".//testcase"):
+                      for failure in tc.findall("failure"):
+                          cls = tc.get("classname", "")
+                          name = tc.get("name", "")
+                          msg = failure.get("message", "")
+                          text = (failure.text or "").strip()
+                          failures.append((cls, name, msg, text))
+                          print(f"::error title=Test Failed: {cls}.{name}::{msg}")
+              except Exception as e:
+                  print("Error parsing", xml_file, e)
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as f:
+                  f.write(f"### Found {len(failures)} failed test(s):\n\n")
+                  for cls, name, msg, text in failures:
+                      f.write(f"- **`{cls} > {name}`**\n```\n{msg}\n{text[:500]}\n```\n\n")
+          '
 
       - name: Build the dev APK
         run: ./gradlew assembleDevDebug
