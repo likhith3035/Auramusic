@@ -134,9 +134,10 @@ internal object DesktopListenTogether {
 
     /** Where the party server lives, injected at build time like the other endpoints. */
     private val DEFAULT_SERVER: String by lazy {
-        normalizeServerUrl(System.getProperty("bitchord.listentogether.server").orEmpty())
-            .getOrNull()
-            .orEmpty()
+        val sysProp = System.getProperty("bitchord.listentogether.server").orEmpty()
+        val env = System.getenv("LISTEN_TOGETHER_SERVER").orEmpty()
+        val chosen = sysProp.ifBlank { env }.ifBlank { "https://auramusic-kjov.onrender.com" }
+        normalizeServerUrl(chosen).getOrNull().orEmpty()
     }
 
     private val http = HttpClient(CIO) {
