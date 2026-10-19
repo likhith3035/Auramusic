@@ -3208,15 +3208,6 @@ private fun BitChordApp(
                                             AuraFeature.STUDIO_EQ -> showEqualizer = true
                                             AuraFeature.LISTEN_TOGETHER -> showListenTogether = true
                                             AuraFeature.KARAOKE_LYRICS -> showNowPlaying = true
-                                            AuraFeature.NOTHING_OS -> {
-                                                val next = !AppSettings.nothingOsMode.value
-                                                AppSettings.setNothingOsMode(next)
-                                                Toast.makeText(
-                                                    context,
-                                                    if (next) "Nothing OS Mode Enabled" else "Classic Aura Mode Enabled",
-                                                    Toast.LENGTH_SHORT,
-                                                ).show()
-                                            }
                                             AuraFeature.SLEEP_TIMER -> showSleepTimer = true
                                             AuraFeature.REPLAY_2026 -> showReplay = true
                                             AuraFeature.ONBOARDING_TOUR -> onOpenOnboarding()

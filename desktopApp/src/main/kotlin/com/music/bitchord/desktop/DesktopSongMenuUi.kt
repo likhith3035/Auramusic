@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -332,6 +334,20 @@ internal fun DesktopSongMenu(
         ) { pickingSleepTimer = true }
         if (!isOffline) {
             DesktopMenuRow(Icons.Rounded.Share, DesktopStrings["share", "Share"], onClick = onShare)
+            if (song.videoId.isNotBlank()) {
+                val uriHandler = LocalUriHandler.current
+                DesktopMenuRow(
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    label = "Open in YouTube",
+                    onClick = {
+                        onDismiss()
+                        try {
+                            uriHandler.openUri("https://www.youtube.com/watch?v=${song.videoId}")
+                        } catch (_: Throwable) {
+                        }
+                    },
+                )
+            }
         }
     }
 }

@@ -20,7 +20,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
@@ -194,6 +208,26 @@ fun EqualizerScreen(
                 }
 
                 EqualizerMode.MANUAL -> {
+                    EqualizerFrequencyCurve(
+                        bands = bands,
+                        enabled = enabled,
+                    )
+
+                    QuickPresetPills(
+                        selectedPreset = preset,
+                        enabled = enabled,
+                        onSelectPreset = { AppSettings.setEqualizerPreset(it) },
+                        onOpenMore = { pickingPreset = true },
+                    )
+
+                    StudioEnhancerRow(
+                        bands = bands,
+                        enabled = enabled,
+                        onChange = { AppSettings.setEqualizerBands(it) },
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
                     SettingsGroup {
                         SettingsRow(
                             icon = Icons.Rounded.GraphicEq,
@@ -510,6 +544,449 @@ private fun ChoiceRow(
     }
 }
 
+// ---- Studio Visualizer & Quick Presets ------------------------------------
+
+@Composable
+private fun EqualizerFrequencyCurve(
+    bands: List<Float>,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val range = EqLayout.MANUAL_RANGE_DB
+    val hzLabels = listOf("60", "150", "400", "1k", "2.5k", "6k", "14k")
+
+    val b0 by animateFloatAsState(bands.getOrElse(0) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b0")
+    val b1 by animateFloatAsState(bands.getOrElse(1) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b1")
+    val b2 by animateFloatAsState(bands.getOrElse(2) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b2")
+    val b3 by animateFloatAsState(bands.getOrElse(3) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b3")
+    val b4 by animateFloatAsState(bands.getOrElse(4) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b4")
+    val b5 by animateFloatAsState(bands.getOrElse(5) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b5")
+    val b6 by animateFloatAsState(bands.getOrElse(6) { 0f }, spring(stiffness = Spring.StiffnessLow), label = "b6")
+    val animatedBands = listOf(b0, b1, b2, b3, b4, b5, b6)
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 9.sp,
+        color = onSurfaceVariant.copy(alpha = 0.7f),
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = GROUP_INSET, vertical = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF13131A),
+                        Color(0xFF0C0C10),
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        primaryColor.copy(alpha = 0.28f),
+                        Color(0xFF22222E),
+                    ),
+                ),
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(top = 12.dp, bottom = 8.dp, start = 10.dp, end = 10.dp),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 6.dp, end = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (enabled) Color(0xFF00F5D4) else Color.Gray),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "STUDIO SPECTRUM RESPONSE",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (enabled) Color(0xFF00F5D4) else onSurfaceVariant,
+                        letterSpacing = 0.8.sp,
+                    )
+                }
+                Text(
+                    text = "±12 dB • 7 BANDS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onSurfaceVariant.copy(alpha = 0.6f),
+                    fontSize = 10.sp,
+                )
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .padding(horizontal = 4.dp),
+            ) {
+                val w = size.width
+                val h = size.height
+                val padY = 12.dp.toPx()
+                val usableH = h - padY * 2
+                val midY = padY + usableH / 2f
+
+                // Horizontal grid lines
+                val stepDb = listOf(12f, 6f, 0f, -6f, -12f)
+                stepDb.forEach { db ->
+                    val yPos = midY - (db / range) * (usableH / 2f)
+                    val isZero = abs(db) < 0.1f
+                    drawLine(
+                        color = if (isZero) primaryColor.copy(alpha = 0.35f) else gridColor,
+                        start = Offset(0f, yPos),
+                        end = Offset(w, yPos),
+                        strokeWidth = if (isZero) 1.2.dp.toPx() else 0.8.dp.toPx(),
+                    )
+                }
+
+                val count = animatedBands.size
+                val points = ArrayList<Offset>(count)
+                val padX = 14.dp.toPx()
+                val usableW = w - padX * 2
+                for (i in 0 until count) {
+                    val px = padX + (i.toFloat() / (count - 1)) * usableW
+                    val py = midY - (animatedBands[i] / range) * (usableH / 2f)
+                    points.add(Offset(px, py))
+                }
+
+                // Smooth cubic curve path
+                val path = Path()
+                path.moveTo(0f, points[0].y)
+                path.lineTo(points[0].x, points[0].y)
+
+                for (i in 0 until points.size - 1) {
+                    val p0 = points[maxOf(0, i - 1)]
+                    val p1 = points[i]
+                    val p2 = points[i + 1]
+                    val p3 = points[minOf(points.size - 1, i + 2)]
+
+                    val cp1x = p1.x + (p2.x - p0.x) / 6f
+                    val cp1y = p1.y + (p2.y - p0.y) / 6f
+                    val cp2x = p2.x - (p3.x - p1.x) / 6f
+                    val cp2y = p2.y - (p3.y - p1.y) / 6f
+
+                    path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+                }
+                path.lineTo(w, points.last().y)
+
+                // Fill under curve
+                val fillPath = Path()
+                fillPath.addPath(path)
+                fillPath.lineTo(w, h)
+                fillPath.lineTo(0f, h)
+                fillPath.close()
+
+                drawPath(
+                    path = fillPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            primaryColor.copy(alpha = if (enabled) 0.32f else 0.08f),
+                            Color(0xFF00F5D4).copy(alpha = if (enabled) 0.12f else 0.03f),
+                            Color.Transparent,
+                        ),
+                        startY = 0f,
+                        endY = h,
+                    ),
+                )
+
+                // Stroke line
+                drawPath(
+                    path = path,
+                    brush = Brush.horizontalGradient(
+                        colors = if (enabled) {
+                            listOf(
+                                Color(0xFF00F5D4),
+                                Color(0xFF00BBF9),
+                                Color(0xFF8338EC),
+                                Color(0xFFFF007F),
+                            )
+                        } else {
+                            listOf(Color.Gray, Color.DarkGray)
+                        },
+                    ),
+                    style = Stroke(
+                        width = 2.8.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    ),
+                )
+
+                // Anchor points
+                points.forEachIndexed { idx, pt ->
+                    val bandVal = animatedBands.getOrElse(idx) { 0f }
+                    val isBoosted = bandVal > 0.5f
+                    val isCut = bandVal < -0.5f
+                    val nodeColor = when {
+                        !enabled -> Color.Gray
+                        isBoosted -> Color(0xFF00F5D4)
+                        isCut -> Color(0xFFFF9E00)
+                        else -> primaryColor
+                    }
+
+                    drawCircle(
+                        color = nodeColor.copy(alpha = 0.25f),
+                        radius = 6.5.dp.toPx(),
+                        center = pt,
+                    )
+                    drawCircle(
+                        color = nodeColor,
+                        radius = 3.5.dp.toPx(),
+                        center = pt,
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 1.2.dp.toPx(),
+                        center = pt,
+                    )
+                }
+            }
+
+            // Frequency Labels along bottom
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                hzLabels.forEach { label ->
+                    Text(
+                        text = label,
+                        style = labelStyle,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickPresetPills(
+    selectedPreset: EqualizerPreset,
+    enabled: Boolean,
+    onSelectPreset: (EqualizerPreset) -> Unit,
+    onOpenMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    val scrollState = rememberScrollState()
+
+    val quickList = listOf(
+        Pair("Flat", EqualizerPreset.FLAT),
+        Pair("Bass Boost", EqualizerPreset.BASS_BOOST),
+        Pair("Rock", EqualizerPreset.ROCK),
+        Pair("Electronic", EqualizerPreset.ELECTRONIC),
+        Pair("Vocal", EqualizerPreset.VOCAL),
+        Pair("Acoustic", EqualizerPreset.ACOUSTIC),
+        Pair("Loudness", EqualizerPreset.LOUDNESS),
+        Pair("Late Night", EqualizerPreset.LATE_NIGHT),
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState)
+            .padding(horizontal = GROUP_INSET, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        quickList.forEach { (title, preset) ->
+            val isSelected = selectedPreset == preset
+            val primaryColor = MaterialTheme.colorScheme.primary
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        if (isSelected) {
+                            primaryColor.copy(alpha = 0.22f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        },
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isSelected) primaryColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    .clickable(enabled = enabled) {
+                        haptics.play(Haptic.Select)
+                        onSelectPreset(preset)
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(primaryColor),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        ),
+                        color = if (isSelected) primaryColor else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+
+        // More Presets Button
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                .clickable(enabled = enabled) {
+                    haptics.play(Haptic.Select)
+                    onOpenMore()
+                }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "All Presets...",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudioEnhancerRow(
+    bands: List<Float>,
+    enabled: Boolean,
+    onChange: (List<Float>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    val range = EqLayout.MANUAL_RANGE_DB
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = GROUP_INSET, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        EnhancerPill(
+            label = "Deep Bass",
+            icon = "🔊",
+            enabled = enabled,
+            modifier = Modifier.weight(1f),
+            onClick = {
+                haptics.play(Haptic.Select)
+                val updated = bands.toMutableList()
+                val currentLow = (updated.getOrElse(0) { 0f } + updated.getOrElse(1) { 0f }) / 2f
+                val delta = if (currentLow > 2f) -3f else 4f
+                if (updated.size > 0) updated[0] = (updated[0] + delta).coerceIn(-range, range)
+                if (updated.size > 1) updated[1] = (updated[1] + delta).coerceIn(-range, range)
+                onChange(updated)
+            },
+        )
+
+        EnhancerPill(
+            label = "Vocal Clarity",
+            icon = "🎤",
+            enabled = enabled,
+            modifier = Modifier.weight(1f),
+            onClick = {
+                haptics.play(Haptic.Select)
+                val updated = bands.toMutableList()
+                val currentMid = (updated.getOrElse(3) { 0f } + updated.getOrElse(4) { 0f }) / 2f
+                val delta = if (currentMid > 1.5f) -2.5f else 3.5f
+                if (updated.size > 3) updated[3] = (updated[3] + delta).coerceIn(-range, range)
+                if (updated.size > 4) updated[4] = (updated[4] + delta).coerceIn(-range, range)
+                onChange(updated)
+            },
+        )
+
+        EnhancerPill(
+            label = "Air & Treble",
+            icon = "✨",
+            enabled = enabled,
+            modifier = Modifier.weight(1f),
+            onClick = {
+                haptics.play(Haptic.Select)
+                val updated = bands.toMutableList()
+                val currentHigh = (updated.getOrElse(5) { 0f } + updated.getOrElse(6) { 0f }) / 2f
+                val delta = if (currentHigh > 1.5f) -2.5f else 3.5f
+                if (updated.size > 5) updated[5] = (updated[5] + delta).coerceIn(-range, range)
+                if (updated.size > 6) updated[6] = (updated[6] + delta).coerceIn(-range, range)
+                onChange(updated)
+            },
+        )
+    }
+}
+
+@Composable
+private fun EnhancerPill(
+    label: String,
+    icon: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(
+                width = 0.8.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(text = icon, fontSize = 11.sp)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 // ---- Manual bands ----------------------------------------------------------
 
 /**
@@ -545,11 +1022,11 @@ private fun BandSliders(
             ) {
                 Text(
                     text = formatGain(value),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (abs(value) < 0.05f) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = when {
+                        value > 0.05f -> Color(0xFF00F5D4)
+                        value < -0.05f -> Color(0xFFFF9E00)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     maxLines = 1,
                 )
@@ -564,7 +1041,7 @@ private fun BandSliders(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = formatFrequency(hz),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
@@ -581,9 +1058,8 @@ private fun BandFader(
     onChange: (Float) -> Unit,
 ) {
     val haptics = rememberHaptics()
-    val trackColor = MaterialTheme.colorScheme.outline
-    val fillColor = MaterialTheme.colorScheme.primary
-    val knobColor = MaterialTheme.colorScheme.background
+    val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val knobColor = MaterialTheme.colorScheme.surface
     val range = EqLayout.MANUAL_RANGE_DB
     // See [TonePad]: the gesture block outlives the composition that made it.
     val latest by rememberUpdatedState(value)
@@ -634,34 +1110,93 @@ private fun BandFader(
         val trackWidth = TRACK_WIDTH.toPx()
         val centreX = size.width / 2
         val knobY = inset + usable * (1f - (value / range + 1f) / 2f)
+        val isBoost = value > 0.05f
+        val isCut = value < -0.05f
 
+        // Draw track groove background
         drawRoundRect(
             color = trackColor,
             topLeft = Offset(centreX - trackWidth / 2, inset),
             size = Size(trackWidth, usable),
             cornerRadius = CornerRadius(trackWidth / 2),
         )
+
+        // Draw active level gradient fill from centre 0dB to current knob position
         if (abs(value) > 0.05f) {
+            val fillBrush = if (isBoost) {
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)),
+                    startY = knobY,
+                    endY = centreY,
+                )
+            } else {
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFFFF9E00), Color(0xFFFF007F)),
+                    startY = centreY,
+                    endY = knobY,
+                )
+            }
             drawRoundRect(
-                color = fillColor,
+                brush = fillBrush,
                 topLeft = Offset(centreX - trackWidth / 2, minOf(centreY, knobY)),
                 size = Size(trackWidth, abs(centreY - knobY)),
                 cornerRadius = CornerRadius(trackWidth / 2),
             )
         }
-        // The zero line, drawn over the track so it survives a full-scale fill.
+
+        // The zero reference line
         drawLine(
-            color = trackColor.copy(alpha = 0.9f),
-            start = Offset(centreX - trackWidth, centreY),
-            end = Offset(centreX + trackWidth, centreY),
+            color = Color.White.copy(alpha = 0.35f),
+            start = Offset(centreX - trackWidth * 1.5f, centreY),
+            end = Offset(centreX + trackWidth * 1.5f, centreY),
             strokeWidth = 1.dp.toPx(),
         )
+
+        // Knob outer glow if boosted or cut
+        if (abs(value) > 0.05f) {
+            val glowColor = if (isBoost) Color(0xFF00F5D4) else Color(0xFFFF9E00)
+            drawCircle(
+                color = glowColor.copy(alpha = 0.28f),
+                radius = inset + 3.dp.toPx(),
+                center = Offset(centreX, knobY),
+            )
+        }
+
+        // Knob shadow
         drawCircle(
-            color = Color.Black.copy(alpha = 0.18f),
+            color = Color.Black.copy(alpha = 0.35f),
             radius = inset + 1.5f,
             center = Offset(centreX, knobY + 1.5f),
         )
-        drawCircle(color = knobColor, radius = inset, center = Offset(centreX, knobY))
+
+        // Knob outer metallic rim
+        drawCircle(
+            color = if (abs(value) > 0.05f) {
+                if (isBoost) Color(0xFF00F5D4) else Color(0xFFFF9E00)
+            } else {
+                Color(0xFF383842)
+            },
+            radius = inset,
+            center = Offset(centreX, knobY),
+        )
+
+        // Knob inner body
+        drawCircle(
+            color = knobColor,
+            radius = inset - 1.5.dp.toPx(),
+            center = Offset(centreX, knobY),
+        )
+
+        // Center tactile pip
+        drawCircle(
+            color = if (abs(value) > 0.05f) {
+                if (isBoost) Color(0xFF00F5D4) else Color(0xFFFF9E00)
+            } else {
+                Color.White.copy(alpha = 0.6f)
+            },
+            radius = 2.5.dp.toPx(),
+            center = Offset(centreX, knobY),
+        )
     }
 }
 

@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Close
@@ -273,6 +275,22 @@ fun SongInfoContent(
                     paletteAccent = palette.accent,
                     modifier = Modifier.weight(1f),
                     onClick = onShare,
+                )
+            }
+
+            if (song.videoId.isNotBlank()) {
+                val uriHandler = LocalUriHandler.current
+                QuickActionButton(
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    label = "YouTube",
+                    paletteAccent = Color(0xFFFF0033),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        try {
+                            uriHandler.openUri("https://www.youtube.com/watch?v=${song.videoId}")
+                        } catch (_: Throwable) {
+                        }
+                    },
                 )
             }
         }

@@ -3743,10 +3743,6 @@ fun BitChordDesktopApp() {
                                     AuraFeature.STUDIO_EQ -> overlays.settingsPage = DesktopSettingsPage.EQUALIZER
                                     AuraFeature.LISTEN_TOGETHER -> overlays.listenTogether = true
                                     AuraFeature.KARAOKE_LYRICS -> overlays.toggleSidePanel(DesktopSidePanel.LYRICS)
-                                    AuraFeature.NOTHING_OS -> {
-                                        val current = DesktopAppUiHost.nothingOsMode.value
-                                        DesktopAppUiHost.setNothingOsMode(!current)
-                                    }
                                     AuraFeature.SLEEP_TIMER -> {
                                         if (sleepAfterTrack) {
                                             DesktopSleepTimer.cancel()

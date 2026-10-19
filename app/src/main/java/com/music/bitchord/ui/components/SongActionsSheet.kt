@@ -312,6 +312,26 @@ fun SongActionsSheet(
             onShare?.let {
                 ActionRow(Icons.Rounded.Share, stringResource(R.string.share), accent = palette.accent, onClick = it)
             }
+            if (song.videoId.isNotBlank()) {
+                val context = LocalContext.current
+                ActionRow(
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    label = "Open in YouTube",
+                    accent = Color(0xFFFF0033),
+                    onClick = {
+                        try {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.youtube.com/watch?v=${song.videoId}"),
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Throwable) {
+                        }
+                    },
+                )
+            }
         }
         ActionRow(
             icon = Icons.Rounded.Radio,

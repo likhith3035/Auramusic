@@ -83,14 +83,6 @@ enum class AuraFeature(
         icon = "🎤",
         gradientColors = listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)),
     ),
-    NOTHING_OS(
-        title = "Nothing OS Mode",
-        subtitle = "AMOLED pitch-black & dot-matrix font",
-        badge = "AESTHETIC",
-        actionLabel = "Toggle",
-        icon = "🖤",
-        gradientColors = listOf(Color(0xFFD71921), Color(0xFF252528)),
-    ),
     SLEEP_TIMER(
         title = "Smart Sleep Timer",
         subtitle = "Gentle fade-out while you drift to sleep",
