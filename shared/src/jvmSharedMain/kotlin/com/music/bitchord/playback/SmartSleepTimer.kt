@@ -52,6 +52,13 @@ object SmartSleepTimer {
     /** Signal indicating the player must stop after the currently playing track ends. */
     val shouldStopAfterCurrentTrack = MutableStateFlow(false)
 
+    /** Smooth volume fade out over final seconds of duration countdown. */
+    val fadeOutEnabled = MutableStateFlow(true)
+    val fadeOutDurationSeconds = MutableStateFlow(30)
+
+    private val _volumeMultiplier = MutableStateFlow(1.0f)
+    val volumeMultiplier: StateFlow<Float> = _volumeMultiplier.asStateFlow()
+
     // Track-based counting
     val completedSongs = MutableStateFlow(0)
     val remainingSongs = MutableStateFlow(0)
@@ -162,6 +169,7 @@ object SmartSleepTimer {
         shouldStopAfterCurrentTrack.value = false
         completedSongs.value = 0
         remainingSongs.value = 0
+        _volumeMultiplier.value = 1.0f
         recordUserActivity()
     }
 
@@ -170,6 +178,26 @@ object SmartSleepTimer {
         if (_status.value == SleepTimerStatus.PAUSED) return pausedDurationRemainingMs
         val dl = _deadlineMs.value ?: return null
         return (dl - MonotonicClock.nowMs()).coerceAtLeast(0L)
+    }
+
+    /**
+     * Updates and returns the volume multiplier based on the remaining milliseconds.
+     * Produces a smooth cosine ease-out curve from 1.0 down to 0.0 during the fade window.
+     */
+    fun updateVolumeMultiplier(remainingMs: Long?): Float {
+        if (_status.value != SleepTimerStatus.RUNNING || !fadeOutEnabled.value || remainingMs == null) {
+            _volumeMultiplier.value = 1.0f
+            return 1.0f
+        }
+        val fadeMs = fadeOutDurationSeconds.value * 1000L
+        if (remainingMs > fadeMs) {
+            _volumeMultiplier.value = 1.0f
+            return 1.0f
+        }
+        val progress = (remainingMs.toFloat() / fadeMs.toFloat()).coerceIn(0f, 1f)
+        val curved = ((1.0 - kotlin.math.cos(progress * Math.PI)) / 2.0).toFloat().coerceIn(0f, 1f)
+        _volumeMultiplier.value = curved
+        return curved
     }
 
     /**

@@ -5422,13 +5422,31 @@ class PlaybackService : MediaLibraryService() {
     private fun watchSleepTimer() {
         scope.launch {
             SmartSleepTimer.deadlineMs.collectLatest { deadline ->
-                if (deadline == null) return@collectLatest
-                val remaining = deadline - MonotonicClock.nowMs()
-                if (remaining > 0) delay(remaining)
+                if (deadline == null) {
+                    player?.volume = 1f
+                    return@collectLatest
+                }
+                while (isActive) {
+                    val remaining = deadline - MonotonicClock.nowMs()
+                    val mult = SmartSleepTimer.updateVolumeMultiplier(remaining)
+                    player?.volume = mult
+                    if (remaining <= 0L) break
+                    val fadeMs = SmartSleepTimer.fadeOutDurationSeconds.value * 1000L
+                    val nextDelay = if (remaining <= fadeMs) 250L else (remaining - fadeMs).coerceIn(250L, 5000L)
+                    delay(nextDelay)
+                }
                 val isPlaying = player?.isPlaying == true
                 val shouldPauseNow = SmartSleepTimer.onDurationCountdownExpired(isPlaying)
                 if (shouldPauseNow) {
                     player?.pause()
+                    player?.volume = 1f
+                }
+            }
+        }
+        scope.launch {
+            SmartSleepTimer.status.collect { status ->
+                if (status == SleepTimerStatus.OFF || status == SleepTimerStatus.PAUSED) {
+                    player?.volume = 1f
                 }
             }
         }

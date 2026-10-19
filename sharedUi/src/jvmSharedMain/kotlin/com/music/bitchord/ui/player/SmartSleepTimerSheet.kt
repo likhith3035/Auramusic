@@ -369,6 +369,74 @@ private fun DurationTimerPane(
             Spacer(Modifier.height(20.dp))
         }
 
+        val shouldStopAfterTrack by SmartSleepTimer.shouldStopAfterCurrentTrack.collectAsStateWithLifecycle()
+        val isStopAfterTrackActive = (mode is SleepTimerMode.SongCount && mode.totalSongs == 1 && status == SleepTimerStatus.RUNNING) || shouldStopAfterTrack
+
+        // Quick 1-Tap: End of Current Track
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (isStopAfterTrackActive) Color(0xFF4CAF50).copy(alpha = 0.16f) else Color.White.copy(alpha = 0.07f))
+                .border(
+                    width = 1.dp,
+                    color = if (isStopAfterTrackActive) Color(0xFF4CAF50).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(16.dp),
+                )
+                .clickable {
+                    if (isStopAfterTrackActive) {
+                        haptics.play(Haptic.ToggleOff)
+                        SmartSleepTimer.cancel()
+                    } else {
+                        haptics.play(Haptic.Select)
+                        SmartSleepTimer.startAfterCurrentSong()
+                    }
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isStopAfterTrackActive) Color(0xFF4CAF50).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
+                    contentDescription = null,
+                    tint = if (isStopAfterTrackActive) Color(0xFF4CAF50) else Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "End of Current Track",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+                Text(
+                    text = if (isStopAfterTrackActive) "Active: stopping after this song" else "Stop playback when this song finishes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isStopAfterTrackActive) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.6f),
+                )
+            }
+            if (isStopAfterTrackActive) {
+                Text(
+                    text = "Active ✓",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF4CAF50),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF4CAF50).copy(alpha = 0.18f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
         // Quick Presets
         Text(
             text = "Quick Presets",
@@ -498,6 +566,48 @@ private fun DurationTimerPane(
             Switch(
                 checked = finishCurrentSong,
                 onCheckedChange = { SmartSleepTimer.finishCurrentSongOnExpiry.value = it },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color.White.copy(alpha = 0.35f),
+                ),
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // "Gentle Volume Fade-Out" Feature Setting
+        val fadeOutEnabled by SmartSleepTimer.fadeOutEnabled.collectAsStateWithLifecycle()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .clickable {
+                    SmartSleepTimer.fadeOutEnabled.value = !fadeOutEnabled
+                    haptics.play(if (!fadeOutEnabled) Haptic.ToggleOn else Haptic.ToggleOff)
+                }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Gentle volume fade-out",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                )
+                Text(
+                    text = "Gradually decreases volume over final 30 seconds before stopping.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = fadeOutEnabled,
+                onCheckedChange = {
+                    SmartSleepTimer.fadeOutEnabled.value = it
+                    haptics.play(if (it) Haptic.ToggleOn else Haptic.ToggleOff)
+                },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = Color.White.copy(alpha = 0.35f),

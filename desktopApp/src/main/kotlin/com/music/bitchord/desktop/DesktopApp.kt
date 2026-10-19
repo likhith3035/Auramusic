@@ -1691,14 +1691,19 @@ fun BitChordDesktopApp() {
     }
     LaunchedEffect(Unit) {
         while (currentCoroutineContext().isActive) {
-            delay(1_000L)
+            delay(500L)
             val remaining = SmartSleepTimer.remainingMs()
+            val mult = SmartSleepTimer.updateVolumeMultiplier(remaining)
+            if (SmartSleepTimer.isActive && SmartSleepTimer.fadeOutEnabled.value) {
+                playbackEngine.setVolume(volume * mult)
+            }
             if (remaining != null && remaining <= 0L) {
                 val isPlaying = playbackEngine.state.value.isPlaying
                 val shouldPauseNow = SmartSleepTimer.onDurationCountdownExpired(isPlaying)
                 if (shouldPauseNow) {
                     DesktopSleepTimer.cancel()
                     playbackEngine.pause()
+                    playbackEngine.setVolume(volume)
                 }
             }
             if (playbackEngine.state.value.isPlaying && SmartSleepTimer.checkInactivityExceeded()) {

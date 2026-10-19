@@ -79,7 +79,8 @@ import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
-import com.music.bitchord.playback.autoplaySectionStart
+import com.music.bitchord.ui.haptics.Haptic
+import com.music.bitchord.ui.haptics.rememberHaptics
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -800,11 +801,12 @@ private fun InlineQueueRow(
     onDrag: (Float) -> Unit = {},
     onDragEnd: () -> Unit = {},
 ) {
+    val haptics = rememberHaptics()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (lifted) Color.White.copy(alpha = 0.06f) else Color.Transparent)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (lifted) Color.White.copy(alpha = 0.12f) else Color.Transparent)
             // Disabled rather than ignored: a tap that ripples and then does
             // nothing reads as the app having missed it.
             .clickable(enabled = !locked, onClick = onClick)
@@ -812,18 +814,16 @@ private fun InlineQueueRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (draggable) {
-            Icon(
-                Icons.Rounded.DragHandle,
-                contentDescription = stringResource(Res.string.drag_to_reorder),
-                tint = Color.White.copy(alpha = 0.4f),
+            Box(
                 modifier = Modifier
-                    .size(20.dp)
-                    // The glyph sits well inset in its own box; this pulls it
-                    // back to the row's edge.
-                    .offset(x = (-4).dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
                     .pointerInput(Unit) {
                         detectDragGestures(
-                            onDragStart = { onDragStart() },
+                            onDragStart = {
+                                haptics.play(Haptic.Select)
+                                onDragStart()
+                            },
                             onDragEnd = { onDragEnd() },
                             onDragCancel = { onDragEnd() },
                             onDrag = { change, amount ->
@@ -832,8 +832,16 @@ private fun InlineQueueRow(
                             },
                         )
                     },
-            )
-            Spacer(Modifier.width(4.dp))
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.DragHandle,
+                    contentDescription = stringResource(Res.string.drag_to_reorder),
+                    tint = if (lifted) Color.White else Color.White.copy(alpha = 0.45f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(2.dp))
         }
         AsyncImage(
             model = rememberRemoteArtworkUrl(song),

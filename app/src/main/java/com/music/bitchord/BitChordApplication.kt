@@ -12,6 +12,7 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.DebugLog
+import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsTranslation
 import androidx.appcompat.app.AppCompatDelegate
 import com.music.bitchord.ui.player.AndroidPlayerHost
@@ -63,6 +64,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // The per-app language picker, which YouTube Music's `hl` follows.
         Innertube.appLanguage = { AppCompatDelegate.getApplicationLocales().get(0)?.language }
         LyricsTranslation.cacheDir = cacheDir
+        LyricsRepository.cacheDir = cacheDir
         // PlaybackService shares this process, so seeding the cookie here means
         // stream resolution is authenticated from the first play onwards.
         authStore = AuthStore(this)

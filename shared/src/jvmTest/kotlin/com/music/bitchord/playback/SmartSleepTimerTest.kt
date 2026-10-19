@@ -85,4 +85,51 @@ class SmartSleepTimerTest {
         assertFalse(SmartSleepTimer.checkInactivityExceeded(currentMs = SmartSleepTimer.lastActivityMs.value + 10 * 60_000L))
         assertTrue(SmartSleepTimer.checkInactivityExceeded(currentMs = SmartSleepTimer.lastActivityMs.value + 16 * 60_000L))
     }
+
+    @Test
+    fun testStartAfterCurrentSong() {
+        SmartSleepTimer.cancel()
+        SmartSleepTimer.startAfterCurrentSong()
+        assertTrue(SmartSleepTimer.isActive)
+        assertTrue(SmartSleepTimer.shouldStopAfterCurrentTrack.value)
+        assertEquals(SleepTimerMode.SongCount(1), SmartSleepTimer.mode.value)
+        val shouldStop = SmartSleepTimer.onTrackCompleted()
+        assertTrue(shouldStop)
+        assertEquals(SleepTimerStatus.OFF, SmartSleepTimer.status.value)
+    }
+
+    @Test
+    fun testVolumeFadeOutCurve() {
+        SmartSleepTimer.cancel()
+        SmartSleepTimer.startDuration(minutes = 10)
+        SmartSleepTimer.fadeOutEnabled.value = true
+        SmartSleepTimer.fadeOutDurationSeconds.value = 30
+
+        // Beyond 30s: volume must be 1.0 (full volume)
+        val vol1 = SmartSleepTimer.updateVolumeMultiplier(remainingMs = 45_000L)
+        assertEquals(1.0f, vol1)
+
+        // Midway through fade window (15s of 30s): volume should be ~0.5
+        val vol2 = SmartSleepTimer.updateVolumeMultiplier(remainingMs = 15_000L)
+        assertTrue(vol2 in 0.45f..0.55f, "Expected mid-fade volume near 0.5, got $vol2")
+
+        // At end (0s): volume must be 0.0
+        val vol3 = SmartSleepTimer.updateVolumeMultiplier(remainingMs = 0L)
+        assertEquals(0.0f, vol3)
+
+        // Reset or cancel restores 1.0
+        SmartSleepTimer.cancel()
+        assertEquals(1.0f, SmartSleepTimer.volumeMultiplier.value)
+    }
+
+    @Test
+    fun testVolumeFadeOutDisabled() {
+        SmartSleepTimer.cancel()
+        SmartSleepTimer.startDuration(minutes = 10)
+        SmartSleepTimer.fadeOutEnabled.value = false
+
+        // Within 10s: since fadeOut is disabled, volume remains 1.0f
+        val vol = SmartSleepTimer.updateVolumeMultiplier(remainingMs = 10_000L)
+        assertEquals(1.0f, vol)
+    }
 }

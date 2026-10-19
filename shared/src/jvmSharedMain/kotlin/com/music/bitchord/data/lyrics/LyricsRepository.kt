@@ -4,11 +4,23 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 /**
  * Where the player gets its lyrics.
@@ -104,6 +116,15 @@ object LyricsRepository {
         /** Lets callers turn a cancelled race loser back into "not fetched". */
         onSourceCancelled: ((LyricsSource) -> Unit)? = null,
     ): Result? = coroutineScope {
+        val cacheKey = cacheKey(videoId, title, artist)
+        // 1. Instant in-memory cache hit (0ms)
+        memoryCache[cacheKey]?.let { return@coroutineScope it }
+        // 2. Persistent disk cache hit (~1ms)
+        readDiskCache(cacheKey)?.let { cached ->
+            memoryCache[cacheKey] = cached
+            return@coroutineScope cached
+        }
+
         val sequence = (order + LyricsSource.offered)
             .distinct()
             .filter { it in sources && !it.hidden }
@@ -156,26 +177,36 @@ object LyricsRepository {
             }
         }
 
-        try {
+        val resolved = try {
             var lineSynced: Result? = null
+            var bestResult: Result? = null
             for ((source, job) in racing) {
                 // If we already found a line-synced or better result, skip Genius completely
                 if (lineSynced != null && source == LyricsSource.GENIUS) continue
 
                 val found = runCatching { job.await() }.getOrNull() ?: continue
-                if (found.lines.any { it.isWordSynced }) return@coroutineScope found
+                if (found.lines.any { it.isWordSynced }) {
+                    bestResult = found
+                    break
+                }
                 if (!prioritizeSyllableSync && found.lines.any { it.timeMs > 0 }) {
-                    return@coroutineScope found
+                    bestResult = found
+                    break
                 }
                 if (lineSynced == null) lineSynced = found
             }
-            lineSynced
+            bestResult ?: lineSynced
         } finally {
             // Whoever lost the race is no longer worth waiting on, and
             // coroutineScope will not return while they are still running.
             racing.forEach { it.second.cancel() }
             documents.cancel()
         }
+
+        if (resolved != null) {
+            cacheResult(cacheKey, resolved)
+        }
+        resolved
     }
 
     private suspend fun fetch(
@@ -301,5 +332,92 @@ object LyricsRepository {
             inFlight.computeIfAbsent(url) { scope.async(Dispatchers.IO) { lyricsGet(url) } }.await()
 
         fun cancel() = inFlight.values.forEach { it.cancel() }
+    }
+
+    var cacheDir: File? = null
+
+    private const val MAX_MEMORY_CACHE = 200
+    private const val CACHE_DIRECTORY = "lyrics_cache"
+    private const val MAX_DISK_CACHE_BYTES = 50L * 1024L * 1024L
+
+    private val json by lazy { Json { ignoreUnknownKeys = true; isLenient = true } }
+    private val diskMutex = Mutex()
+    private val cacheScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private val memoryCache: MutableMap<String, Result> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Result>(MAX_MEMORY_CACHE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, Result>) = size > MAX_MEMORY_CACHE
+        },
+    )
+
+    fun cacheKey(videoId: String, title: String, artist: String): String {
+        if (videoId.isNotBlank()) return "v_" + videoId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val raw = "${title.trim().lowercase()}_${artist.trim().lowercase()}"
+        return "ta_" + raw.replace(Regex("[^a-z0-9_]"), "_").take(64)
+    }
+
+    private suspend fun readDiskCache(key: String): Result? = withContext(Dispatchers.IO) {
+        diskMutex.withLock {
+            val root = cacheDir ?: return@withLock null
+            val file = File(File(root, CACHE_DIRECTORY), "$key.json.gz")
+            if (!file.isFile) return@withLock null
+            runCatching {
+                val data = GZIPInputStream(FileInputStream(file)).bufferedReader().use {
+                    json.decodeFromString<CachedLyricsData>(it.readText())
+                }
+                file.setLastModified(System.currentTimeMillis())
+                data.toResult()
+            }.getOrNull()
+        }
+    }
+
+    private suspend fun writeDiskCache(key: String, result: Result) = withContext(Dispatchers.IO) {
+        diskMutex.withLock {
+            val root = cacheDir ?: return@withLock
+            val directory = File(root, CACHE_DIRECTORY)
+            if (!directory.exists() && !directory.mkdirs()) return@withLock
+            val destination = File(directory, "$key.json.gz")
+            val temporary = File(directory, "$key.tmp")
+            runCatching {
+                val cached = result.toCached()
+                GZIPOutputStream(FileOutputStream(temporary)).bufferedWriter().use {
+                    it.write(json.encodeToString(cached))
+                }
+                if (!temporary.renameTo(destination)) {
+                    temporary.copyTo(destination, overwrite = true)
+                    temporary.delete()
+                }
+                trimDiskCache(directory)
+            }.onFailure { temporary.delete() }
+        }
+    }
+
+    private fun trimDiskCache(directory: File) {
+        val files = directory.listFiles { file -> file.extension == "gz" }
+            ?.sortedByDescending(File::lastModified)
+            .orEmpty()
+        var kept = 0L
+        files.forEach { file ->
+            kept += file.length()
+            if (kept > MAX_DISK_CACHE_BYTES) file.delete()
+        }
+    }
+
+    private fun cacheResult(key: String, result: Result) {
+        memoryCache[key] = result
+        cacheScope.launch {
+            writeDiskCache(key, result)
+        }
+    }
+
+    fun clearCache() {
+        memoryCache.clear()
+        cacheScope.launch {
+            diskMutex.withLock {
+                val root = cacheDir ?: return@withLock
+                val directory = File(root, CACHE_DIRECTORY)
+                directory.deleteRecursively()
+            }
+        }
     }
 }
