@@ -1298,4 +1298,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">Bagikan file audio</string>
+    <string name="play_in_external_app">Putar di aplikasi eksternal</string>
+    <string name="share_template_glass">Kaca</string>
+    <string name="share_template_vinyl">Vinil</string>
+    <string name="share_template_cassette">Kaset</string>
+    <string name="share_template_lyrics">Lirik</string>
+    <string name="share_template_bento">Bento</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Batang</string>
+    <string name="share_visualizer_sine">Gelombang</string>
+    <string name="share_visualizer_pulse">Pulsa</string>
+    <string name="share_visualizer_off">Nonaktif</string>
+    <string name="fast_forward_hold_speed">Kecepatan Tahan untuk Maju Cepat</string>
+    <string name="fast_forward_hold_speed_subtitle">Pengali kecepatan saat menahan tombol lagu berikutnya</string>
+    <string name="rewind_hold_action">Tindakan Tahan untuk Putar Ulang</string>
+    <string name="rewind_hold_action_subtitle">Perilaku saat menahan tombol lagu sebelumnya</string>
 </resources>

@@ -1175,5 +1175,4 @@
     <string name="fast_forward_hold_speed_subtitle">Speed multiplier when holding the next track button</string>
     <string name="rewind_hold_action">Hold to Rewind Action</string>
     <string name="rewind_hold_action_subtitle">Behavior when holding the previous track button</string>
-    <string name="saved_to_bitchord_folder">Saved to AuraMusic folder</string>
 </resources>

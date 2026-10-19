@@ -49,7 +49,7 @@ class JamInviteLinkTest {
     @Test
     fun `builds the canonical share URL`() {
         assertEquals(
-            "https://bitchord.kushagrasingh.in/invite/ABC123",
+            "${ListenTogether.defaultServer}/invite/ABC123",
             JamInviteLink.url("abc123"),
         )
     }
@@ -65,11 +65,11 @@ class JamInviteLinkTest {
             JamInviteLink.url("abc123", "https://my-party.onrender.com/"),
         )
         assertEquals(
-            "https://bitchord.kushagrasingh.in/invite/ABC123",
+            "${ListenTogether.defaultServer}/invite/ABC123",
             JamInviteLink.url("abc123", ""),
         )
         assertEquals(
-            "https://bitchord.kushagrasingh.in/invite/ABC123",
+            "${ListenTogether.defaultServer}/invite/ABC123",
             JamInviteLink.url("abc123", null),
         )
     }
@@ -77,11 +77,11 @@ class JamInviteLinkTest {
     @Test
     fun `builds custom scheme URL`() {
         assertEquals(
-            "bitchord://party/ABC123?server=https%3A%2F%2Fmy-party.onrender.com",
+            "auramusic://party/ABC123?server=https%3A%2F%2Fmy-party.onrender.com",
             JamInviteLink.schemeUrl("abc123", "https://my-party.onrender.com"),
         )
         assertEquals(
-            "bitchord://party/ABC123",
+            "auramusic://party/ABC123",
             JamInviteLink.schemeUrl("abc123", null),
         )
     }
@@ -135,7 +135,7 @@ class JamInviteLinkTest {
         } else {
             JamInviteLink.url(code, activePartyHost)
         }
-        assertEquals("https://bitchord.kushagrasingh.in/invite/JAM001", link)
+        assertEquals("${ListenTogether.defaultServer}/invite/JAM001", link)
     }
 
     @Test
@@ -148,7 +148,7 @@ class JamInviteLinkTest {
             JamInviteLink.url(code, customHost)
         }
         assertEquals("https://custom.jam.example.com/invite/JAM002", link)
-        assertNotEquals("https://bitchord.kushagrasingh.in/invite/JAM002", link)
+        assertNotEquals("${ListenTogether.defaultServer}/invite/JAM002", link)
     }
 
     @Test

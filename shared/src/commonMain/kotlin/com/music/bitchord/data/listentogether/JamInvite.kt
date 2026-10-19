@@ -17,7 +17,9 @@ object JamInvite {
     /** The normalized party code, for the public invite URL shape only. */
     fun parse(value: String?): String? {
         val text = value?.trim() ?: return null
-        val code = text.substringAfter("/invite/").substringBefore('?').substringBefore('#')
+        val prefix = "$ORIGIN/invite/"
+        if (!text.startsWith(prefix)) return null
+        val code = text.removePrefix(prefix).substringBefore('?').substringBefore('#')
         if (code.length != CODE_LENGTH || !code.all(Char::isLetterOrDigit)) return null
         return code.uppercase()
     }

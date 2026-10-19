@@ -1304,4 +1304,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">แชร์ไฟล์เสียง</string>
+    <string name="play_in_external_app">เล่นในแอปภายนอก</string>
+    <string name="share_template_glass">กระจก</string>
+    <string name="share_template_vinyl">แผ่นเสียง</string>
+    <string name="share_template_cassette">เทปคาสเซ็ท</string>
+    <string name="share_template_lyrics">เนื้อเพลง</string>
+    <string name="share_template_bento">เบนโตะ</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">แถบคลื่น</string>
+    <string name="share_visualizer_sine">คลื่นเสียง</string>
+    <string name="share_visualizer_pulse">ชีพจร</string>
+    <string name="share_visualizer_off">ปิด</string>
+    <string name="fast_forward_hold_speed">ความเร็วในการกดค้างเพื่อกรอไปข้างหน้า</string>
+    <string name="fast_forward_hold_speed_subtitle">ตัวคูณความเร็วเมื่อกดปุ่มเพลงถัดไปค้างไว้</string>
+    <string name="rewind_hold_action">การดำเนินการกดค้างเพื่อกรอกลับ</string>
+    <string name="rewind_hold_action_subtitle">พฤติกรรมเมื่อกดปุ่มเพลงก่อนหน้าค้างไว้</string>
 </resources>

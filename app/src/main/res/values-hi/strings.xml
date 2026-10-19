@@ -1321,4 +1321,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">ऑडियो फ़ाइल शेयर करें</string>
+    <string name="play_in_external_app">बाहरी ऐप में चलाएं</string>
+    <string name="share_template_glass">ग्लास</string>
+    <string name="share_template_vinyl">विनाइल</string>
+    <string name="share_template_cassette">कैसेट</string>
+    <string name="share_template_lyrics">बोल</string>
+    <string name="share_template_bento">बेंटो</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">बार्स</string>
+    <string name="share_visualizer_sine">तरंग</string>
+    <string name="share_visualizer_pulse">पल्स</string>
+    <string name="share_visualizer_off">बंद</string>
+    <string name="fast_forward_hold_speed">फ़ास्ट-फ़ॉरवर्ड दबाए रखने की गति</string>
+    <string name="fast_forward_hold_speed_subtitle">अगले ट्रैक बटन को दबाए रखने पर गति गुणक</string>
+    <string name="rewind_hold_action">रिवाइंड दबाए रखने की क्रिया</string>
+    <string name="rewind_hold_action_subtitle">पिछले ट्रैक बटन को दबाए रखने पर व्यवहार</string>
 </resources>

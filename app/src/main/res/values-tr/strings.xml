@@ -1278,4 +1278,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">Ses dosyasını paylaş</string>
+    <string name="play_in_external_app">Harici uygulamada çal</string>
+    <string name="share_template_glass">Cam</string>
+    <string name="share_template_vinyl">Plak</string>
+    <string name="share_template_cassette">Kaset</string>
+    <string name="share_template_lyrics">Şarkı sözleri</string>
+    <string name="share_template_bento">Bento</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Çubuklar</string>
+    <string name="share_visualizer_sine">Dalga</string>
+    <string name="share_visualizer_pulse">Nabız</string>
+    <string name="share_visualizer_off">Kapalı</string>
+    <string name="fast_forward_hold_speed">Hızlı İleri Basılı Tutma Hızı</string>
+    <string name="fast_forward_hold_speed_subtitle">Sonraki parça düğmesine basılı tutulduğunda hız çarpanı</string>
+    <string name="rewind_hold_action">Geri Sarma Basılı Tutma Eylemi</string>
+    <string name="rewind_hold_action_subtitle">Önceki parça düğmesine basılı tutulduğunda davranış</string>
 </resources>

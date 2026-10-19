@@ -1299,4 +1299,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">音声ファイルを共有</string>
+    <string name="play_in_external_app">外部アプリで再生</string>
+    <string name="share_template_glass">グラス</string>
+    <string name="share_template_vinyl">ビニール</string>
+    <string name="share_template_cassette">カセット</string>
+    <string name="share_template_lyrics">歌詞</string>
+    <string name="share_template_bento">ベントー</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">バー</string>
+    <string name="share_visualizer_sine">波形</string>
+    <string name="share_visualizer_pulse">パルス</string>
+    <string name="share_visualizer_off">オフ</string>
+    <string name="fast_forward_hold_speed">長押し早送り速度</string>
+    <string name="fast_forward_hold_speed_subtitle">次の曲ボタンを長押ししたときの速度倍率</string>
+    <string name="rewind_hold_action">長押し巻き戻し動作</string>
+    <string name="rewind_hold_action_subtitle">前の曲ボタンを長押ししたときの動作</string>
 </resources>

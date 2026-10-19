@@ -31,6 +31,7 @@ func setupTestServer() *httptest.Server {
 	mux.HandleFunc("POST /api/presence", handlePresence)
 	mux.HandleFunc("GET /api/stats/live", handleLiveStats)
 	mux.HandleFunc("GET /api/stats/live/badge.svg", handleLiveBadge)
+	mux.HandleFunc("GET /stats", handleStatsDashboard)
 	mux.HandleFunc("GET /invite/{code}", handleInviteLanding)
 	mux.HandleFunc("GET /ws/parties/{code}", handleWebSocket)
 
@@ -474,11 +475,26 @@ func TestInviteLanding(t *testing.T) {
 	_, _ = buf.ReadFrom(resActive.Body)
 	content := buf.String()
 
-	expectedDeepLinkPrefix := "bitchord://party/" + code
+	expectedDeepLinkPrefix := "auramusic://party/" + code
 	if !strings.Contains(content, expectedDeepLinkPrefix) {
 		t.Errorf("Expected HTML content to contain deep link %s", expectedDeepLinkPrefix)
 	}
 	if !strings.Contains(content, code) {
 		t.Errorf("Expected HTML content to contain party code %s", code)
+	}
+}
+
+func TestStatsDashboard(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/stats")
+	if err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("GET /stats failed: status %v, err %v", res.StatusCode, err)
+	}
+	buf := new(bytes.Buffer)
+	_, _ = buf.ReadFrom(res.Body)
+	if !strings.Contains(buf.String(), "AuraMusic Analytics") {
+		t.Errorf("Expected stats page to contain 'AuraMusic Analytics'")
 	}
 }

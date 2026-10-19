@@ -40,6 +40,11 @@ object JamInviteLink {
         return true
     }
 
+    private val OFFICIAL_HOSTS = setOf(
+        "auramusic-kjov.onrender.com",
+        "bitchord.kushagrasingh.in",
+    )
+
     fun handled() {
         _pending.value = null
     }
@@ -69,7 +74,9 @@ object JamInviteLink {
 
         // 2. Web domain: https://<domain>/invite/<CODE>
         val match = INVITE_PATH.matchEntire(uri.path.orEmpty())
-        if ((scheme == "https" || scheme == "http") && match != null) {
+        val defaultHost = runCatching { URI(ListenTogether.defaultServer).host?.lowercase() }.getOrNull()
+        val isAllowedHost = host in OFFICIAL_HOSTS || (defaultHost != null && host == defaultHost)
+        if (scheme == "https" && isAllowedHost && match != null) {
             val code = match.groupValues[1].uppercase()
             val hostServer = server ?: "${scheme}://${uri.authority}"
             return ParsedJamInvite(code = code, serverUrl = hostServer)

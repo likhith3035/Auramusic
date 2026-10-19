@@ -1298,4 +1298,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">分享音频文件</string>
+    <string name="play_in_external_app">在外部应用中播放</string>
+    <string name="share_template_glass">磨砂玻璃</string>
+    <string name="share_template_vinyl">黑胶唱片</string>
+    <string name="share_template_cassette">磁带</string>
+    <string name="share_template_lyrics">歌词</string>
+    <string name="share_template_bento">便当盒</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">柱状条</string>
+    <string name="share_visualizer_sine">波浪</string>
+    <string name="share_visualizer_pulse">脉冲</string>
+    <string name="share_visualizer_off">关闭</string>
+    <string name="fast_forward_hold_speed">按住快进速度</string>
+    <string name="fast_forward_hold_speed_subtitle">按住下一曲按钮时的倍速</string>
+    <string name="rewind_hold_action">按住快退操作</string>
+    <string name="rewind_hold_action_subtitle">按住上一曲按钮时的行为</string>
 </resources>

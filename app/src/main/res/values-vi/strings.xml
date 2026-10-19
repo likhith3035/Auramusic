@@ -1238,4 +1238,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">Chia sẻ tệp âm thanh</string>
+    <string name="play_in_external_app">Phát trong ứng dụng ngoài</string>
+    <string name="share_template_glass">Kính</string>
+    <string name="share_template_vinyl">Đĩa than</string>
+    <string name="share_template_cassette">Băng cassette</string>
+    <string name="share_template_lyrics">Lời bài hát</string>
+    <string name="share_template_bento">Bento</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Thanh sóng</string>
+    <string name="share_visualizer_sine">Dải sóng</string>
+    <string name="share_visualizer_pulse">Nhịp xung</string>
+    <string name="share_visualizer_off">Tắt</string>
+    <string name="fast_forward_hold_speed">Tốc độ giữ để tua nhanh</string>
+    <string name="fast_forward_hold_speed_subtitle">Hệ số tốc độ khi giữ nút bài tiếp theo</string>
+    <string name="rewind_hold_action">Hành động giữ để tua lại</string>
+    <string name="rewind_hold_action_subtitle">Hành vi khi giữ nút bài trước</string>
 </resources>

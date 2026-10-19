@@ -1353,4 +1353,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">Поделиться аудиофайлом</string>
+    <string name="play_in_external_app">Воспроизвести во внешнем приложении</string>
+    <string name="share_template_glass">Стекло</string>
+    <string name="share_template_vinyl">Винил</string>
+    <string name="share_template_cassette">Кассета</string>
+    <string name="share_template_lyrics">Текст</string>
+    <string name="share_template_bento">Бенто</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Полосы</string>
+    <string name="share_visualizer_sine">Волна</string>
+    <string name="share_visualizer_pulse">Пульс</string>
+    <string name="share_visualizer_off">Выкл</string>
+    <string name="fast_forward_hold_speed">Скорость перемотки вперед при удержании</string>
+    <string name="fast_forward_hold_speed_subtitle">Множитель скорости при удержании кнопки следующего трека</string>
+    <string name="rewind_hold_action">Действие при удержании перемотки назад</string>
+    <string name="rewind_hold_action_subtitle">Поведение при удержании кнопки предыдущего трека</string>
 </resources>

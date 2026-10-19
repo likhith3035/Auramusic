@@ -1326,4 +1326,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">שתף קובץ שמע</string>
+    <string name="play_in_external_app">הפעל באפליקציה חיצונית</string>
+    <string name="share_template_glass">זכוכית</string>
+    <string name="share_template_vinyl">ויניל</string>
+    <string name="share_template_cassette">קלטת</string>
+    <string name="share_template_lyrics">מילים</string>
+    <string name="share_template_bento">בנטו</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">פסים</string>
+    <string name="share_visualizer_sine">גל</string>
+    <string name="share_visualizer_pulse">פעימה</string>
+    <string name="share_visualizer_off">כבוי</string>
+    <string name="fast_forward_hold_speed">מהירות החזקה להרצה קדימה</string>
+    <string name="fast_forward_hold_speed_subtitle">מכפיל מהירות בעת החזקת כפתור הרצועה הבאה</string>
+    <string name="rewind_hold_action">פעולת החזקה להרצה אחורה</string>
+    <string name="rewind_hold_action_subtitle">התנהגות בעת החזקת כפתור הרצועה הקודמת</string>
 </resources>

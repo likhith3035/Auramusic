@@ -1326,4 +1326,21 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_audio_file">Compartilhar arquivo de áudio</string>
+    <string name="play_in_external_app">Reproduzir em app externo</string>
+    <string name="share_template_glass">Vidro</string>
+    <string name="share_template_vinyl">Vinil</string>
+    <string name="share_template_cassette">Cassete</string>
+    <string name="share_template_lyrics">Letra</string>
+    <string name="share_template_bento">Bento</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Barras</string>
+    <string name="share_visualizer_sine">Onda</string>
+    <string name="share_visualizer_pulse">Pulso</string>
+    <string name="share_visualizer_off">Desativado</string>
+    <string name="fast_forward_hold_speed">Velocidade ao segurar avanço rápido</string>
+    <string name="fast_forward_hold_speed_subtitle">Multiplicador de velocidade ao segurar o botão da próxima faixa</string>
+    <string name="rewind_hold_action">Ação ao segurar retrocesso</string>
+    <string name="rewind_hold_action_subtitle">Comportamento ao segurar o botão da faixa anterior</string>
 </resources>
