@@ -215,10 +215,14 @@
             <!-- Public Listen Together invites. autoVerify makes a tap open
                  BitChord directly once the domain publishes its assetlinks
                  association for the production signing certificate. -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="auramusic-kjov.onrender.com"
+                    android:pathPattern="/invite/......" />
                 <data
                     android:scheme="https"
                     android:host="bitchord.kushagrasingh.in"
