@@ -33,10 +33,10 @@ if ($LASTEXITCODE -ne 0) {
 
 $arm64Src = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\app-prod-arm64-v8a-release-unsigned.apk"
 $univSrc = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\app-prod-universal-release-unsigned.apk"
-Sign-Apk $arm64Src (Join-Path $releaseDir "AuraMusic-v2.0-arm64.apk")
-Sign-Apk $univSrc (Join-Path $releaseDir "AuraMusic-v2.0-Universal.apk")
+Sign-Apk $arm64Src (Join-Path $releaseDir "AuraMusic-v3.0-arm64.apk")
+Sign-Apk $univSrc (Join-Path $releaseDir "AuraMusic-v3.0-Universal.apk")
 
 Write-Host "`n========================================================" -ForegroundColor Green
 Write-Host "Production APKs updated in $releaseDir" -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
-Get-ChildItem -Path $releaseDir -Filter "AuraMusic-v2.0*.apk" | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+Get-ChildItem -Path $releaseDir -Filter "AuraMusic-v3.0*.apk" | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
