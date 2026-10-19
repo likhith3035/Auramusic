@@ -61,7 +61,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -140,6 +140,7 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -295,6 +296,7 @@ import com.music.bitchord.data.settings.LastPlayerScreen
 import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.TrackAnalysisState
 import com.music.bitchord.data.settings.TransitionWindow
+import com.music.bitchord.ui.about.AURA_CHANGELOG_ENTRIES
 import com.music.bitchord.ui.about.AuraChangelogDialog
 import com.music.bitchord.ui.about.DeveloperProfileCard
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -6179,6 +6181,58 @@ private fun DesktopSettingsFooter(onLicenses: () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF14141E),
+            border = BorderStroke(1.dp, Color(0xFF272738)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clickable { showChangelog = true },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF6366F1).copy(alpha = 0.22f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = null,
+                        tint = Color(0xFFA5B4FC),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Engineering & Innovation Log",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = "Features, exact timestamps & behind-the-scenes build fixes",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = DesktopSecondary,
+                    )
+                }
+                Text(
+                    text = "${AURA_CHANGELOG_ENTRIES.size} Milestones →",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA5B4FC),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
         DeveloperProfileCard(
             developerName = "kami likhith",
             onOpenChangelog = { showChangelog = true },

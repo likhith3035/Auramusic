@@ -1488,6 +1488,21 @@ fun SettingsScreen(
                     onClick = { AppSettings.setShowNerdStats(!nerdStats) },
                 )
             }
+            row("Engineering & Innovation Log", "changelog", "updates", "features", "build", "timeline", "what's new", "fixes", "log") {
+                SettingsRow(
+                    icon = Icons.Rounded.History,
+                    title = "Engineering & Innovation Log",
+                    subtitle = "Features, exact timestamps & behind-the-scenes build fixes",
+                    trailing = {
+                        Text(
+                            text = "11 Milestones",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    onClick = { showChangelog = true },
+                )
+            }
         }
 
         // Read after every group above has had its turn at the query, which is
