@@ -228,6 +228,15 @@ android {
             }
         }
     }
+
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val abi = filters.find { it.filterType == com.android.build.OutputFile.ABI }?.identifier ?: "universal"
+            output?.outputFileName = "AuraMusic-v${variant.versionName}-$abi.apk"
+        }
+    }
 }
 
 kotlin {
