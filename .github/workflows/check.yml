@@ -125,7 +125,19 @@ jobs:
           chmod +x gradlew
 
       - name: Tests
-        run: ./gradlew testDevDebugUnitTest
+        run: ./gradlew testDevDebugUnitTest --continue
+
+      - name: Print test failures
+        if: failure()
+        run: |
+          for f in $(find app/build/test-results -name "*.xml" 2>/dev/null); do
+            if grep -q "<failure" "$f"; then
+              echo "=========================================="
+              echo "FAILURES IN $f"
+              echo "=========================================="
+              cat "$f"
+            fi
+          done
 
       - name: Build the dev APK
         run: ./gradlew assembleDevDebug
