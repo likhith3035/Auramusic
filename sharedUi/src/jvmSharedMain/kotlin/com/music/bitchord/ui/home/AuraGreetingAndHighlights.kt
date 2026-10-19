@@ -1,7 +1,6 @@
 package com.music.bitchord.ui.home
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -9,9 +8,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,8 +21,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +49,75 @@ import com.music.bitchord.ui.theme.NothingThemeTokens
 import java.util.Calendar
 
 /**
+ * Flagship capabilities highlighted in the Home screen feature discovery carousel.
+ */
+enum class AuraFeature(
+    val title: String,
+    val subtitle: String,
+    val badge: String,
+    val actionLabel: String,
+    val icon: String,
+    val gradientColors: List<Color>,
+) {
+    STUDIO_EQ(
+        title = "10-Band Studio EQ",
+        subtitle = "Parametric audio curve & bass boost",
+        badge = "STUDIO",
+        actionLabel = "Tune EQ",
+        icon = "🎛️",
+        gradientColors = listOf(Color(0xFF00C6FF), Color(0xFF0072FF)),
+    ),
+    LISTEN_TOGETHER(
+        title = "Listen Together",
+        subtitle = "Zero-drift party rooms with live soundbites",
+        badge = "SOCIAL",
+        actionLabel = "Party",
+        icon = "📻",
+        gradientColors = listOf(Color(0xFFFF007F), Color(0xFF7928CA)),
+    ),
+    KARAOKE_LYRICS(
+        title = "Live Synced Lyrics",
+        subtitle = "Word-by-word karaoke & live translation",
+        badge = "LIVE",
+        actionLabel = "Sing",
+        icon = "🎤",
+        gradientColors = listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)),
+    ),
+    NOTHING_OS(
+        title = "Nothing OS Mode",
+        subtitle = "AMOLED pitch-black & dot-matrix font",
+        badge = "AESTHETIC",
+        actionLabel = "Toggle",
+        icon = "🖤",
+        gradientColors = listOf(Color(0xFFD71921), Color(0xFF252528)),
+    ),
+    SLEEP_TIMER(
+        title = "Smart Sleep Timer",
+        subtitle = "Gentle fade-out while you drift to sleep",
+        badge = "NIGHT",
+        actionLabel = "Timer",
+        icon = "🌙",
+        gradientColors = listOf(Color(0xFF8338EC), Color(0xFF3A86FF)),
+    ),
+    REPLAY_2026(
+        title = "2026 Replay Recap",
+        subtitle = "Your top artists, tracks & hologram card",
+        badge = "SPECIAL",
+        actionLabel = "View",
+        icon = "✨",
+        gradientColors = listOf(Color(0xFFFFB703), Color(0xFFFB8500)),
+    ),
+    ONBOARDING_TOUR(
+        title = "Welcome Tour",
+        subtitle = "Revisit all features and setup tips",
+        badge = "TOUR",
+        actionLabel = "Explore",
+        icon = "🚀",
+        gradientColors = listOf(Color(0xFF06D6A0), Color(0xFF118AB2)),
+    ),
+}
+
+/**
  * Time of day categorization with curated celestial styling, mood responses, and icons.
  */
 enum class TimeOfDay(
@@ -50,6 +126,7 @@ enum class TimeOfDay(
     val periodTag: String,
     val dotMatrixGreeting: String,
     val subtitles: List<String>,
+    val moodPills: List<String>,
     val gradientColors: List<Color>,
 ) {
     MORNING(
@@ -62,6 +139,7 @@ enum class TimeOfDay(
             "Crisp morning melodies brewed to fuel your day",
             "Your morning coffee soundtrack is curated and ready",
         ),
+        moodPills = listOf("⚡ Morning Energy", "☕ Acoustic Brew", "🧘 Mindful Wakeup", "✨ Fresh Beats"),
         gradientColors = listOf(
             Color(0xFF381512).copy(alpha = 0.55f),
             Color(0xFF1E1026).copy(alpha = 0.65f),
@@ -78,6 +156,7 @@ enum class TimeOfDay(
             "Midday energy boost — upbeat rhythms to keep momentum alive",
             "Stay locked in the zone with your daily focus soundtrack",
         ),
+        moodPills = listOf("⚡ Midday Focus", "🔥 Upbeat Hits", "🎧 Deep Flow", "☕ Lofi Chill"),
         gradientColors = listOf(
             Color(0xFF0C243B).copy(alpha = 0.55f),
             Color(0xFF0C1B2E).copy(alpha = 0.65f),
@@ -94,6 +173,7 @@ enum class TimeOfDay(
             "Dusk is here — slow down and let the soul rhythms play",
             "Sunset melodies crafted for a relaxed, serene evening",
         ),
+        moodPills = listOf("🌆 Golden Hour", "✨ Sunset Melodies", "🍷 Chill R&B", "🎷 Smooth Soul"),
         gradientColors = listOf(
             Color(0xFF35122F).copy(alpha = 0.55f),
             Color(0xFF1E112E).copy(alpha = 0.65f),
@@ -106,21 +186,19 @@ enum class TimeOfDay(
         periodTag = "MIDNIGHT AURA",
         dotMatrixGreeting = "G O O D   N I G H T",
         subtitles = listOf(
-            "Late night reflections, soft lo-fi beats & ambient soundscapes",
-            "Dim the lights and immerse in deep midnight frequencies",
-            "Tranquil nighttime acoustics for restful dreaming",
+            "Late night reflections & soft, immersive ambient soundscapes",
+            "Dim the room lights and immerse in deep midnight audio",
+            "Gentle midnight melodies designed for peaceful dreams",
         ),
+        moodPills = listOf("🌙 Late Night Lo-Fi", "🌌 Deep Ambient", "💤 Sleep Soundscapes", "🎹 Piano Dreams"),
         gradientColors = listOf(
-            Color(0xFF131533).copy(alpha = 0.55f),
-            Color(0xFF0E1024).copy(alpha = 0.65f),
-            Color(0xFF070812).copy(alpha = 0.85f),
+            Color(0xFF131038).copy(alpha = 0.55f),
+            Color(0xFF0C1026).copy(alpha = 0.65f),
+            Color(0xFF060812).copy(alpha = 0.85f),
         ),
     );
 
-    fun pickSubtitle(): String {
-        val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-        return subtitles[dayOfYear % subtitles.size]
-    }
+    fun pickSubtitle(): String = subtitles.random()
 
     companion object {
         fun current(): TimeOfDay {
@@ -138,7 +216,7 @@ enum class TimeOfDay(
 /**
  * High-end dynamic greeting header rendered at the top of the AuraMusic Home feed.
  * Features an atmospheric celestial card, live digital clock pill, animated equalizer indicator,
- * and dual-mode theme support (Classic Aura glassmorphism vs Nothing OS AMOLED dot matrix).
+ * dynamic contextual mood chips, and dual-mode theme support (Classic Aura vs Nothing OS).
  */
 @Composable
 fun AuraGreetingHeader(
@@ -146,6 +224,7 @@ fun AuraGreetingHeader(
     nothingOsMode: Boolean,
     modifier: Modifier = Modifier,
     timeOfDay: TimeOfDay = remember { TimeOfDay.current() },
+    onMoodClick: ((String) -> Unit)? = null,
 ) {
     val firstName = remember(accountName) {
         accountName?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotBlank() }
@@ -264,6 +343,36 @@ fun AuraGreetingHeader(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+
+                // Contextual Mood Chips
+                if (onMoodClick != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        timeOfDay.moodPills.forEach { mood ->
+                            Surface(
+                                shape = RoundedCornerShape(percent = 50),
+                                color = NothingThemeTokens.SurfaceElevated,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border),
+                                modifier = Modifier.clickable { onMoodClick(mood) },
+                            ) {
+                                Text(
+                                    text = mood,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                    ),
+                                    color = NothingThemeTokens.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     } else {
@@ -384,6 +493,151 @@ fun AuraGreetingHeader(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+
+                    // Contextual Mood Chips
+                    if (onMoodClick != null) {
+                        Spacer(Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            timeOfDay.moodPills.forEach { mood ->
+                                Surface(
+                                    shape = RoundedCornerShape(percent = 50),
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
+                                    modifier = Modifier.clickable { onMoodClick(mood) },
+                                ) {
+                                    Text(
+                                        text = mood,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Feature Highlights carousel showcasing AuraMusic's flagship features
+ * with one-tap action triggers and high-end visual design.
+ */
+@Composable
+fun FeatureHighlightsStrip(
+    onFeatureClick: (AuraFeature) -> Unit,
+    nothingOsMode: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
+    ) {
+        items(AuraFeature.values()) { feature ->
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (nothingOsMode) NothingThemeTokens.Surface else Color(0xFF141724),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.10f),
+                ),
+                modifier = Modifier
+                    .width(220.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable { onFeatureClick(feature) },
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else feature.gradientColors.first().copy(alpha = 0.20f),
+                        ) {
+                            Text(
+                                text = feature.badge,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 1.sp,
+                                ),
+                                color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+
+                        Text(feature.icon, fontSize = 20.sp)
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Text(
+                        text = feature.title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                        ),
+                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = feature.subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                        ),
+                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.65f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first(),
+                            modifier = Modifier.clickable { onFeatureClick(feature) },
+                        ) {
+                            Text(
+                                text = feature.actionLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                ),
+                                color = if (nothingOsMode) NothingThemeTokens.White else Color.Black,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

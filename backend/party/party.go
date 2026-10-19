@@ -533,6 +533,7 @@ type Party struct {
 	// seconds. It travels with MaxMembers on the members frame instead, which
 	// is only sent when something about the membership actually changes.
 	HostOnlyControl bool
+	SkipVotes       map[string]bool
 	CreatedAtMs     int64
 	TouchedAtMs     int64
 	EmptySinceMs    *int64
@@ -553,6 +554,7 @@ func NewPartyWithMaxMembers(code string, maxMembers int) *Party {
 		Members:      make(map[string]*Member),
 		Playback:     NewPlaybackState(),
 		MaxMembers:   maxMembers,
+		SkipVotes:    make(map[string]bool),
 		CreatedAtMs:  now,
 		TouchedAtMs:  now,
 		EmptySinceMs: &empty,
@@ -564,6 +566,37 @@ func (p *Party) Unlock() { p.mu.Unlock() }
 
 func (p *Party) Touch() {
 	p.TouchedAtMs = clock.NowMs()
+}
+
+func (p *Party) ToggleSkipVote(memberId string) (int, int, bool) {
+	if p.SkipVotes == nil {
+		p.SkipVotes = make(map[string]bool)
+	}
+	if p.SkipVotes[memberId] {
+		delete(p.SkipVotes, memberId)
+	} else {
+		p.SkipVotes[memberId] = true
+	}
+	activeVotes := len(p.SkipVotes)
+	connectedCount := 0
+	for _, m := range p.Members {
+		if m.Connected {
+			connectedCount++
+		}
+	}
+	if connectedCount == 0 {
+		connectedCount = len(p.Members)
+	}
+	needed := (connectedCount / 2) + 1
+	reached := activeVotes >= needed
+	if reached {
+		p.SkipVotes = make(map[string]bool)
+	}
+	return activeVotes, needed, reached
+}
+
+func (p *Party) ClearSkipVotes() {
+	p.SkipVotes = make(map[string]bool)
 }
 
 func (p *Party) Host() *Member {

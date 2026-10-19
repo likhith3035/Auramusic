@@ -36,6 +36,11 @@ interface AppUiHost {
     val nothingOsMode: StateFlow<Boolean>
 
     fun setNothingOsMode(value: Boolean)
+
+    /** Whether first-run onboarding has been completed. */
+    val onboardingCompleted: StateFlow<Boolean>
+
+    fun setOnboardingCompleted(value: Boolean)
 }
 
 object AppUi {

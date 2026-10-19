@@ -1,6 +1,8 @@
 package com.music.bitchord.playback
 
+import android.content.Context
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.media3.common.Player
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.listentogether.ListenTogether
@@ -8,7 +10,9 @@ import com.music.bitchord.data.listentogether.PartyTrack
 import com.music.bitchord.data.listentogether.partyQueueIndexOf
 import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.ui.screens.PartySoundbiteAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -86,6 +90,7 @@ import kotlin.math.abs
  */
 class PartySync(
     private val scope: CoroutineScope,
+    private val context: Context? = null,
     /** Read fresh every time: the service swaps players at a crossfade. */
     private val player: () -> Player?,
 ) {
@@ -190,6 +195,27 @@ class PartySync(
 
     private var lastPartyCode: String? = null
 
+    /** Whether the player speed is currently slewed away from [AppSettings.playbackSpeed] to correct drift. */
+    private var isSlewingSpeed = false
+    private var currentSlewFactor = 1.0f
+
+    private fun restoreBaseSpeed(exo: Player?) {
+        if (isSlewingSpeed) {
+            isSlewingSpeed = false
+            currentSlewFactor = 1.0f
+            exo?.setPlaybackSpeed(AppSettings.playbackSpeed.value)
+        }
+    }
+
+    private fun applySlewSpeed(exo: Player, factor: Float) {
+        if (!isSlewingSpeed || abs(currentSlewFactor - factor) > 0.005f) {
+            isSlewingSpeed = true
+            currentSlewFactor = factor
+            val targetSpeed = (AppSettings.playbackSpeed.value * factor).toFloat()
+            exo.setPlaybackSpeed(targetSpeed)
+        }
+    }
+
     fun start() {
         jobs += scope.launch {
             ListenTogether.state
@@ -232,9 +258,23 @@ class PartySync(
                 reconcile()
             }
         }
+        // Global party soundbites (Airhorn, Bass Drop, Scratch, etc.)
+        // Plays on every party device regardless of active screen or sheet.
+        jobs += scope.launch {
+            ListenTogether.soundbites.collect { bite ->
+                if (!ListenTogether.state.value.inParty) return@collect
+                val myId = ListenTogether.state.value.you?.memberId
+                // If this device was the sender and already triggered playback locally on click, skip echo
+                if (!bite.senderId.isNullOrBlank() && bite.senderId == myId && PartySoundbiteAudio.wasRecentlyPlayedLocally(bite.sound)) {
+                    return@collect
+                }
+                PartySoundbiteAudio.play(bite.sound)
+            }
+        }
     }
 
     fun stop() {
+        restoreBaseSpeed(player())
         jobs.forEach(Job::cancel)
         jobs.clear()
         publishJob?.cancel()
@@ -472,6 +512,7 @@ class PartySync(
     private fun reconcile() {
         val party = ListenTogether.state.value
         if (!party.inParty) {
+            restoreBaseSpeed(player())
             loadingVideoId = null
             focusLost = false
             rejoining = false
@@ -536,6 +577,7 @@ class PartySync(
         }
 
         if (!target.isPlaying) {
+            restoreBaseSpeed(exo)
             deferredPlayPending = false
             if (exo.playWhenReady) exo.pause()
             // Held where the party paused it, so that everybody resumes from the
@@ -622,32 +664,45 @@ class PartySync(
 
             if (isPlaybackAnchorChanged && abs(drift) > ALIGN_TOLERANCE_MS) {
                 Log.i(TAG, "aligning ${drift}ms onto party control ${target.seq}")
+                restoreBaseSpeed(exo)
                 exo.seekTo(want)
                 return
             }
         }
-        if (abs(drift) <= DRIFT_LIMIT_MS) {
+
+        // --- Smooth Tempo Slewing & Drift Correction ---
+        // 1. In deadband (<= SLEW_DEADBAND_MS): In sync! Restore normal speed.
+        if (abs(drift) <= SLEW_DEADBAND_MS) {
             driftStrikes = 0
+            restoreBaseSpeed(exo)
             return
         }
-        // Seeking is not free, and on a slow device it is not cheap either: the
-        // re-buffer it costs can be longer than the gap being closed, so the
-        // correction arrives already as far behind as the error it was fixing,
-        // and does it again, forever. That loop is real — it was measured here
-        // at a flat -1402ms every 1.4s, to the millisecond, for as long as it
-        // was left running.
-        //
-        // Two things keep it out. A correction has to be asked for twice in a
-        // row before it happens, so one reading taken while the pipeline was
-        // catching up cannot trigger anything; and after one, the player is left
-        // alone long enough to settle and show what it is really doing.
-        val now = SystemClock.elapsedRealtime()
-        if (now < driftCooldownUntilMs) return
-        if (++driftStrikes < DRIFT_STRIKES) return
-        Log.i(TAG, "correcting ${drift}ms of drift against the party")
+
+        // 2. Large drift (> HARD_SEEK_DRIFT_MS): Too big for speed slewing alone (e.g. woke from doze or long tunnel). Hard seek with cooldown.
+        if (abs(drift) > HARD_SEEK_DRIFT_MS) {
+            val now = SystemClock.elapsedRealtime()
+            if (now < driftCooldownUntilMs) return
+            if (++driftStrikes < DRIFT_STRIKES) return
+            Log.i(TAG, "correcting large drift (${drift}ms) via seek against the party")
+            driftStrikes = 0
+            driftCooldownUntilMs = now + DRIFT_COOLDOWN_MS
+            restoreBaseSpeed(exo)
+            exo.seekTo(want)
+            return
+        }
+
+        // 3. Moderate drift (SLEW_DEADBAND_MS .. HARD_SEEK_DRIFT_MS):
+        // Slews playback speed smoothly without dropping buffers or causing audible pops.
         driftStrikes = 0
-        driftCooldownUntilMs = now + DRIFT_COOLDOWN_MS
-        exo.seekTo(want)
+        if (drift < 0) {
+            // Player is behind the room: speed up slightly (+3.5% or +5.0% for larger lag)
+            val factor = if (drift < -800L) 1.050f else 1.035f
+            applySlewSpeed(exo, factor)
+        } else {
+            // Player is ahead of the room: slow down slightly (-3.5% or -5.0% for larger lead)
+            val factor = if (drift > 800L) 0.950f else 0.965f
+            applySlewSpeed(exo, factor)
+        }
     }
 
     /**
@@ -741,7 +796,14 @@ class PartySync(
         // what it was doing, and normal service resumes on the next track that
         // has a catalogue id. A *downloaded* track is not this case: it has a
         // real id and everybody else can stream it perfectly well.
-        if (song.isDeviceFile()) return
+        if (song.isDeviceFile()) {
+            context?.let { ctx ->
+                scope.launch(Dispatchers.Main) {
+                    Toast.makeText(ctx, "Local files cannot be shared in Listen Together.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
         val track = song.toPartyTrack(exo.duration)
         val position = exo.currentPosition.coerceAtLeast(0L)
         // What the user asked for, which during a deferred resume is not what
@@ -910,6 +972,7 @@ class PartySync(
 
     private fun onLeftParty() {
         Log.i(TAG, "left party, restoring personal queue if stashed")
+        restoreBaseSpeed(player())
         loadingVideoId = null
         focusLost = false
         rejoining = false
@@ -1015,12 +1078,19 @@ class PartySync(
         const val TICK_MS = 700L
 
         /**
-         * How far out of step is worth an audible seek.
-         *
-         * Above the jitter of two decoders on different hardware, and at the
-         * level of a real desync. Tightening this does not make a party more
-         * synchronised — it makes it seek more often, which is what people
-         * actually hear.
+         * Within this window the device is in time with the room.
+         * If playback speed was modified to close drift, it is restored to normal.
+         */
+        const val SLEW_DEADBAND_MS = 75L
+
+        /**
+         * Beyond this drift, micro-speed slewing alone is too slow (e.g. device woke from doze
+         * or was stalled in a long tunnel), so an audible hard seek is performed.
+         */
+        const val HARD_SEEK_DRIFT_MS = 2_400L
+
+        /**
+         * Legacy ceiling; replaced by [HARD_SEEK_DRIFT_MS] and [SLEW_DEADBAND_MS] for smooth playback.
          */
         const val DRIFT_LIMIT_MS = 1_200L
 

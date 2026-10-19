@@ -102,6 +102,10 @@ internal object DesktopAppUiHost : AppUiHost {
         DesktopPlayerSettings.setNothingOsMode(value)
     }
 
+    override val onboardingCompleted: StateFlow<Boolean> = MutableStateFlow(true)
+
+    override fun setOnboardingCompleted(value: Boolean) {}
+
     private const val KEY_SWIPE_PLAY_NEXT = "swipe_play_next"
     private const val KEY_HOME_RECENTS_VIEW = "home_recents_view"
 }

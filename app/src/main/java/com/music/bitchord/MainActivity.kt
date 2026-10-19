@@ -152,6 +152,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibrarySort
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.components.AccountProfileSelector
+import com.music.bitchord.ui.components.FloatingPartyPill
 import com.music.bitchord.ui.components.SpotifyImportAlert
 import com.music.bitchord.ui.screens.AccountAndScrobblingScreen
 import com.music.bitchord.ui.screens.DiscordDialog
@@ -320,6 +321,11 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.Locale
+import com.music.bitchord.audio.AuraIntroAudioCue
+import com.music.bitchord.ui.splash.AuraSplashScreen
+import com.music.bitchord.ui.onboarding.AuraOnboardingScreen
+import com.music.bitchord.ui.home.AuraFeature
+import com.music.bitchord.ui.player.SmartSleepTimerSheet
 
 /** A full first screen of a native YouTube Music radio before AutoPlay tops it up. */
 /** How much of an artist page's header scrolls away before the top fade begins. */
@@ -402,16 +408,34 @@ class MainActivity : AppCompatActivity() {
                 // A measured constraint cannot be stale — it is the very width
                 // the split is about to be laid out in.
                 BoxWithConstraints(Modifier.fillMaxSize()) {
+                    var showOnboarding by rememberSaveable { mutableStateOf(false) }
                     BitChordApp(
                         darkTheme = darkTheme,
                         windowWidth = maxWidth,
                         windowHeight = maxHeight,
                         appBackdrop = appBackdrop,
+                        onOpenOnboarding = { showOnboarding = true },
                     )
+                    val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
                     var showSplash by rememberSaveable { mutableStateOf(true) }
                     if (showSplash) {
                         AuraSplashScreen(
-                            onFinished = { showSplash = false },
+                            onFinished = {
+                                showSplash = false
+                                if (!onboardingCompleted) {
+                                    showOnboarding = true
+                                }
+                            },
+                            onPlayIntroCue = {
+                                AuraIntroAudioCue.playChime(this@MainActivity)
+                            },
+                        )
+                    } else if (showOnboarding) {
+                        AuraOnboardingScreen(
+                            onFinished = {
+                                AppSettings.setOnboardingCompleted(true)
+                                showOnboarding = false
+                            },
                         )
                     }
                 }
@@ -473,6 +497,7 @@ private fun BitChordApp(
     windowHeight: Dp,
     appBackdrop: LayerBackdrop,
     viewModel: MainViewModel = viewModel(),
+    onOpenOnboarding: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -570,6 +595,7 @@ private fun BitChordApp(
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showListenTogether by rememberSaveable { mutableStateOf(false) }
     var showEqualizer by rememberSaveable { mutableStateOf(false) }
+    var showSleepTimer by rememberSaveable { mutableStateOf(false) }
     var showSpotifyCanvasAuth by remember { mutableStateOf(false) }
 
     // Hosted here rather than inside SourcesScreen so its frosted card has
@@ -948,6 +974,10 @@ private fun BitChordApp(
     val togglePlayPause: () -> Unit = {
         controller?.let { c ->
             val party = ListenTogether.state.value
+            if (awaitingPartyStart) {
+                // Already waiting for room to start synchronously, ignore rapid second tap
+                return@let
+            }
             if (party.controlsLocked && !party.playback.isPlaying && !c.isPlaying) {
                 showHostOnlyNotice()
             } else if (c.isPlaying) {
@@ -2873,6 +2903,7 @@ private fun BitChordApp(
                             },
                             contentPadding = listPadding,
                             onEditServer = { editingPartyServer = true },
+                            viewModel = viewModel,
                         )
                     } else if (key == "equalizer") {
                         EqualizerScreen(contentPadding = listPadding)
@@ -3153,6 +3184,30 @@ private fun BitChordApp(
                                     loadingMore = homeLoadingMore,
                                     recentlyPlayedLoading = homeRecentlyPlayedLoading,
                                     accountName = account?.name,
+                                    onFeatureClick = { feature ->
+                                        when (feature) {
+                                            AuraFeature.STUDIO_EQ -> showEqualizer = true
+                                            AuraFeature.LISTEN_TOGETHER -> showListenTogether = true
+                                            AuraFeature.KARAOKE_LYRICS -> showNowPlaying = true
+                                            AuraFeature.NOTHING_OS -> {
+                                                val next = !AppSettings.nothingOsMode.value
+                                                AppSettings.setNothingOsMode(next)
+                                                Toast.makeText(
+                                                    context,
+                                                    if (next) "Nothing OS Mode Enabled" else "Classic Aura Mode Enabled",
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }
+                                            AuraFeature.SLEEP_TIMER -> showSleepTimer = true
+                                            AuraFeature.REPLAY_2026 -> showReplay = true
+                                            AuraFeature.ONBOARDING_TOUR -> onOpenOnboarding()
+                                        }
+                                    },
+                                    onMoodClick = { mood ->
+                                        val cleanMood = mood.replace(Regex("[^a-zA-Z0-9 &-]"), "").trim()
+                                        selectedTab = TAB_SEARCH
+                                        viewModel.searchFor("$cleanMood Music")
+                                    },
                                 )
                             }
                         }
@@ -3488,6 +3543,7 @@ private fun BitChordApp(
                                 },
                                 contentPadding = listPadding,
                                 onEditServer = { editingPartyServer = true },
+                                viewModel = viewModel,
                             )
                         }
                     }
@@ -3972,6 +4028,14 @@ private fun BitChordApp(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     QueueActionNoticeHost(queueNotice)
+                    FloatingPartyPill(
+                        visible = !showListenTogether && settingsSubScreen != "listen_together",
+                        onClick = {
+                            showSettings = true
+                            settingsSubScreen = "listen_together"
+                        },
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
                     player.song?.let { song ->
                         MiniPlayer(
                             song = song,
@@ -5329,6 +5393,13 @@ private fun BitChordApp(
                     confirmJioSaavn = false
                 },
                 onDismiss = { confirmJioSaavn = false },
+            )
+        }
+
+        if (showSleepTimer) {
+            SmartSleepTimerSheet(
+                hazeState = hazeState,
+                onDismiss = { showSleepTimer = false },
             )
         }
 

@@ -23,6 +23,7 @@ import com.music.bitchord.data.model.SearchHistoryEntity
 import com.music.bitchord.ui.LocalPullToRefreshEnabled
 import com.music.bitchord.ui.screens.ExploreScreen
 import com.music.bitchord.ui.screens.HomeScreen
+import com.music.bitchord.ui.home.AuraFeature
 import com.music.bitchord.ui.screens.CompactTrackRow
 import com.music.bitchord.ui.screens.LibraryGridPage
 import com.music.bitchord.ui.screens.LibraryLink
@@ -3730,6 +3731,38 @@ fun BitChordDesktopApp() {
                             recentlyPlayedLoading = homeRecentsLoading,
                             leadHero = false,
                             accountName = activeAccount?.name?.takeIf(String::isNotBlank),
+                            onFeatureClick = { feature ->
+                                when (feature) {
+                                    AuraFeature.STUDIO_EQ -> overlays.settingsPage = DesktopSettingsPage.EQUALIZER
+                                    AuraFeature.LISTEN_TOGETHER -> overlays.listenTogether = true
+                                    AuraFeature.KARAOKE_LYRICS -> overlays.toggleSidePanel(DesktopSidePanel.LYRICS)
+                                    AuraFeature.NOTHING_OS -> {
+                                        val current = DesktopAppUiHost.nothingOsMode.value
+                                        DesktopAppUiHost.setNothingOsMode(!current)
+                                    }
+                                    AuraFeature.SLEEP_TIMER -> {
+                                        if (sleepAfterTrack) {
+                                            DesktopSleepTimer.cancel()
+                                        } else if (sleepTimerMinutes == null) {
+                                            DesktopSleepTimer.start(DesktopSleepTimer.presets.first())
+                                        } else if (sleepTimerMinutes == DesktopSleepTimer.presets.last()) {
+                                            DesktopSleepTimer.startAfterTrack()
+                                        } else {
+                                            val current = DesktopSleepTimer.presets.indexOf(sleepTimerMinutes)
+                                            DesktopSleepTimer.start(DesktopSleepTimer.presets.getOrElse(current + 1) { DesktopSleepTimer.presets.last() })
+                                        }
+                                    }
+                                    AuraFeature.REPLAY_2026 -> overlays.replay = true
+                                    AuraFeature.ONBOARDING_TOUR -> {
+                                        overlays.settingsPage = DesktopSettingsPage.MAIN
+                                    }
+                                }
+                            },
+                            onMoodClick = { mood ->
+                                editQuery("$mood Music")
+                                destination = DesktopDestination.SEARCH
+                                search()
+                            },
                         )
                         destination == DesktopDestination.EXPLORE && selectedMoodGenre != null -> Column(Modifier.fillMaxSize()) {
                             MoodGenrePlaylistsScreen(

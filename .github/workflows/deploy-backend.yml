@@ -24,6 +24,7 @@ jobs:
 
   deploy:
     needs: test
+    if: ${{ secrets.ORACLE_HOST != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to the Oracle VM

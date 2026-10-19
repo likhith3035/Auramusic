@@ -18,6 +18,9 @@ object AndroidAppUiHost : AppUiHost {
     override val nothingOsMode get() = AppSettings.nothingOsMode
     override fun setNothingOsMode(value: Boolean) = AppSettings.setNothingOsMode(value)
 
+    override val onboardingCompleted get() = AppSettings.onboardingCompleted
+    override fun setOnboardingCompleted(value: Boolean) = AppSettings.setOnboardingCompleted(value)
+
     @Composable
     override fun downloadedIds(): Set<String> {
         val saved by Downloads.saved.collectAsStateWithLifecycle()

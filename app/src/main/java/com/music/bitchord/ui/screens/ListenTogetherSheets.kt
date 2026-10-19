@@ -81,6 +81,18 @@ internal sealed interface PartySheet {
 
     /** A link and a square, for getting somebody else in. */
     data object Invite : PartySheet
+
+    /** Real-time in-party chat and jukebox song suggestions. */
+    data object Chat : PartySheet
+
+    /** Party session recap & playlist creation dialog. */
+    data object Recap : PartySheet
+
+    /** Host-synchronized room soundstage & visualizer theme. */
+    data object Soundstage : PartySheet
+
+    /** Synced live karaoke lyrics & verse-jump. */
+    data object Lyrics : PartySheet
 }
 
 /**

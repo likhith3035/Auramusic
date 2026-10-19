@@ -144,11 +144,11 @@
 ---
 
 ## 🎯 Verification Checklist
-- [ ] Opening app splash screen showcases the uploaded "AuraMusic BY LIKHITH" neon artwork with smooth entrance scaling and exit dissolve.
-- [ ] Tap-to-skip works immediately on the splash screen without any lag.
-- [ ] Dynamic greeting adapts to current local hour (Morning, Afternoon, Evening, Night).
-- [ ] Subtitle provides rich, warm contextual mood phrases.
-- [ ] Personalized first name appears when signed in ("Good morning, Likhith!").
-- [ ] Feature Spotlight carousel allows users to easily discover and launch AuraMusic features.
-- [ ] Full parity between Android and Desktop platforms.
-- [ ] Zero compilation errors on `:desktopApp:compileKotlin` and `:app:compileDevDebugKotlin`.
+- [x] Opening app splash screen showcases the uploaded "AuraMusic BY LIKHITH" neon artwork with smooth entrance scaling and exit dissolve.
+- [x] Tap-to-skip works immediately on the splash screen without any lag.
+- [x] Dynamic greeting adapts to current local hour (Morning, Afternoon, Evening, Night).
+- [x] Subtitle provides rich, warm contextual mood phrases.
+- [x] Personalized first name appears when signed in ("Good morning, Likhith!").
+- [x] Feature Spotlight carousel allows users to easily discover and launch AuraMusic features.
+- [x] Full parity between Android and Desktop platforms.
+- [x] Zero compilation errors on `:desktopApp:compileKotlin` and `:app:compileDevDebugKotlin`.

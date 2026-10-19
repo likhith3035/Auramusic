@@ -1642,7 +1642,7 @@ class PlaybackService : MediaLibraryService() {
         exoPlayer.addListener(playbackListener)
         // After the player exists and before the session is built: the
         // session's wrapper reports the user's actions to it.
-        partySync = PartySync(scope) { player }.also { it.start() }
+        partySync = PartySync(scope, context = this) { player }.also { it.start() }
         // AutoPlay has one shared supplier in a party. The host supplies it
         // while connected; if they disappear, the lowest stable connected member
         // ID takes over. That election is deterministic on every phone, so two

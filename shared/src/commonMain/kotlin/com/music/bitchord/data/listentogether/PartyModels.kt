@@ -186,3 +186,79 @@ data class ApiError(
     @SerialName("error") val code: String = "",
     val message: String = "",
 )
+
+/** Real-time in-party chat message and song suggestion card. */
+@Serializable
+data class PartyChatMessage(
+    val id: String,
+    val senderId: String,
+    val senderName: String,
+    val senderAvatar: String? = null,
+    val timestampMs: Long = 0,
+    val text: String = "",
+    val song: PartySongRecommendation? = null,
+    val upvotes: Int = 0,
+    val upvoterIds: Set<String> = emptySet(),
+    val autoQueued: Boolean = false,
+    val reactions: Map<String, List<String>> = emptyMap(),
+    val replyToId: String? = null,
+    val replyToSender: String? = null,
+    val replyToText: String? = null,
+    val isPinned: Boolean = false,
+)
+
+/** Real-time party soundbite audio effect. */
+@Serializable
+data class PartySoundbite(
+    val sound: String,
+    val senderId: String = "",
+    val senderName: String = "",
+    val timestampMs: Long = 0,
+)
+
+/** Real-time live emoji floating reaction. */
+@Serializable
+data class PartyReaction(
+    val id: String = "",
+    val senderId: String = "",
+    val senderName: String = "",
+    val emoji: String = "",
+    val timestampMs: Long = 0,
+)
+
+/** Embedded song recommendation inside an in-party chat message. */
+@Serializable
+data class PartySongRecommendation(
+    val videoId: String,
+    val title: String,
+    val artist: String,
+    val coverUrl: String? = null,
+    val durationSec: Int? = null,
+)
+
+/** Real-time skip vote / veto status for the room. */
+@Serializable
+data class PartySkipVoteState(
+    val activeVotes: Int = 0,
+    val totalNeeded: Int = 1,
+    val hasVoted: Boolean = false,
+)
+
+/** A song played in this session for the Party Recap. */
+@Serializable
+data class PartySessionTrack(
+    val videoId: String,
+    val title: String,
+    val artist: String,
+    val coverUrl: String? = null,
+    val durationMs: Long? = null,
+    val playedAtMs: Long = 0,
+    val queuedByName: String? = null,
+)
+
+/** Host-synchronized room soundstage and visualizer palette. */
+@Serializable
+data class PartySyncedTheme(
+    val presetName: String = "",
+    val palette: String = "",
+)

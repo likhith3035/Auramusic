@@ -11,6 +11,13 @@ import com.music.bitchord.data.listentogether.PartyPreview
 import com.music.bitchord.data.listentogether.PartyQueue
 import com.music.bitchord.data.listentogether.PartySnapshot
 import com.music.bitchord.data.listentogether.PartyTrack
+import com.music.bitchord.data.listentogether.PartyChatMessage
+import com.music.bitchord.data.listentogether.PartyReaction
+import com.music.bitchord.data.listentogether.PartySoundbite
+import com.music.bitchord.data.listentogether.PartySongRecommendation
+import com.music.bitchord.data.listentogether.PartySkipVoteState
+import com.music.bitchord.data.listentogether.PartySessionTrack
+import com.music.bitchord.data.listentogether.PartySyncedTheme
 import com.music.bitchord.data.listentogether.ServerClock
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -41,8 +48,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -52,9 +62,12 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -144,6 +157,35 @@ internal object DesktopListenTogether {
 
     private val _activity = MutableStateFlow<List<PartyActivity>>(emptyList())
     val activity: StateFlow<List<PartyActivity>> = _activity.asStateFlow()
+
+    private val _chatMessages = MutableStateFlow<List<PartyChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<PartyChatMessage>> = _chatMessages.asStateFlow()
+
+    private val _unreadChatCount = MutableStateFlow(0)
+    val unreadChatCount: StateFlow<Int> = _unreadChatCount.asStateFlow()
+
+    private val _reactions = MutableSharedFlow<PartyReaction>(extraBufferCapacity = 64)
+    val reactions: SharedFlow<PartyReaction> = _reactions.asSharedFlow()
+
+    private val _soundbites = MutableSharedFlow<PartySoundbite>(extraBufferCapacity = 64)
+    val soundbites: SharedFlow<PartySoundbite> = _soundbites.asSharedFlow()
+
+    private val _skipVoteState = MutableStateFlow(PartySkipVoteState())
+    val skipVoteState: StateFlow<PartySkipVoteState> = _skipVoteState.asStateFlow()
+
+    private val _sessionHistory = MutableStateFlow<List<PartySessionTrack>>(emptyList())
+    val sessionHistory: StateFlow<List<PartySessionTrack>> = _sessionHistory.asStateFlow()
+
+    private val _sessionStartedAtMs = MutableStateFlow(0L)
+    val sessionStartedAtMs: StateFlow<Long> = _sessionStartedAtMs.asStateFlow()
+
+    private val _syncedTheme = MutableStateFlow<PartySyncedTheme?>(null)
+    val syncedTheme: StateFlow<PartySyncedTheme?> = _syncedTheme.asStateFlow()
+
+    var lastCompletedSessionHistory: List<PartySessionTrack> = emptyList()
+        private set
+    var lastCompletedSessionDurationMs: Long = 0L
+        private set
 
     private val _customServer = MutableStateFlow(DesktopPersistence().string(KEY_SERVER))
     val customServerUrl: StateFlow<String> = _customServer.asStateFlow()
@@ -354,10 +396,21 @@ internal object DesktopListenTogether {
         clock.reset()
         token = null
         activePartyServerBase = null
+        val elapsedDurationMs = if (_sessionStartedAtMs.value > 0) {
+            clock.nowMs() - _sessionStartedAtMs.value
+        } else 0L
+        lastCompletedSessionHistory = _sessionHistory.value
+        lastCompletedSessionDurationMs = elapsedDurationMs
         persistence.saveString(KEY_CODE, "")
         persistence.saveString(KEY_TOKEN, "")
         persistence.saveString(KEY_ACTIVE_SERVER, "")
         _activity.value = emptyList()
+        _chatMessages.value = emptyList()
+        _unreadChatCount.value = 0
+        _skipVoteState.value = PartySkipVoteState()
+        _sessionHistory.value = emptyList()
+        _sessionStartedAtMs.value = 0L
+        _syncedTheme.value = null
         _state.value = State()
         if (code != null && held != null && server.isNotBlank()) {
             runCatching {
@@ -414,6 +467,161 @@ internal object DesktopListenTogether {
 
     fun setHostOnlyControl(enabled: Boolean) =
         control("setHostOnlyControl") { put("enabled", enabled) }
+
+    fun sendChatMessage(
+        text: String,
+        song: PartySongRecommendation? = null,
+        replyTo: PartyChatMessage? = null,
+    ) {
+        val you = _state.value.you ?: return
+        val id = UUID.randomUUID().toString()
+        val now = clock.nowMs()
+        val localMsg = PartyChatMessage(
+            id = id,
+            senderId = you.memberId,
+            senderName = you.displayName,
+            senderAvatar = you.avatarUrl,
+            timestampMs = now,
+            text = text,
+            song = song,
+            upvotes = 0,
+            replyToId = replyTo?.id,
+            replyToSender = replyTo?.senderName,
+            replyToText = replyTo?.text?.take(140),
+        )
+        _chatMessages.update { list ->
+            if (list.none { it.id == id }) list + localMsg else list
+        }
+        val frame = buildJsonObject {
+            put("type", "chat")
+            put("id", id)
+            put("senderId", you.memberId)
+            put("senderName", you.displayName)
+            you.avatarUrl?.let { put("senderAvatar", it) }
+            put("timestampMs", now)
+            put("text", text)
+            if (song != null) {
+                put("song", json.encodeToJsonElement(PartySongRecommendation.serializer(), song))
+            }
+            put("upvotes", 0)
+            if (replyTo != null) {
+                put("replyToId", replyTo.id)
+                put("replyToSender", replyTo.senderName)
+                put("replyToText", replyTo.text.take(140))
+            }
+        }
+        send(frame)
+    }
+
+    fun upvoteChatMessage(messageId: String) {
+        val you = _state.value.you ?: return
+        val currentMsg = _chatMessages.value.firstOrNull { it.id == messageId } ?: return
+        val alreadyUpvoted = currentMsg.upvoterIds.contains(you.memberId)
+        val newUpvoters = if (alreadyUpvoted) currentMsg.upvoterIds - you.memberId else currentMsg.upvoterIds + you.memberId
+        val newVotes = newUpvoters.size
+        val updated = currentMsg.copy(upvotes = newVotes, upvoterIds = newUpvoters)
+        sendChatUpdateFrame(updated)
+    }
+
+    fun reactToChatMessage(messageId: String, emoji: String) {
+        val you = _state.value.you ?: return
+        val currentMsg = _chatMessages.value.firstOrNull { it.id == messageId } ?: return
+        val currentMembers = currentMsg.reactions[emoji].orEmpty()
+        val updatedMembers = if (currentMembers.contains(you.memberId)) {
+            currentMembers - you.memberId
+        } else {
+            currentMembers + you.memberId
+        }
+        val updatedReactions = currentMsg.reactions.toMutableMap()
+        if (updatedMembers.isEmpty()) {
+            updatedReactions.remove(emoji)
+        } else {
+            updatedReactions[emoji] = updatedMembers
+        }
+        val updatedMsg = currentMsg.copy(reactions = updatedReactions)
+        sendChatUpdateFrame(updatedMsg)
+    }
+
+    fun pinChatMessage(messageId: String) {
+        val you = _state.value.you ?: return
+        if (!you.isHost) return
+        val currentMsg = _chatMessages.value.firstOrNull { it.id == messageId } ?: return
+        val updatedMsg = currentMsg.copy(isPinned = !currentMsg.isPinned)
+        sendChatUpdateFrame(updatedMsg)
+    }
+
+    private fun sendChatUpdateFrame(updated: PartyChatMessage) {
+        val frame = buildJsonObject {
+            put("type", "chat")
+            put("id", updated.id)
+            put("senderId", updated.senderId)
+            put("senderName", updated.senderName)
+            updated.senderAvatar?.let { put("senderAvatar", it) }
+            put("timestampMs", updated.timestampMs)
+            put("text", updated.text)
+            val rec = updated.song
+            if (rec != null) {
+                put("song", json.encodeToJsonElement(PartySongRecommendation.serializer(), rec))
+            }
+            put("upvotes", updated.upvotes)
+            put("upvoterIds", JsonArray(updated.upvoterIds.map { JsonPrimitive(it) }))
+            val reactionsObj = buildJsonObject {
+                updated.reactions.forEach { (em, members) ->
+                    put(em, JsonArray(members.map { JsonPrimitive(it) }))
+                }
+            }
+            put("reactions", reactionsObj)
+            updated.replyToId?.let { put("replyToId", it) }
+            updated.replyToSender?.let { put("replyToSender", it) }
+            updated.replyToText?.let { put("replyToText", it) }
+            put("isPinned", updated.isPinned)
+        }
+        send(frame)
+    }
+
+    fun sendSoundbite(sound: String) {
+        val you = _state.value.you ?: return
+        val frame = buildJsonObject {
+            put("type", "soundbite")
+            put("sound", sound)
+            put("senderId", you.memberId)
+            put("senderName", you.displayName)
+            put("timestampMs", clock.nowMs())
+        }
+        send(frame)
+    }
+
+    fun voteSkip() {
+        val frame = buildJsonObject {
+            put("type", "vote_skip")
+        }
+        send(frame)
+    }
+
+    fun syncTheme(presetName: String, palette: String) {
+        val frame = buildJsonObject {
+            put("type", "sync_eq")
+            put("presetName", presetName)
+            put("palette", palette)
+        }
+        send(frame)
+    }
+
+    fun sendReaction(emoji: String) {
+        val you = _state.value.you ?: return
+        val frame = buildJsonObject {
+            put("type", "reaction")
+            put("emoji", emoji)
+            put("senderId", you.memberId)
+            put("senderName", you.displayName)
+            put("timestampMs", clock.nowMs())
+        }
+        send(frame)
+    }
+
+    fun clearUnreadChat() {
+        _unreadChatCount.value = 0
+    }
 
     private fun control(action: String, body: JsonObjectBuilder.() -> Unit) {
         if (_state.value.controlsLocked) return
@@ -556,6 +764,12 @@ internal object DesktopListenTogether {
                         error = null,
                     )
                 }
+                _sessionStartedAtMs.value = clock.nowMs()
+                if (_state.value.code != party.code) {
+                    _sessionHistory.value = emptyList()
+                    _chatMessages.value = emptyList()
+                    _skipVoteState.value = PartySkipVoteState()
+                }
             }
 
             "pong" -> {
@@ -571,7 +785,33 @@ internal object DesktopListenTogether {
                 } ?: return
                 // An out-of-order frame is older news than what is already held.
                 if (playback.seq < _state.value.playback.seq) return
+                val prevTrack = _state.value.playback.track
                 _state.update { it.copy(playback = playback) }
+
+                val currTrack = playback.track
+                if (currTrack != null && (prevTrack?.videoId != currTrack.videoId || _sessionHistory.value.isEmpty())) {
+                    val alreadyRecorded = _sessionHistory.value.lastOrNull()?.videoId == currTrack.videoId
+                    if (!alreadyRecorded) {
+                        _sessionHistory.update { history ->
+                            history + PartySessionTrack(
+                                videoId = currTrack.videoId,
+                                title = currTrack.title,
+                                artist = currTrack.artist,
+                                coverUrl = currTrack.thumbnailUrl,
+                                durationMs = currTrack.durationMs,
+                                playedAtMs = clock.nowMs(),
+                                queuedByName = playback.startedByName,
+                            )
+                        }
+                    }
+                    val connected = _state.value.members.count { it.connected }.takeIf { it > 0 } ?: _state.value.members.size
+                    _skipVoteState.value = PartySkipVoteState(
+                        activeVotes = 0,
+                        totalNeeded = (connected / 2) + 1,
+                        hasVoted = false,
+                    )
+                }
+
                 if (playback.queueSeq != _state.value.queue.seq) {
                     send(buildJsonObject { put("type", "syncQueue") })
                 }
@@ -595,6 +835,8 @@ internal object DesktopListenTogether {
                     ?: _state.value.maxMembers
                 val hostOnly = frame["hostOnlyControl"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
                     ?: _state.value.hostOnlyControl
+                val connected = members.count { it.connected }.takeIf { it > 0 } ?: members.size
+                _skipVoteState.update { it.copy(totalNeeded = (connected / 2) + 1) }
                 _state.update { current ->
                     current.copy(
                         members = members,
@@ -613,6 +855,123 @@ internal object DesktopListenTogether {
                 val atMs = frame["atMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: received
                 val detail = frame["detail"]?.jsonPrimitive?.content.orEmpty()
                 _activity.update { (listOf(PartyActivity(action, by, atMs, detail)) + it).take(100) }
+            }
+
+            "chat" -> {
+                val id = frame["id"]?.jsonPrimitive?.content ?: return
+                val senderId = frame["senderId"]?.jsonPrimitive?.content ?: ""
+                val senderName = frame["senderName"]?.jsonPrimitive?.content ?: ""
+                val senderAvatar = frame["senderAvatar"]?.jsonPrimitive?.content
+                val ts = frame["timestampMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: clock.nowMs()
+                val msgText = frame["text"]?.jsonPrimitive?.content.orEmpty()
+                val song = frame["song"]?.let {
+                    runCatching { json.decodeFromJsonElement(PartySongRecommendation.serializer(), it) }.getOrNull()
+                }
+                val upvotes = frame["upvotes"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                val upvoterIds = frame["upvoterIds"]?.let { elem ->
+                    runCatching {
+                        elem.jsonArray.mapNotNull { it.jsonPrimitive.content }.toSet()
+                    }.getOrNull()
+                } ?: emptySet()
+                val autoQueued = frame["autoQueued"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+                val reactionsMap = frame["reactions"]?.let { elem ->
+                    runCatching {
+                        elem.jsonObject.mapValues { entry ->
+                            entry.value.jsonArray.mapNotNull { it.jsonPrimitive.content }
+                        }
+                    }.getOrNull()
+                } ?: emptyMap()
+                val replyToId = frame["replyToId"]?.jsonPrimitive?.content
+                val replyToSender = frame["replyToSender"]?.jsonPrimitive?.content
+                val replyToText = frame["replyToText"]?.jsonPrimitive?.content
+                val isPinned = frame["isPinned"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+
+                val incomingMsg = PartyChatMessage(
+                    id = id,
+                    senderId = senderId,
+                    senderName = senderName,
+                    senderAvatar = senderAvatar,
+                    timestampMs = ts,
+                    text = msgText,
+                    song = song,
+                    upvotes = upvotes,
+                    upvoterIds = upvoterIds,
+                    autoQueued = autoQueued,
+                    reactions = reactionsMap,
+                    replyToId = replyToId,
+                    replyToSender = replyToSender,
+                    replyToText = replyToText,
+                    isPinned = isPinned,
+                )
+
+                _chatMessages.update { list ->
+                    val index = list.indexOfFirst { it.id == id }
+                    if (index >= 0) {
+                        list.toMutableList().apply { set(index, incomingMsg) }
+                    } else {
+                        list + incomingMsg
+                    }
+                }
+                _unreadChatCount.update { it + 1 }
+            }
+
+            "reaction" -> {
+                val emoji = frame["emoji"]?.jsonPrimitive?.content ?: return
+                val senderId = frame["senderId"]?.jsonPrimitive?.content ?: ""
+                val senderName = frame["senderName"]?.jsonPrimitive?.content ?: "Listener"
+                val ts = frame["timestampMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: clock.nowMs()
+                val reaction = PartyReaction(
+                    id = java.util.UUID.randomUUID().toString(),
+                    senderId = senderId,
+                    senderName = senderName,
+                    emoji = emoji,
+                    timestampMs = ts,
+                )
+                scope.launch {
+                    _reactions.emit(reaction)
+                }
+            }
+
+            "soundbite" -> {
+                val sound = frame["sound"]?.jsonPrimitive?.content.orEmpty()
+                val senderId = frame["senderId"]?.jsonPrimitive?.content.orEmpty()
+                val senderName = frame["senderName"]?.jsonPrimitive?.content.orEmpty()
+                val ts = frame["timestampMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: clock.nowMs()
+                if (sound.isNotBlank()) {
+                    _soundbites.tryEmit(
+                        PartySoundbite(
+                            sound = sound,
+                            senderId = senderId,
+                            senderName = senderName,
+                            timestampMs = ts,
+                        )
+                    )
+                }
+            }
+
+            "vote_skip" -> {
+                val active = frame["activeVotes"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                val needed = frame["totalNeeded"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1
+                val voterId = frame["voterId"]?.jsonPrimitive?.content
+                val myMemberId = _state.value.you?.memberId
+
+                val newHasVoted = if (voterId != null && voterId == myMemberId) {
+                    !_skipVoteState.value.hasVoted
+                } else {
+                    _skipVoteState.value.hasVoted
+                }
+
+                _skipVoteState.value = PartySkipVoteState(
+                    activeVotes = active,
+                    totalNeeded = needed,
+                    hasVoted = if (active == 0) false else newHasVoted,
+                )
+            }
+
+            "sync_eq" -> {
+                val preset = frame["presetName"]?.jsonPrimitive?.content.orEmpty()
+                val palette = frame["palette"]?.jsonPrimitive?.content.orEmpty()
+                _syncedTheme.value = PartySyncedTheme(presetName = preset, palette = palette)
             }
 
             "error" -> {

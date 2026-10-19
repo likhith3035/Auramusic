@@ -1160,8 +1160,20 @@
     <string name="share_link_copied">Link copied to clipboard</string>
     <string name="share_lyrics_unavailable">Lyrics not available for this song</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
+    <string name="share_template_glass">Glass</string>
+    <string name="share_template_vinyl">Vinyl</string>
+    <string name="share_template_cassette">Cassette</string>
+    <string name="share_template_lyrics">Lyrics</string>
+    <string name="share_template_bento">Bento</string>
+    <string name="share_aspect_story">9:16</string>
+    <string name="share_aspect_square">1:1</string>
+    <string name="share_visualizer_bars">Bars</string>
+    <string name="share_visualizer_sine">Wave</string>
+    <string name="share_visualizer_pulse">Pulse</string>
+    <string name="share_visualizer_off">Off</string>
     <string name="fast_forward_hold_speed">Hold to Fast-Forward Speed</string>
     <string name="fast_forward_hold_speed_subtitle">Speed multiplier when holding the next track button</string>
     <string name="rewind_hold_action">Hold to Rewind Action</string>
     <string name="rewind_hold_action_subtitle">Behavior when holding the previous track button</string>
+    <string name="saved_to_bitchord_folder">Saved to BitChord folder</string>
 </resources>

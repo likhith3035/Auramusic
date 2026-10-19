@@ -15,6 +15,11 @@ const (
 	FrameError   = "error"
 	FrameBye     = "bye"
 	FrameActivity = "activity"
+	FrameChat     = "chat"
+	FrameVoteSkip = "vote_skip"
+	FrameSyncEq   = "sync_eq"
+	FrameReaction = "reaction"
+	FrameSoundbite = "soundbite"
 )
 
 // Client -> Server frame types
@@ -24,6 +29,11 @@ const (
 	FrameSync      = "sync"
 	FrameSyncQueue = "syncQueue"
 	FrameReport    = "report"
+	FrameClientChat     = "chat"
+	FrameClientVoteSkip = "vote_skip"
+	FrameClientSyncEq   = "sync_eq"
+	FrameClientReaction = "reaction"
+	FrameClientSoundbite = "soundbite"
 )
 
 // Control actions

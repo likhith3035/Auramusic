@@ -35,20 +35,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.SkipNext
+import com.music.bitchord.ui.MainViewModel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -141,6 +147,7 @@ fun ListenTogetherScreen(
      * @see PartyServerEditor for why it cannot live on this screen.
      */
     onEditServer: () -> Unit,
+    viewModel: MainViewModel? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -163,7 +170,7 @@ fun ListenTogetherScreen(
     // Hoisted so a sheet can be *animated* away rather than dropped out of the
     // composition, which is the only way one sheet can hand over to another:
     // see the invite that follows a create.
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     /**
      * Hands the create sheet over to the invite sheet, with the party page
@@ -190,12 +197,7 @@ fun ListenTogetherScreen(
 
     /** The invite URL for a code, pointing at whichever server holds the party. */
     val inviteLinkFor: (String) -> String = { partyCode ->
-        val host = ListenTogether.activePartyServerBase()
-        if (host == null || host == ListenTogether.defaultServer) {
-            JamInviteLink.url(partyCode, null)
-        } else {
-            JamInviteLink.url(partyCode, host)
-        }
+        JamInviteLink.url(partyCode, ListenTogether.activePartyServerBase())
     }
 
     /** The system chooser, with the link and the spoken-aloud code together. */
@@ -343,7 +345,14 @@ fun ListenTogetherScreen(
         )
     }
 
-    sheet?.let { open ->
+    LaunchedEffect(sheet) {
+        if (sheet != null && sheet != PartySheet.Recap) {
+            runCatching { sheetState.show() }
+        }
+    }
+
+    if (sheet != null && sheet != PartySheet.Recap) {
+        val open = sheet!!
         ModalBottomSheet(
             onDismissRequest = {
                 sheet = null
@@ -467,8 +476,30 @@ fun ListenTogetherScreen(
                         ).show()
                     },
                 )
+
+                PartySheet.Chat -> PartyChatSheet(
+                    onDismiss = { sheet = null },
+                )
+
+                PartySheet.Soundstage -> PartySoundstageSheet(
+                    onDismiss = { sheet = null },
+                )
+
+                PartySheet.Lyrics -> PartyLyricsSheet(
+                    onDismiss = { sheet = null },
+                    viewModel = viewModel,
+                )
+
+                PartySheet.Recap -> {}
             }
         }
+    }
+
+    if (sheet == PartySheet.Recap) {
+        PartyRecapDialog(
+            onDismiss = { sheet = null },
+            viewModel = viewModel,
+        )
     }
 
     Column(
@@ -515,6 +546,10 @@ fun ListenTogetherScreen(
                 onCopy = { clipboard.setText(AnnotatedString(state.code.orEmpty())) },
                 onShare = { sheet = PartySheet.Invite },
                 onShareLink = shareInvite,
+                onOpenChat = { sheet = PartySheet.Chat },
+                onOpenSoundstage = { sheet = PartySheet.Soundstage },
+                onOpenLyrics = { sheet = PartySheet.Lyrics },
+                onOpenRecap = { sheet = PartySheet.Recap },
                 onLeave = { scope.launch { ListenTogether.leaveParty() } },
                 onSetCapacity = ListenTogether::setMaxMembers,
                 onSetHostOnlyControl = ListenTogether::setHostOnlyControl,
@@ -842,11 +877,18 @@ private fun InAParty(
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onShareLink: () -> Unit,
+    onOpenChat: () -> Unit,
+    onOpenSoundstage: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenRecap: () -> Unit,
     onLeave: () -> Unit,
     onSetCapacity: (Int) -> Unit,
     onSetHostOnlyControl: (Boolean) -> Unit,
     onKick: (String) -> Unit,
 ) {
+    val unreadChat by ListenTogether.unreadChatCount.collectAsStateWithLifecycle()
+    val syncedTheme by ListenTogether.syncedTheme.collectAsStateWithLifecycle()
+
     SettingsGroup(
         header = stringResource(R.string.listen_together_code),
         footer = stringResource(R.string.listen_together_code_footer),
@@ -878,6 +920,51 @@ private fun InAParty(
     }
 
     NowPlayingInTheParty(state)
+
+    SettingsGroup(header = "Party Hub & Audio") {
+        SettingsRow(
+            icon = Icons.Rounded.Chat,
+            title = "Party Chat & Jukebox",
+            subtitle = "Live song suggestions with YouTube Music search",
+            trailing = if (unreadChat > 0) ({
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "$unreadChat",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }) else null,
+            onClick = onOpenChat,
+        )
+        RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.GraphicEq,
+            title = "Room Soundstage & Theme",
+            subtitle = syncedTheme?.presetName?.ifBlank { "Aura Spatial 3D" } ?: "Aura Spatial 3D",
+            onClick = onOpenSoundstage,
+        )
+        RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.MusicNote,
+            title = "Synced Live Karaoke",
+            subtitle = "Live lyrics with real-time verse-jump and floating emoji reactions",
+            onClick = onOpenLyrics,
+        )
+        RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.AutoAwesome,
+            title = "Party Recap & Playlist",
+            subtitle = "Review session stats and save as local playlist",
+            onClick = onOpenRecap,
+        )
+    }
 
     SettingsGroup(
         header = stringResource(
@@ -988,6 +1075,35 @@ private fun NowPlayingInTheParty(state: ListenTogether.State) {
                 }
             },
         )
+        if (track != null) {
+            RowDivider()
+            val skipVote by ListenTogether.skipVoteState.collectAsStateWithLifecycle()
+            SettingsRow(
+                icon = Icons.Rounded.SkipNext,
+                title = if (skipVote.activeVotes > 0) {
+                    "Skip Vote (${skipVote.activeVotes}/${skipVote.totalNeeded})"
+                } else {
+                    "Vote to Skip"
+                },
+                subtitle = if (skipVote.hasVoted) "You voted to skip this track" else "Majority vote (>50%) automatically skips to next track",
+                trailing = {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (skipVote.hasVoted) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Text(
+                            text = if (skipVote.hasVoted) "Voted" else "Vote",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (skipVote.hasVoted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                },
+                onClick = { ListenTogether.voteSkip() },
+            )
+        }
     }
 }
 

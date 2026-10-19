@@ -355,6 +355,9 @@ object AppSettings {
     /** Nothing OS UI mode: true pitch-black AMOLED, Nothing Red accents, dot-matrix & glyph widgets. */
     val nothingOsMode = MutableStateFlow(false)
 
+    /** Whether the first-launch interactive onboarding tour has been completed. */
+    val onboardingCompleted = MutableStateFlow(true)
+
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
 
@@ -843,6 +846,17 @@ object AppSettings {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
         nothingOsMode.value = prefs.getBoolean(KEY_NOTHING_OS_MODE, false)
+        onboardingCompleted.value = if (!prefs.contains(KEY_ONBOARDING_COMPLETED)) {
+            val isExistingUser = prefs.contains(KEY_THEME) || prefs.contains(KEY_QUALITY_WIFI)
+            if (isExistingUser) {
+                prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, true).apply()
+                true
+            } else {
+                false
+            }
+        } else {
+            prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+        }
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
@@ -1244,6 +1258,11 @@ object AppSettings {
     fun setNothingOsMode(value: Boolean) {
         nothingOsMode.value = value
         prefs.edit().putBoolean(KEY_NOTHING_OS_MODE, value).apply()
+    }
+
+    fun setOnboardingCompleted(value: Boolean) {
+        onboardingCompleted.value = value
+        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -2051,6 +2070,7 @@ object AppSettings {
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
+    private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed_v1"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"
     private const val KEY_TRANSLATION_LANGUAGE = "translation_language"

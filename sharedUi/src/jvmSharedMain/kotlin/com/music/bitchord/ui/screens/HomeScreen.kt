@@ -91,7 +91,9 @@ import com.music.bitchord.ui.components.recentlyPlayedSkeleton
 import com.music.bitchord.ui.components.heroCardWidth
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.trackColumnWidth
+import com.music.bitchord.ui.home.AuraFeature
 import com.music.bitchord.ui.home.AuraGreetingHeader
+import com.music.bitchord.ui.home.FeatureHighlightsStrip
 import com.music.bitchord.ui.player.MeshGradientBackground
 import com.music.bitchord.ui.player.MeshPalette
 
@@ -144,6 +146,8 @@ fun HomeScreen(
     currentSong: Song? = null,
     isPlaying: Boolean = false,
     accountName: String? = null,
+    onFeatureClick: ((AuraFeature) -> Unit)? = null,
+    onMoodClick: ((String) -> Unit)? = null,
 ) {
     val recentsViewType by AppUi.host.homeRecentsViewType.collectAsStateWithLifecycle()
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
@@ -168,7 +172,16 @@ fun HomeScreen(
                 AuraGreetingHeader(
                     accountName = accountName,
                     nothingOsMode = nothingOsMode,
+                    onMoodClick = onMoodClick,
                 )
+            }
+            if (onFeatureClick != null) {
+                item {
+                    FeatureHighlightsStrip(
+                        onFeatureClick = onFeatureClick,
+                        nothingOsMode = nothingOsMode,
+                    )
+                }
             }
             if (!signedIn && onSignIn != null) {
                 item {

@@ -16,11 +16,11 @@ data class ParsedJamInvite(
 /** Relays a BitChord web or scheme invite from [com.music.bitchord.MainActivity] to Compose. */
 object JamInviteLink {
 
-    const val ORIGIN = "https://bitchord.kushagrasingh.in"
+    const val ORIGIN = "https://github.com/likhith3035/Auramusic"
 
-    private const val EXTRA_CONSUMED = "bitchord.jamInviteConsumed"
-    private const val HOST = "bitchord.kushagrasingh.in"
-    private const val CUSTOM_SCHEME = "bitchord"
+    private const val EXTRA_CONSUMED = "auramusic.jamInviteConsumed"
+    private const val CUSTOM_SCHEME = "auramusic"
+    private const val LEGACY_SCHEME = "bitchord"
     private const val CUSTOM_HOST = "party"
 
     private val _pending = MutableStateFlow<ParsedJamInvite?>(null)
@@ -49,8 +49,8 @@ object JamInviteLink {
 
     /**
      * Parses an incoming invite:
-     * 1. bitchord://party/<CODE>?server=<SERVER>
-     * 2. https://bitchord.kushagrasingh.in/invite/<CODE>?server=<SERVER>
+     * 1. auramusic://party/<CODE>?server=<SERVER> (or bitchord://...)
+     * 2. https://<server-domain>/invite/<CODE>?server=<SERVER>
      */
     fun parseInvite(value: String?): ParsedJamInvite? {
         val uri = runCatching { URI(value ?: return null) }.getOrNull() ?: return null
@@ -59,31 +59,30 @@ object JamInviteLink {
         val query = uri.rawQuery
         val server = extractQueryParam(query, "server")?.let { sanitizeServerUrl(it) }
 
-        // 1. Custom scheme: bitchord://party/<CODE> or bitchord://party?code=<CODE>
-        if (scheme == CUSTOM_SCHEME && host == CUSTOM_HOST) {
+        // 1. Custom scheme: auramusic://party/<CODE> or bitchord://party/<CODE>
+        if ((scheme == CUSTOM_SCHEME || scheme == LEGACY_SCHEME) && host == CUSTOM_HOST) {
             val pathPart = uri.path.orEmpty().trim('/').takeIf { it.isNotBlank() }
             val candidate = pathPart ?: extractQueryParam(query, "code") ?: return null
             val code = cleanCode(candidate) ?: return null
             return ParsedJamInvite(code = code, serverUrl = server)
         }
 
-        // 2. Official web domain: https://bitchord.kushagrasingh.in/invite/<CODE>
-        if (scheme == "https" && host == HOST) {
-            val match = INVITE_PATH.matchEntire(uri.path.orEmpty()) ?: return null
+        // 2. Web domain: https://<domain>/invite/<CODE>
+        val match = INVITE_PATH.matchEntire(uri.path.orEmpty())
+        if ((scheme == "https" || scheme == "http") && match != null) {
             val code = match.groupValues[1].uppercase()
-            return ParsedJamInvite(code = code, serverUrl = server)
+            val hostServer = server ?: "${scheme}://${uri.authority}"
+            return ParsedJamInvite(code = code, serverUrl = hostServer)
         }
 
         return null
     }
 
     fun url(code: String, customServer: String? = null): String {
-        val base = customServer?.trim()?.trimEnd('/')
-        return if (!base.isNullOrBlank() && !base.equals(ORIGIN, ignoreCase = true)) {
-            "$base/invite/${code.uppercase()}"
-        } else {
-            "$ORIGIN/invite/${code.uppercase()}"
-        }
+        val base = (customServer?.trim()?.takeIf { it.isNotBlank() }
+            ?: ListenTogether.activePartyServerBase()
+            ?: ListenTogether.defaultServer).trimEnd('/')
+        return "$base/invite/${code.uppercase()}"
     }
 
     fun schemeUrl(code: String, customServer: String? = null): String {
@@ -91,9 +90,9 @@ object JamInviteLink {
         val base = customServer?.trim()?.trimEnd('/')
         return if (!base.isNullOrBlank()) {
             val encoded = runCatching { URLEncoder.encode(base, "UTF-8") }.getOrDefault(base)
-            "bitchord://party/$normalizedCode?server=$encoded"
+            "auramusic://party/$normalizedCode?server=$encoded"
         } else {
-            "bitchord://party/$normalizedCode"
+            "auramusic://party/$normalizedCode"
         }
     }
 

@@ -576,7 +576,7 @@ var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitChord Listen Together - Party {{.Code}}</title>
+    <title>AuraMusic Listen Together - Party {{.Code}}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -711,7 +711,7 @@ var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
                 <span>Listen Together • {{.MemberCount}} in party</span>
             </div>
             <h1>Join the Music Party</h1>
-            <p class="subtitle">Opening BitChord to sync playback in real time.</p>
+            <p class="subtitle">Opening AuraMusic by Likhith to sync playback in real time.</p>
             <div class="code-box">
                 <div class="code-label">Party Code</div>
                 <div class="code-val">{{.Code}}</div>
@@ -719,10 +719,10 @@ var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
                     <div class="now-playing">🎵 {{.CurrentSongTitle}} - {{.CurrentSongArtist}}</div>
                 {{end}}
             </div>
-            <a id="joinBtn" href="{{.IntentURI}}" class="btn">Join Party in BitChord</a>
+            <a id="joinBtn" href="{{.IntentURI}}" class="btn">Join Party in AuraMusic</a>
             <p class="footer-note">
                 Didn’t open automatically? Tap the button above.<br>
-                Don't have BitChord yet? <a href="https://github.com/kushagrasinghx/BitChord/releases" target="_blank" rel="noopener">Download it here</a>.
+                Don't have AuraMusic yet? <a href="https://github.com/likhith3035/Auramusic/releases" target="_blank" rel="noopener">Download AuraMusic here</a>.
             </p>
             <script>
                 var intentUri = {{.IntentURI}};
@@ -799,8 +799,8 @@ func handleInviteLanding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deepLink := fmt.Sprintf("bitchord://party/%s?server=%s", url.PathEscape(code), url.QueryEscape(origin))
-	intentURI := fmt.Sprintf("intent://party/%s?server=%s#Intent;scheme=bitchord;end", url.PathEscape(code), url.QueryEscape(origin))
+	deepLink := fmt.Sprintf("auramusic://party/%s?server=%s", url.PathEscape(code), url.QueryEscape(origin))
+	intentURI := fmt.Sprintf("intent://party/%s?server=%s#Intent;scheme=auramusic;package=com.music.bitchord;S.browser_fallback_url=https://github.com/likhith3035/Auramusic/releases;end", url.PathEscape(code), url.QueryEscape(origin))
 
 	currentSongTitle := ""
 	currentSongArtist := ""
@@ -975,6 +975,82 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 				"message": errMsg,
 			})
 		}
+
+	case protocol.FrameChat:
+		// Check for Democracy Queue auto-enqueue on upvoted songs
+		if songMap, ok := frame["song"].(map[string]interface{}); ok && songMap != nil {
+			autoQueued, _ := frame["autoQueued"].(bool)
+			upvotes, _ := frame["upvotes"].(float64)
+			if int(upvotes) >= 2 && !autoQueued {
+				track := party.TrackFromWire(map[string]interface{}{
+					"videoId":      songMap["videoId"],
+					"title":        songMap["title"],
+					"artist":       songMap["artist"],
+					"thumbnailUrl": songMap["coverUrl"],
+					"durationMs":   songMap["durationSec"],
+				})
+				if track != nil {
+					ok, _ := p.Playback.AddUpcoming(&member.MemberId, []*party.Track{track}, false)
+					if ok {
+						frame["autoQueued"] = true
+						p.Touch()
+						hubInst.Broadcast(p.Code, queueFrame(p), "")
+						hubInst.Broadcast(p.Code, stateFrame(p), "")
+						act := activityFrame(member, "democracy_queue", map[string]interface{}{
+							"detail": fmt.Sprintf("Auto-queued \"%s\" (%d upvotes)", track.Title, int(upvotes)),
+						})
+						hubInst.Broadcast(p.Code, act, "")
+					}
+				}
+			}
+		}
+		// Broadcast in-party chat message / song suggestion to all connected members
+		hubInst.Broadcast(p.Code, frame, "")
+
+	case protocol.FrameReaction:
+		reactionEmoji, _ := frame["emoji"].(string)
+		if reactionEmoji != "" {
+			hubInst.Broadcast(p.Code, map[string]interface{}{
+				"type":        protocol.FrameReaction,
+				"emoji":       reactionEmoji,
+				"senderId":    member.MemberId,
+				"senderName":  member.DisplayName,
+				"timestampMs": clock.NowMs(),
+			}, "")
+		}
+
+	case protocol.FrameSoundbite:
+		sound, _ := frame["sound"].(string)
+		if sound != "" {
+			hubInst.Broadcast(p.Code, map[string]interface{}{
+				"type":        protocol.FrameSoundbite,
+				"sound":       sound,
+				"senderId":    member.MemberId,
+				"senderName":  member.DisplayName,
+				"timestampMs": clock.NowMs(),
+			}, "")
+		}
+
+	case protocol.FrameVoteSkip:
+		active, needed, reached := p.ToggleSkipVote(member.MemberId)
+		skipStateFrame := map[string]interface{}{
+			"type":        protocol.FrameVoteSkip,
+			"activeVotes": active,
+			"totalNeeded": needed,
+			"voterId":     member.MemberId,
+		}
+		hubInst.Broadcast(p.Code, skipStateFrame, "")
+		if reached {
+			// Room reached majority (>50%) veto threshold! Skip to next track
+			applyControl(p, member, protocol.ActionNext, frame)
+			p.ClearSkipVotes()
+			p.Touch()
+			hubInst.Broadcast(p.Code, stateFrame(p), "")
+		}
+
+	case protocol.FrameSyncEq:
+		// Broadcast host soundstage & visualizer theme
+		hubInst.Broadcast(p.Code, frame, "")
 	}
 }
 
@@ -1029,6 +1105,7 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 			qIndexPtr = &qi
 		}
 		p.Playback.SetTrack(&member.MemberId, t, pos, isPlaying, qIndexPtr, &member.DisplayName)
+		p.ClearSkipVotes()
 		return true, "", ""
 
 	case protocol.ActionSetQueue:
@@ -1116,12 +1193,14 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 		if !p.Playback.Step(&member.MemberId, 1, &member.DisplayName) {
 			return false, "end_of_queue", "Already at the end of the queue."
 		}
+		p.ClearSkipVotes()
 		return true, "", ""
 
 	case protocol.ActionPrevious:
 		if !p.Playback.Step(&member.MemberId, -1, &member.DisplayName) {
 			return false, "start_of_queue", "Already at the beginning of the queue."
 		}
+		p.ClearSkipVotes()
 		return true, "", ""
 
 	case protocol.ActionSetMaxMembers:
