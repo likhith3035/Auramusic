@@ -38,10 +38,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,17 +73,19 @@ fun PartyRecapDialog(
 ) {
     val context = LocalContext.current
     val currentHistory by ListenTogether.sessionHistory.collectAsStateWithLifecycle()
-    val sessionStartedAt by ListenTogether.sessionStartedAtMs.collectAsStateWithLifecycle()
     val state by ListenTogether.state.collectAsStateWithLifecycle()
 
     val history = if (currentHistory.isNotEmpty()) currentHistory else ListenTogether.lastCompletedSessionHistory
-    val durationMs = if (sessionStartedAt > 0L) {
-        (System.currentTimeMillis() - sessionStartedAt).coerceAtLeast(0L)
-    } else {
-        ListenTogether.lastCompletedSessionDurationMs
+    var durationMs by remember { mutableLongStateOf(ListenTogether.sessionDurationMs()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            durationMs = ListenTogether.sessionDurationMs()
+            delay(1000)
+        }
     }
 
-    val durationMinutes = (durationMs / 60000L).coerceAtLeast(1)
+    val durationMinutes = (durationMs / 60000L).coerceAtLeast(if (durationMs > 0) 1 else 0)
     val roomCode = state.code ?: "Aura"
 
     // Top contributor calculation
@@ -198,7 +203,11 @@ fun PartyRecapDialog(
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = if (durationMinutes >= 60) "${durationMinutes / 60}h ${durationMinutes % 60}m" else "$durationMinutes mins",
+                                text = when {
+                                    durationMinutes >= 60 -> "${durationMinutes / 60}h ${durationMinutes % 60}m"
+                                    durationMinutes > 0 -> "$durationMinutes mins"
+                                    else -> "< 1 min"
+                                },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,

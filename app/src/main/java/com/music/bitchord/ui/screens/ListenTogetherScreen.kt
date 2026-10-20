@@ -530,6 +530,10 @@ fun ListenTogetherScreen(
             PartyLanding(
                 avatarUrl = ListenTogether.myAvatarUrl(),
                 enabled = signedIn && ListenTogether.hasServer && !busy,
+                hasLastRecap = ListenTogether.lastCompletedSessionHistory.isNotEmpty(),
+                onOpenRecap = {
+                    sheet = PartySheet.Recap
+                },
                 // The last attempt's message does not belong on the next one.
                 onCreate = {
                     failure = null

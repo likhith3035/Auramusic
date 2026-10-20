@@ -188,6 +188,15 @@ internal object DesktopListenTogether {
     var lastCompletedSessionDurationMs: Long = 0L
         private set
 
+    fun sessionDurationMs(): Long {
+        val started = _sessionStartedAtMs.value
+        return if (started > 0L) {
+            (clock.nowMs() - started).coerceAtLeast(0L)
+        } else {
+            lastCompletedSessionDurationMs
+        }
+    }
+
     private val _customServer = MutableStateFlow(DesktopPersistence().string(KEY_SERVER))
     val customServerUrl: StateFlow<String> = _customServer.asStateFlow()
 
@@ -752,6 +761,55 @@ internal object DesktopListenTogether {
                 val you = frame["you"]?.let {
                     runCatching { json.decodeFromJsonElement(PartyMember.serializer(), it) }.getOrNull()
                 }
+                val isNewParty = _state.value.code != party.code
+                if (isNewParty) {
+                    _sessionStartedAtMs.value = clock.nowMs()
+                    _sessionHistory.value = party.playback.track?.let { t ->
+                        listOf(
+                            PartySessionTrack(
+                                videoId = t.videoId,
+                                title = t.title,
+                                artist = t.artist,
+                                coverUrl = t.thumbnailUrl,
+                                durationMs = t.durationMs,
+                                playedAtMs = clock.nowMs(),
+                                queuedByName = party.playback.startedByName,
+                            )
+                        )
+                    } ?: emptyList()
+                    _chatMessages.value = emptyList()
+                    _skipVoteState.value = PartySkipVoteState()
+                } else {
+                    if (_sessionStartedAtMs.value == 0L) {
+                        _sessionStartedAtMs.value = clock.nowMs()
+                    }
+                    party.playback.track?.let { t ->
+                        val current = _sessionHistory.value
+                        if (current.isEmpty()) {
+                            _sessionHistory.value = listOf(
+                                PartySessionTrack(
+                                    videoId = t.videoId,
+                                    title = t.title,
+                                    artist = t.artist,
+                                    coverUrl = t.thumbnailUrl,
+                                    durationMs = t.durationMs,
+                                    playedAtMs = clock.nowMs(),
+                                    queuedByName = party.playback.startedByName,
+                                )
+                            )
+                        } else if (current.lastOrNull()?.videoId != t.videoId) {
+                            _sessionHistory.value = current + PartySessionTrack(
+                                videoId = t.videoId,
+                                title = t.title,
+                                artist = t.artist,
+                                coverUrl = t.thumbnailUrl,
+                                durationMs = t.durationMs,
+                                playedAtMs = clock.nowMs(),
+                                queuedByName = party.playback.startedByName,
+                            )
+                        }
+                    }
+                }
                 _state.update {
                     it.copy(
                         code = party.code,
@@ -764,12 +822,6 @@ internal object DesktopListenTogether {
                         connection = Connection.LIVE,
                         error = null,
                     )
-                }
-                _sessionStartedAtMs.value = clock.nowMs()
-                if (_state.value.code != party.code) {
-                    _sessionHistory.value = emptyList()
-                    _chatMessages.value = emptyList()
-                    _skipVoteState.value = PartySkipVoteState()
                 }
             }
 

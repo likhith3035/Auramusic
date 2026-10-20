@@ -1325,7 +1325,7 @@ private data class PartyBadge(
 
 private fun PartyUi.badge(): PartyBadge = PartyBadge(
     inParty = inParty,
-    members = members.size,
+    members = members.count { it.connected }.takeIf { it > 0 } ?: members.size,
     hostFirstName = members.firstOrNull(PartyMember::isHost)
         ?.displayName
         ?.trim()

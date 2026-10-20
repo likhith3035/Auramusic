@@ -164,8 +164,9 @@ fun PartyChatSheet(
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
+                        val listeningCount = state.members.count { it.connected }.takeIf { it > 0 } ?: state.members.size
                         Text(
-                            text = "${state.members.size} listening",
+                            text = "$listeningCount listening",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,

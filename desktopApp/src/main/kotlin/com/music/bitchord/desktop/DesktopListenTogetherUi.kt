@@ -64,6 +64,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -230,6 +231,7 @@ internal fun DesktopListenTogetherDialog(autoplayEnabled: Boolean, onDismiss: ()
                             busy = false
                         }
                     },
+                    onOpenRecap = { showRecapDialog = true },
                 )
             }
         }
@@ -256,6 +258,7 @@ private fun PartyLanding(
     error: String?,
     onCreate: () -> Unit,
     onPreview: () -> Unit,
+    onOpenRecap: () -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -315,6 +318,34 @@ private fun PartyLanding(
                         enabled = enabled && code.length == DesktopListenTogether.CODE_LENGTH,
                         onClick = onPreview,
                     )
+                }
+            }
+        }
+        if (DesktopListenTogether.lastCompletedSessionHistory.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .desktopCardInset(RoundedCornerShape(14.dp))
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = DesktopAccent, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Last Party Recap", fontWeight = FontWeight.Bold)
+                        Text(
+                            "${DesktopListenTogether.lastCompletedSessionHistory.size} tracks from your previous session",
+                            color = DesktopSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Button(
+                        onClick = onOpenRecap,
+                        colors = ButtonDefaults.buttonColors(containerColor = DesktopAccent),
+                    ) {
+                        Text("View Recap")
+                    }
                 }
             }
         }
@@ -1593,17 +1624,19 @@ private fun PartySoundstagePanel(state: DesktopListenTogether.State) {
 @Composable
 private fun DesktopPartyRecapDialog(onDismiss: () -> Unit) {
     val currentHistory by DesktopListenTogether.sessionHistory.collectAsState()
-    val sessionStartedAt by DesktopListenTogether.sessionStartedAtMs.collectAsState()
     val state by DesktopListenTogether.state.collectAsState()
 
     val history = if (currentHistory.isNotEmpty()) currentHistory else DesktopListenTogether.lastCompletedSessionHistory
-    val durationMs = if (sessionStartedAt > 0L) {
-        (System.currentTimeMillis() - sessionStartedAt).coerceAtLeast(0L)
-    } else {
-        DesktopListenTogether.lastCompletedSessionDurationMs
+    var durationMs by remember { mutableStateOf(DesktopListenTogether.sessionDurationMs()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            durationMs = DesktopListenTogether.sessionDurationMs()
+            delay(1000)
+        }
     }
 
-    val durationMinutes = (durationMs / 60000L).coerceAtLeast(1)
+    val durationMinutes = (durationMs / 60000L).coerceAtLeast(if (durationMs > 0L) 1L else 0L)
     val roomCode = state.code ?: "Aura"
 
     val topDj = remember(history) {

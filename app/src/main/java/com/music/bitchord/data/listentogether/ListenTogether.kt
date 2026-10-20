@@ -297,6 +297,15 @@ object ListenTogether {
     var lastCompletedSessionDurationMs: Long = 0L
         private set
 
+    fun sessionDurationMs(): Long {
+        val started = _sessionStartedAtMs.value
+        return if (started > 0L) {
+            (clock.nowMs() - started).coerceAtLeast(0L)
+        } else {
+            lastCompletedSessionDurationMs
+        }
+    }
+
     /**
      * A server the user has pointed this install at instead of the built-in one.
      *
@@ -1522,24 +1531,56 @@ object ListenTogether {
                 val you = frame["you"]?.let {
                     runCatching { json.decodeFromJsonElement(PartyMember.serializer(), it) }.getOrNull()
                 }
-                _sessionStartedAtMs.value = clock.nowMs()
-                if (_state.value.code != party.code) {
+                val isNewParty = _state.value.code != party.code
+                if (isNewParty) {
+                    _sessionStartedAtMs.value = clock.nowMs()
                     _chatMessages.value = emptyList()
                     _unreadChatCount.value = 0
-                    _sessionHistory.value = emptyList()
-                }
-                party.playback.track?.let { t ->
-                    _sessionHistory.value = listOf(
-                        PartySessionTrack(
-                            videoId = t.videoId,
-                            title = t.title,
-                            artist = t.artist,
-                            coverUrl = t.thumbnailUrl,
-                            durationMs = t.durationMs,
-                            playedAtMs = clock.nowMs(),
-                            queuedByName = party.playback.startedByName,
+                    lastAutopilotVideoId = null
+                    _sessionHistory.value = party.playback.track?.let { t ->
+                        listOf(
+                            PartySessionTrack(
+                                videoId = t.videoId,
+                                title = t.title,
+                                artist = t.artist,
+                                coverUrl = t.thumbnailUrl,
+                                durationMs = t.durationMs,
+                                playedAtMs = clock.nowMs(),
+                                queuedByName = party.playback.startedByName,
+                            )
                         )
-                    )
+                    } ?: emptyList()
+                } else {
+                    // Reconnected to the same party: preserve existing session history and duration
+                    if (_sessionStartedAtMs.value == 0L) {
+                        _sessionStartedAtMs.value = clock.nowMs()
+                    }
+                    party.playback.track?.let { t ->
+                        val current = _sessionHistory.value
+                        if (current.isEmpty()) {
+                            _sessionHistory.value = listOf(
+                                PartySessionTrack(
+                                    videoId = t.videoId,
+                                    title = t.title,
+                                    artist = t.artist,
+                                    coverUrl = t.thumbnailUrl,
+                                    durationMs = t.durationMs,
+                                    playedAtMs = clock.nowMs(),
+                                    queuedByName = party.playback.startedByName,
+                                )
+                            )
+                        } else if (current.lastOrNull()?.videoId != t.videoId) {
+                            _sessionHistory.value = current + PartySessionTrack(
+                                videoId = t.videoId,
+                                title = t.title,
+                                artist = t.artist,
+                                coverUrl = t.thumbnailUrl,
+                                durationMs = t.durationMs,
+                                playedAtMs = clock.nowMs(),
+                                queuedByName = party.playback.startedByName,
+                            )
+                        }
+                    }
                 }
                 val connectedCount = party.members.count { it.connected }.takeIf { it > 0 } ?: party.members.size
                 _skipVoteState.value = PartySkipVoteState(activeVotes = 0, totalNeeded = (connectedCount / 2) + 1, hasVoted = false)

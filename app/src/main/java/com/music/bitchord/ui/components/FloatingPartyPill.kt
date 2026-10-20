@@ -145,8 +145,9 @@ fun FloatingPartyPill(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(13.dp),
                         )
+                        val connectedMembers = state.members.count { it.connected }.takeIf { it > 0 } ?: state.members.size
                         Text(
-                            text = "${state.members.size}",
+                            text = "$connectedMembers",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
