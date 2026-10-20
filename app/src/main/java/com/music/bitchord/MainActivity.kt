@@ -260,6 +260,7 @@ import com.music.bitchord.sharedui.resources.search_library_hint
 import com.music.bitchord.ui.components.TopBarDownloadButton
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.components.topBarContentPadding
+import androidx.compose.material.icons.rounded.Upgrade
 import com.music.bitchord.ui.components.AppLanguageDialog
 import com.music.bitchord.ui.components.TranslationLanguageDialog
 import com.music.bitchord.ui.components.LyricsSourcesDialog
@@ -427,7 +428,7 @@ class MainActivity : AppCompatActivity() {
                                 showSplash = false
                                 if (!onboardingCompleted) {
                                     showOnboarding = true
-                                } else if (lastSeenWhatsNewVersion < 3) {
+                                } else if (lastSeenWhatsNewVersion < 4) {
                                     showWhatsNew = true
                                 }
                             },
@@ -440,7 +441,7 @@ class MainActivity : AppCompatActivity() {
                             onFinished = {
                                 AppSettings.setOnboardingCompleted(true)
                                 showOnboarding = false
-                                if (lastSeenWhatsNewVersion < 3) {
+                                if (lastSeenWhatsNewVersion < 4) {
                                     showWhatsNew = true
                                 }
                             },
@@ -448,11 +449,11 @@ class MainActivity : AppCompatActivity() {
                     } else if (showWhatsNew) {
                         AuraV3WhatsNewDialog(
                             onDismissRequest = {
-                                AppSettings.setLastSeenWhatsNewVersion(3)
+                                AppSettings.setLastSeenWhatsNewVersion(4)
                                 showWhatsNew = false
                             },
                             onExploreParty = {
-                                AppSettings.setLastSeenWhatsNewVersion(3)
+                                AppSettings.setLastSeenWhatsNewVersion(4)
                                 showWhatsNew = false
                             },
                         )
@@ -2961,6 +2962,7 @@ private fun BitChordApp(
                             },
                             onSpotifyCanvasAuth = { showSpotifyCanvasAuth = true },
                             onAppLanguage = { showAppLanguage = true },
+                            onShowUpdateDialog = { showUpdateDialog = true },
                             contentPadding = listPadding,
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -3171,6 +3173,7 @@ private fun BitChordApp(
                                     listState = homeListState,
                                     currentSong = player.song,
                                     isPlaying = player.isPlaying,
+                                    onPlayPause = togglePlayPause,
                                     title = stringResource(R.string.listen_now),
                                     signedIn = signedIn,
                                     onSignIn = { webSession = WebSessionMode.SIGN_IN },
@@ -3921,6 +3924,27 @@ private fun BitChordApp(
                             // [TopBarDownloadButton], which decides that for
                             // itself rather than being told.
                             TopBarDownloadButton(onClick = { showDownloadManager = true })
+                            if (updateNotice != null) {
+                                IconButton(
+                                    onClick = { showUpdateDialog = true },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.TopEnd) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Upgrade,
+                                            contentDescription = stringResource(R.string.software_update),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF34D399)),
+                                        )
+                                    }
+                                }
+                            }
                             IconButton(
                                 onClick = { showSettings = true },
                                 modifier = Modifier.size(40.dp),
@@ -5033,6 +5057,7 @@ private fun BitChordApp(
                 UpdateAvailableDialog(
                     version = update.version,
                     notes = update.notes,
+                    isMandatory = update.isMandatory,
                     hazeState = hazeState,
                     // A download in progress keeps running behind the closed
                     // sheet — only the sheet itself goes away. The top bar's

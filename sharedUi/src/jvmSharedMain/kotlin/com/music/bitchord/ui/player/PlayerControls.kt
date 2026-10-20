@@ -1239,29 +1239,80 @@ internal fun OutputCaption(
     val jamName = badge.hostFirstName
         ?.let { stringResource(Res.string.listen_together_jam, it) }
         ?: stringResource(Res.string.listen_together_jam_unnamed)
-    val captionModifier = Modifier
-        .fillMaxWidth(0.65f)
-        .clickable { if (badge.inParty) onOpenMembers() else onOpenOutput() }
-    if (!badge.inParty && isHiResOutput) {
-        ShimmerText(
-            text = outputName,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-            ),
-            modifier = captionModifier,
-        )
-    } else {
-        Text(
-            text = if (badge.inParty) jamName else outputName,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            color = Color.White.copy(alpha = 0.55f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = captionModifier,
-        )
+
+    val labelText = if (badge.inParty) jamName else outputName
+    val outputs = rememberAudioOutputs()
+    val activeDevice = outputs.firstOrNull { it.isActive }
+    val deviceKind = activeDevice?.kind
+
+    Surface(
+        shape = RoundedCornerShape(percent = 50),
+        color = when {
+            badge.inParty -> Color(0xFFFF007F).copy(alpha = 0.22f)
+            isHiResOutput -> Color(0xFF00C6FF).copy(alpha = 0.18f)
+            else -> Color.White.copy(alpha = 0.10f)
+        },
+        border = BorderStroke(
+            1.dp,
+            when {
+                badge.inParty -> Color(0xFFFF007F).copy(alpha = 0.45f)
+                isHiResOutput -> Color(0xFF00C6FF).copy(alpha = 0.40f)
+                else -> Color.White.copy(alpha = 0.15f)
+            },
+        ),
+        modifier = Modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .clickable { if (badge.inParty) onOpenMembers() else onOpenOutput() },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        ) {
+            val icon = when {
+                badge.inParty -> Icons.Rounded.Headphones
+                deviceKind == AudioOutputKind.BLUETOOTH || deviceKind == AudioOutputKind.WIRED || deviceKind == AudioOutputKind.USB -> Icons.Rounded.Headphones
+                else -> Icons.AutoMirrored.Rounded.VolumeUp
+            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = when {
+                    badge.inParty -> Color(0xFFFF007F)
+                    isHiResOutput -> Color(0xFF00D2FF)
+                    else -> Color.White.copy(alpha = 0.85f)
+                },
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            if (!badge.inParty && isHiResOutput) {
+                ShimmerText(
+                    text = labelText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+            } else {
+                Text(
+                    text = labelText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = Color.White.copy(alpha = 0.90f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = BitChordIcons.ChevronRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.45f),
+                modifier = Modifier.size(11.dp),
+            )
+        }
     }
 }
 

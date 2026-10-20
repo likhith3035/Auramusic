@@ -216,6 +216,9 @@ fun AuraGreetingHeader(
     nothingOsMode: Boolean,
     modifier: Modifier = Modifier,
     timeOfDay: TimeOfDay = remember { TimeOfDay.current() },
+    currentSongTitle: String? = null,
+    isPlaying: Boolean = false,
+    onResumeClick: (() -> Unit)? = null,
     onMoodClick: ((String) -> Unit)? = null,
 ) {
     val firstName = remember(accountName) {
@@ -243,21 +246,21 @@ fun AuraGreetingHeader(
     )
 
     if (nothingOsMode) {
-        // Nothing OS Mode: AMOLED Pitch Black + NDot Matrix + Red Glyph
+        // Nothing OS Mode: AMOLED Pitch Black + NDot Matrix + Red Glyph (Compact Edition)
         Surface(
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(16.dp),
             color = NothingThemeTokens.Surface,
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = PAGE_GUTTER, vertical = 6.dp)
-                .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(22.dp)),
+                .padding(horizontal = PAGE_GUTTER, vertical = 3.dp)
+                .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(16.dp)),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
-                // Top Row: Pulsing LED glyph, Matrix Tag, and Live Clock Readout
+                // Top Row: Pulsing LED glyph, Matrix Tag, and Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -266,37 +269,70 @@ fun AuraGreetingHeader(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(7.dp)
+                                .size(6.dp)
                                 .clip(CircleShape)
                                 .background(NothingThemeTokens.Red),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             text = timeOfDay.dotMatrixGreeting,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 2.sp,
+                                letterSpacing = 1.4.sp,
+                                fontSize = 10.sp,
                             ),
                             color = NothingThemeTokens.White,
                         )
                     }
 
-                    // Nothing OS Audio Pulse Indicator
+                    // Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(RoundedCornerShape(percent = 50))
                             .background(NothingThemeTokens.SurfaceElevated)
-                            .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(percent = 50))
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .border(
+                                1.dp,
+                                if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.Border,
+                                RoundedCornerShape(percent = 50),
+                            )
+                            .then(
+                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                    Modifier.clickable { onResumeClick() }
+                                } else Modifier
+                            )
+                            .padding(horizontal = 7.dp, vertical = 3.5.dp),
                     ) {
+                        if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                            Text(
+                                text = if (isPlaying) "⏸" else "▶",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                text = if (isPlaying) "PAUSE" else "RESUME",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp,
+                                ),
+                                color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
+                            )
+                            Spacer(Modifier.width(3.dp))
+                        }
                         listOf(bar1, bar2, bar3).forEach { barHeight ->
                             Box(
                                 modifier = Modifier
                                     .width(2.dp)
-                                    .height(barHeight.dp)
+                                    .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
                                     .clip(RoundedCornerShape(percent = 50))
                                     .background(NothingThemeTokens.Red),
                             )
@@ -304,7 +340,7 @@ fun AuraGreetingHeader(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(6.dp))
 
                 // Main headline greeting
                 val headlineText = if (!firstName.isNullOrBlank()) {
@@ -315,35 +351,43 @@ fun AuraGreetingHeader(
 
                 Text(
                     text = headlineText,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.5).sp,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        letterSpacing = (-0.3).sp,
                     ),
                     color = NothingThemeTokens.White,
-                )
-
-                Spacer(Modifier.height(6.dp))
-
-                // Subtitle
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                    ),
-                    color = NothingThemeTokens.MutedText,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                // Contextual Mood Chips
+                Spacer(Modifier.height(2.dp))
+
+                // Single-line compact subtitle (shows current/paused song if available)
+                val effectiveSubtitle = when {
+                    !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing • $currentSongTitle"
+                    !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused • $currentSongTitle"
+                    else -> subtitle
+                }
+                Text(
+                    text = effectiveSubtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                    ),
+                    color = NothingThemeTokens.MutedText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                // Contextual Mood Chips (tight, compact micro-pills)
                 if (onMoodClick != null) {
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         timeOfDay.moodPills.forEach { mood ->
                             Surface(
@@ -356,10 +400,10 @@ fun AuraGreetingHeader(
                                     text = mood,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                     ),
                                     color = NothingThemeTokens.White,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
                                 )
                             }
                         }
@@ -368,13 +412,13 @@ fun AuraGreetingHeader(
             }
         }
     } else {
-        // Classic Aura: Luxurious Celestial Atmospheric Card with Ambient Radial Gradient
+        // Classic Aura: Luxurious Celestial Atmospheric Card with Ambient Radial Gradient (Compact Edition)
         Surface(
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(18.dp),
             color = Color(0xFF10121C),
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = PAGE_GUTTER, vertical = 6.dp)
+                .padding(horizontal = PAGE_GUTTER, vertical = 3.dp)
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
@@ -383,7 +427,7 @@ fun AuraGreetingHeader(
                             Color.White.copy(alpha = 0.04f),
                         ),
                     ),
-                    shape = RoundedCornerShape(26.dp),
+                    shape = RoundedCornerShape(18.dp),
                 ),
         ) {
             Box(
@@ -398,9 +442,9 @@ fun AuraGreetingHeader(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    // Top Row: Time Period Tag + Live Clock & Mini Equalizer
+                    // Top Row: Time Period Tag + Mini Equalizer / 1-Tap Quick Resume
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -412,51 +456,81 @@ fun AuraGreetingHeader(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
                                 Text(
                                     text = timeOfDay.emoji,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                 )
-                                Spacer(Modifier.width(6.dp))
+                                Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = timeOfDay.periodTag,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.2.sp,
+                                        letterSpacing = 1.sp,
+                                        fontSize = 10.sp,
                                     ),
                                     color = Color.White.copy(alpha = 0.9f),
                                 )
                             }
                         }
 
-                        // Right: Dancing Equalizer Bars
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(Color.Black.copy(alpha = 0.25f))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        // Right: Quick Resume Pill + Dancing Equalizer Bars
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = if (isPlaying) Color(0xFF00D2FF).copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.25f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isPlaying) Color(0xFF00D2FF).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.12f),
+                            ),
+                            modifier = Modifier.then(
+                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                    Modifier.clickable { onResumeClick() }
+                                } else Modifier
+                            ),
                         ) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-                                verticalAlignment = Alignment.Bottom,
-                                modifier = Modifier.height(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
                             ) {
-                                listOf(bar1, bar2, bar3).forEach { barHeight ->
-                                    Box(
-                                        modifier = Modifier
-                                            .width(2.dp)
-                                            .height(barHeight.dp)
-                                            .clip(RoundedCornerShape(percent = 50))
-                                            .background(Color(0xFF00D2FF)),
+                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                    Text(
+                                        text = if (isPlaying) "⏸" else "▶",
+                                        fontSize = 10.sp,
+                                        color = Color.White,
                                     )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isPlaying) "Playing" else "Resume",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            letterSpacing = 0.5.sp,
+                                        ),
+                                        color = Color.White,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.height(11.dp),
+                                ) {
+                                    listOf(bar1, bar2, bar3).forEach { barHeight ->
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.dp)
+                                                .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
+                                                .clip(RoundedCornerShape(percent = 50))
+                                                .background(Color(0xFF00D2FF)),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(6.dp))
 
                     // Dynamic Personalized Greeting
                     val greetingHeadline = if (!firstName.isNullOrBlank()) {
@@ -467,33 +541,42 @@ fun AuraGreetingHeader(
 
                     Text(
                         text = greetingHeadline,
-                        style = MaterialTheme.typography.headlineLarge.copy(
+                        style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.8).sp,
+                            fontSize = 17.sp,
+                            letterSpacing = (-0.4).sp,
                         ),
                         color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(2.dp))
 
+                    val effectiveClassicSubtitle = when {
+                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing • $currentSongTitle"
+                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused • $currentSongTitle"
+                        else -> subtitle
+                    }
                     Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            lineHeight = 20.sp,
+                        text = effectiveClassicSubtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
                         ),
-                        color = Color.White.copy(alpha = 0.72f),
-                        maxLines = 2,
+                        color = Color.White.copy(alpha = 0.75f),
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
 
                     // Contextual Mood Chips
                     if (onMoodClick != null) {
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             timeOfDay.moodPills.forEach { mood ->
                                 Surface(
@@ -506,10 +589,10 @@ fun AuraGreetingHeader(
                                         text = mood,
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.SemiBold,
-                                            fontSize = 11.sp,
+                                            fontSize = 10.sp,
                                         ),
                                         color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                                     )
                                 }
                             }

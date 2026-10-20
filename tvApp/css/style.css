@@ -317,30 +317,30 @@ body.desktop-theme {
   align-items: center;
   background-color: var(--nt-surface);
   border: 1px solid var(--nt-border);
-  border-radius: 16px;
-  padding: 28px 32px;
-  margin-bottom: 36px;
+  border-radius: 14px;
+  padding: 16px 22px;
+  margin-bottom: 20px;
 }
 
 .greeting-badge {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.4px;
   color: var(--nt-red);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   display: inline-block;
 }
 
 .greeting-title {
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: -0.5px;
-  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
 }
 
 .greeting-sub {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--nt-muted);
 }
 

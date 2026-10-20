@@ -38,12 +38,16 @@ object AppUpdateChecker {
         val apkUrl: String?,
         /** The release's own Markdown body, shown as this update's "what's new". */
         val notes: String?,
+        val isMandatory: Boolean = false,
     )
 
     private const val CACHE_SUBDIR = "updates"
 
     private const val LATEST_RELEASE_URL =
-        "https://api.github.com/repos/likhith3035/AuraMusic/releases/latest"
+        "https://api.github.com/repos/likhith3035/Auramusic/releases/latest"
+
+    private const val FALLBACK_VERSION_URL =
+        "https://raw.githubusercontent.com/likhith3035/Auramusic/main/version.json"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -65,22 +69,52 @@ object AppUpdateChecker {
     @Volatile
     private var downloadCancelled = false
 
-    suspend fun check() = withContext(Dispatchers.IO) {
-        runCatching {
-            val request = Request.Builder().url(LATEST_RELEASE_URL).build()
-            val body = Http.client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) null else response.body?.string()
-            } ?: return@runCatching
-            val release = json.parseToJsonElement(body) as? JsonObject ?: return@runCatching
-            val tag = release["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching
-            val url = release["html_url"]?.jsonPrimitive?.contentOrNull ?: return@runCatching
-            val apkUrl = apkAssetUrl(release)
-            val notes = release["body"]?.jsonPrimitive?.contentOrNull
-            val latest = tag.removePrefix("v")
-            if (isNewer(latest, BuildConfig.VERSION_NAME)) {
-                _available.value = UpdateInfo(latest, url, apkUrl, notes)
-            }
+    private fun fetchFromGitHubRelease(): UpdateInfo? = runCatching {
+        val request = Request.Builder()
+            .url(LATEST_RELEASE_URL)
+            .header("User-Agent", "AuraMusic")
+            .build()
+        val body = Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) null else response.body?.string()
+        } ?: return@runCatching null
+        val release = json.parseToJsonElement(body) as? JsonObject ?: return@runCatching null
+        val tag = release["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
+        val url = release["html_url"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
+        val apkUrl = apkAssetUrl(release)
+        val notes = release["body"]?.jsonPrimitive?.contentOrNull
+        val latest = tag.removePrefix("v")
+        val isMandatory = notes?.contains("[MANDATORY]", ignoreCase = true) == true ||
+            release["isMandatory"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
+        UpdateInfo(latest, url, apkUrl, notes, isMandatory)
+    }.getOrNull()
+
+    private fun fetchFromFallbackJson(): UpdateInfo? = runCatching {
+        val request = Request.Builder()
+            .url(FALLBACK_VERSION_URL)
+            .header("User-Agent", "AuraMusic")
+            .build()
+        val body = Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) null else response.body?.string()
+        } ?: return@runCatching null
+        val root = json.parseToJsonElement(body) as? JsonObject ?: return@runCatching null
+        val version = root["version"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
+        val url = root["releaseUrl"]?.jsonPrimitive?.contentOrNull
+            ?: "https://github.com/likhith3035/Auramusic/releases"
+        val apkUrl = root["apkUrl"]?.jsonPrimitive?.contentOrNull
+        val notes = root["notes"]?.jsonPrimitive?.contentOrNull
+        val isMandatory = root["isMandatory"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true ||
+            notes?.contains("[MANDATORY]", ignoreCase = true) == true
+        val latest = version.removePrefix("v")
+        UpdateInfo(latest, url, apkUrl, notes, isMandatory)
+    }.getOrNull()
+
+    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
+        val update = fetchFromGitHubRelease() ?: fetchFromFallbackJson()
+        if (update != null && isNewer(update.version, BuildConfig.VERSION_NAME)) {
+            _available.value = update
+            return@withContext update
         }
+        null
     }
 
     /**

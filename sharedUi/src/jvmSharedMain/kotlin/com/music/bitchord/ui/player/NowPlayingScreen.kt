@@ -61,6 +61,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Bedtime
@@ -68,6 +69,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
 import com.music.bitchord.ui.AppUi
 import androidx.compose.material3.Icon
@@ -781,6 +783,7 @@ fun NowPlayingScreen(
     var showLyricsProviders by remember { mutableStateOf(false) }
     var showAddSongs by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showSongInfoSheet by remember { mutableStateOf(false) }
     val sleepTimerStatus by SmartSleepTimer.status.collectAsStateWithLifecycle()
     val sleepTimerMode by SmartSleepTimer.mode.collectAsStateWithLifecycle()
     val sleepTimerRemainingMs by produceState(SmartSleepTimer.remainingMs(), sleepTimerStatus) {
@@ -1520,10 +1523,10 @@ fun NowPlayingScreen(
             onOpenListenTogetherMembers = openListenTogetherMembers,
         )
         // Keep the current output caption visible in every state.
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
         Box(
-            modifier = Modifier.fillMaxWidth().height(20.dp),
-            contentAlignment = Alignment.TopCenter,
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+            contentAlignment = Alignment.Center,
         ) {
             OutputCaption(
                 accountName = accountName,
@@ -1568,6 +1571,21 @@ fun NowPlayingScreen(
             SmartSleepTimerSheet(
                 hazeState = playerHaze,
                 onDismiss = { showSleepTimerSheet = false },
+            )
+        }
+        if (showSongInfoSheet) {
+            SongInfoSheet(
+                song = song,
+                hazeState = playerHaze,
+                onDismiss = { showSongInfoSheet = false },
+                onOpenArtist = { id ->
+                    showSongInfoSheet = false
+                    onOpenArtist(id, song.artist)
+                },
+                onOpenAlbum = { id ->
+                    showSongInfoSheet = false
+                    onOpenAlbum(id)
+                },
             )
         }
         if (showAudioPipeline) {
@@ -3369,6 +3387,13 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(Res.string.sleep_timer),
                         onClick = { showSleepTimerSheet = true },
                         active = sleepTimerStatus != SleepTimerStatus.OFF,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    CircleGlyph(
+                        icon = Icons.Rounded.Info,
+                        contentDescription = "Song Info",
+                        onClick = { showSongInfoSheet = true },
+                        active = showSongInfoSheet,
                     )
                     Spacer(Modifier.width(8.dp))
                     CircleGlyph(

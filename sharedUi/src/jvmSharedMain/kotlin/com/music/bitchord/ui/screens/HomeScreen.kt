@@ -148,6 +148,7 @@ fun HomeScreen(
     accountName: String? = null,
     onFeatureClick: ((AuraFeature) -> Unit)? = null,
     onMoodClick: ((String) -> Unit)? = null,
+    onPlayPause: (() -> Unit)? = null,
 ) {
     val recentsViewType by AppUi.host.homeRecentsViewType.collectAsStateWithLifecycle()
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
@@ -172,6 +173,9 @@ fun HomeScreen(
                 AuraGreetingHeader(
                     accountName = accountName,
                     nothingOsMode = nothingOsMode,
+                    currentSongTitle = currentSong?.title,
+                    isPlaying = isPlaying,
+                    onResumeClick = onPlayPause,
                     onMoodClick = onMoodClick,
                 )
             }

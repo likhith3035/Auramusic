@@ -72,36 +72,44 @@ private data class V3FeatureHighlight(
 
 private val V3_FEATURES = listOf(
     V3FeatureHighlight(
-        title = "Dedicated Cloud Sync",
-        subtitle = "Ultra-low latency zero-drift party engine running on Render cloud WebSocket cluster.",
-        tag = "SUB-50MS SYNC",
-        icon = Icons.Rounded.Cloud,
-        accentColor = Color(0xFF38BDF8),
-        glowGradient = listOf(Color(0xFF0284C7).copy(alpha = 0.25f), Color(0xFF0369A1).copy(alpha = 0.05f)),
+        title = "5 Liquid Glass App Icons",
+        subtitle = "Choose from Azure, Obsidian, Crimson, Amethyst, and Prism glowing soundwaves on your home screen.",
+        tag = "CUSTOM ICONS",
+        icon = Icons.Rounded.AutoAwesome,
+        accentColor = Color(0xFF67E8F9),
+        glowGradient = listOf(Color(0xFF06B6D4).copy(alpha = 0.25f), Color(0xFF0891B2).copy(alpha = 0.05f)),
     ),
     V3FeatureHighlight(
-        title = "In-Party Live Chat",
-        subtitle = "Message your friends in real-time inside the listening room with zero audio interruptions.",
-        tag = "LIVE MESSAGING",
-        icon = Icons.Rounded.Forum,
+        title = "Audio Output Route Pill",
+        subtitle = "Apple Music-style interactive pill on the player showing connected headphones or speakers with 1-tap switching.",
+        tag = "AUDIO ROUTING",
+        icon = Icons.Rounded.Cloud,
         accentColor = Color(0xFFA855F7),
         glowGradient = listOf(Color(0xFF9333EA).copy(alpha = 0.25f), Color(0xFF6B21A8).copy(alpha = 0.05f)),
     ),
     V3FeatureHighlight(
-        title = "Airhorns & Soundbites",
-        subtitle = "Broadcast high-energy soundbites (airhorns, cheering) and burst floating heart/fire emojis live.",
-        tag = "REACTIONS",
+        title = "Song Info & Track Specs",
+        subtitle = "Deep-dive into bitrates, sample rates, duration, release year, songwriters, and Behind the Track synopsis.",
+        tag = "TRACK SPECS",
         icon = Icons.Rounded.AutoAwesome,
+        accentColor = Color(0xFF10B981),
+        glowGradient = listOf(Color(0xFF059669).copy(alpha = 0.25f), Color(0xFF047857).copy(alpha = 0.05f)),
+    ),
+    V3FeatureHighlight(
+        title = "Organized Downloads & Local Music",
+        subtitle = "Browse your offline music library cleanly separated into Songs, Artists, and Albums tabs.",
+        tag = "LOCAL MUSIC",
+        icon = Icons.Rounded.ThumbUp,
         accentColor = Color(0xFFF59E0B),
         glowGradient = listOf(Color(0xFFD97706).copy(alpha = 0.25f), Color(0xFFB45309).copy(alpha = 0.05f)),
     ),
     V3FeatureHighlight(
-        title = "Collaborative Democracy",
-        subtitle = "Drop song links into chat to auto-queue upon 2 upvotes, and vote with your party to skip.",
-        tag = "COMMUNITY QUEUE",
-        icon = Icons.Rounded.ThumbUp,
-        accentColor = Color(0xFF10B981),
-        glowGradient = listOf(Color(0xFF059669).copy(alpha = 0.25f), Color(0xFF047857).copy(alpha = 0.05f)),
+        title = "Listen Together Cloud Sync",
+        subtitle = "Ultra-low latency zero-drift party engine with live in-room messaging and soundbites.",
+        tag = "PARTY ENGINE",
+        icon = Icons.Rounded.Forum,
+        accentColor = Color(0xFFEC4899),
+        glowGradient = listOf(Color(0xFFDB2777).copy(alpha = 0.25f), Color(0xFFBE185D).copy(alpha = 0.05f)),
     ),
 )
 
@@ -191,7 +199,7 @@ fun AuraV3WhatsNewShowcase(
                                 .background(Color(0xFF10B981)),
                         )
                         Text(
-                            text = "AURAMUSIC 3.0 • MAJOR RELEASE",
+                            text = "AURAMUSIC 3.1 • MAJOR UPDATE",
                             color = Color(0xFFE0E7FF),
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
@@ -220,7 +228,7 @@ fun AuraV3WhatsNewShowcase(
 
             // Main Title
             Text(
-                text = "Welcome to AuraMusic 3.0",
+                text = "Welcome to AuraMusic 3.1",
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
@@ -232,7 +240,7 @@ fun AuraV3WhatsNewShowcase(
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "Next-generation synchronized music sessions with live chat, floating soundbites, and community democracy.",
+                text = "5 Liquid Glass app icons, interactive audio routing pill, comprehensive track specifications, and organized offline music tabs.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF94A3B8),
                 textAlign = TextAlign.Center,

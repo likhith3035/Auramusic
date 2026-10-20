@@ -24,10 +24,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ScrollState
+import com.music.bitchord.data.settings.AppIcon
+import com.music.bitchord.ui.utils.AppIconManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -76,6 +80,8 @@ import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.SystemUpdate
+import com.music.bitchord.data.AppUpdateChecker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
@@ -184,6 +190,7 @@ fun SettingsScreen(
     onListenTogether: () -> Unit,
     onSpotifyCanvasAuth: () -> Unit,
     onAppLanguage: () -> Unit,
+    onShowUpdateDialog: (() -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -217,6 +224,7 @@ fun SettingsScreen(
     val translationLanguage by AppSettings.translationLanguage.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
     val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val currentAppIcon by AppSettings.appIcon.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
@@ -798,6 +806,101 @@ fun SettingsScreen(
                     onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
                     modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
                 )
+            }
+            val appIconTitle = stringResource(R.string.app_icon)
+            row(appIconTitle, "icon", "launcher", "logo", "glass", "custom icon", "obsidian", "azure") {
+                SettingsRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = appIconTitle,
+                    subtitle = stringResource(R.string.app_icon_subtitle),
+                    value = stringResource(currentAppIcon.titleRes),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = ROW_INSET, end = ROW_INSET, bottom = 16.dp, top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    AppIcon.entries.forEach { icon ->
+                        val isSelected = icon == currentAppIcon
+                        val haptic = LocalHapticFeedback.current
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .width(88.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    },
+                                )
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    },
+                                    shape = RoundedCornerShape(16.dp),
+                                )
+                                .clickable {
+                                    if (!isSelected) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        AppIconManager.setAppIcon(context, icon)
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.app_icon_updated, context.getString(icon.titleRes)),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
+                                .padding(8.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier.size(60.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                androidx.compose.foundation.Image(
+                                    painter = painterResource(icon.previewRes),
+                                    contentDescription = stringResource(icon.titleRes),
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(RoundedCornerShape(14.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                if (isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(20.dp)
+                                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(13.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(icon.titleRes),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
             }
             val nothingOsTitle = stringResource(R.string.nothing_os_mode)
             row(nothingOsTitle, "nothing", "glyph", "oled", "pitch black") {
@@ -1501,6 +1604,48 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { showChangelog = true },
+                )
+            }
+            row("Check for Software Updates", "update", "software update", "version", "download", "upgrade", "new version", "changelog", "apk") {
+                val coroutineScope = rememberCoroutineScope()
+                var checkingUpdate by remember { mutableStateOf(false) }
+                val updateNotice by AppUpdateChecker.available.collectAsStateWithLifecycle()
+                SettingsRow(
+                    icon = Icons.Rounded.SystemUpdate,
+                    title = "Check for Software Updates",
+                    subtitle = if (updateNotice != null) "Update v${updateNotice?.version} available!" else "Current build: v$version • Tap to check latest release",
+                    trailing = {
+                        if (checkingUpdate) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else if (updateNotice != null) {
+                            Text(
+                                text = "• UPDATE READY",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = androidx.compose.ui.graphics.Color(0xFF34D399),
+                            )
+                        }
+                    },
+                    onClick = {
+                        if (updateNotice != null) {
+                            onShowUpdateDialog?.invoke()
+                        } else {
+                            coroutineScope.launch {
+                                checkingUpdate = true
+                                val result = AppUpdateChecker.check()
+                                checkingUpdate = false
+                                if (result != null) {
+                                    onShowUpdateDialog?.invoke()
+                                } else {
+                                    android.widget.Toast.makeText(context, "AuraMusic is up to date (v$version)", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
                 )
             }
             row("Live Network & Listener Pulse", "analytics", "listeners", "stats", "server", "telemetry", "pulse", "live", "parties") {

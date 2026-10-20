@@ -355,6 +355,9 @@ object AppSettings {
     /** Nothing OS UI mode: true pitch-black AMOLED, Nothing Red accents, dot-matrix & glyph widgets. */
     val nothingOsMode = MutableStateFlow(false)
 
+    /** Chosen launcher icon aesthetic (Default Aura or one of the 5 Liquid Glass styles). */
+    val appIcon = MutableStateFlow(AppIcon.DEFAULT)
+
     /** Whether the first-launch interactive onboarding tour has been completed. */
     val onboardingCompleted = MutableStateFlow(true)
 
@@ -849,6 +852,7 @@ object AppSettings {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
         nothingOsMode.value = prefs.getBoolean(KEY_NOTHING_OS_MODE, false)
+        appIcon.value = AppIcon.fromId(prefs.getString(KEY_APP_ICON, null))
         onboardingCompleted.value = if (!prefs.contains(KEY_ONBOARDING_COMPLETED)) {
             val isExistingUser = prefs.contains(KEY_THEME) || prefs.contains(KEY_QUALITY_WIFI)
             if (isExistingUser) {
@@ -1262,6 +1266,11 @@ object AppSettings {
     fun setNothingOsMode(value: Boolean) {
         nothingOsMode.value = value
         prefs.edit().putBoolean(KEY_NOTHING_OS_MODE, value).apply()
+    }
+
+    fun setAppIcon(value: AppIcon) {
+        appIcon.value = value
+        prefs.edit().putString(KEY_APP_ICON, value.id).apply()
     }
 
     fun setOnboardingCompleted(value: Boolean) {
@@ -2080,6 +2089,7 @@ object AppSettings {
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
+    private const val KEY_APP_ICON = "app_icon"
     private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed_v1"
     private const val KEY_LAST_SEEN_WHATS_NEW_VERSION = "last_seen_whats_new_version"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"

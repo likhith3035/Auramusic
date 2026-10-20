@@ -89,6 +89,7 @@ fun UpdateAvailableDialog(
     onCancelDownload: () -> Unit,
     onInstall: () -> Unit,
     onOpenReleasePage: () -> Unit,
+    isMandatory: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -106,7 +107,7 @@ fun UpdateAvailableDialog(
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
-                onClick = onDismiss,
+                onClick = { if (!isMandatory) onDismiss() },
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -139,22 +140,24 @@ fun UpdateAvailableDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = stringResource(R.string.software_update),
+                    text = if (isMandatory) "Critical Update Required" else stringResource(R.string.software_update),
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = 17.sp,
                         fontWeight = FontWeight.W600,
                     ),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    text = when (state) {
-                        is AppUpdateChecker.DownloadState.Downloading ->
+                    text = when {
+                        state is AppUpdateChecker.DownloadState.Downloading ->
                             stringResource(R.string.update_downloading_body, version)
-                        is AppUpdateChecker.DownloadState.Ready ->
+                        state is AppUpdateChecker.DownloadState.Ready ->
                             stringResource(R.string.update_ready_body, version)
-                        is AppUpdateChecker.DownloadState.Failed ->
+                        state is AppUpdateChecker.DownloadState.Failed ->
                             stringResource(R.string.update_failed_body, version)
+                        isMandatory ->
+                            "Please install this update to continue using AuraMusic (v$version)."
                         else ->
                             stringResource(R.string.update_available_body, version)
                     },
@@ -242,12 +245,16 @@ fun UpdateAvailableDialog(
             AlertRule()
             when (state) {
                 is AppUpdateChecker.DownloadState.Downloading -> {
-                    AlertAction(label = stringResource(R.string.cancel), emphasised = false, onClick = onCancelDownload)
+                    if (!isMandatory) {
+                        AlertAction(label = stringResource(R.string.cancel), emphasised = false, onClick = onCancelDownload)
+                    }
                 }
                 is AppUpdateChecker.DownloadState.Ready -> {
                     AlertAction(label = stringResource(R.string.install_now), emphasised = true, onClick = onInstall)
-                    AlertRule()
-                    AlertAction(label = stringResource(R.string.later), emphasised = false, onClick = onDismiss)
+                    if (!isMandatory) {
+                        AlertRule()
+                        AlertAction(label = stringResource(R.string.later), emphasised = false, onClick = onDismiss)
+                    }
                 }
                 is AppUpdateChecker.DownloadState.Failed -> {
                     AlertAction(label = stringResource(R.string.try_again), emphasised = true, onClick = onDownload)
@@ -256,8 +263,10 @@ fun UpdateAvailableDialog(
                 }
                 else -> {
                     AlertAction(label = stringResource(R.string.download_now), emphasised = true, onClick = onDownload)
-                    AlertRule()
-                    AlertAction(label = stringResource(R.string.remind_me_later), emphasised = false, onClick = onDismiss)
+                    if (!isMandatory) {
+                        AlertRule()
+                        AlertAction(label = stringResource(R.string.remind_me_later), emphasised = false, onClick = onDismiss)
+                    }
                 }
             }
         }

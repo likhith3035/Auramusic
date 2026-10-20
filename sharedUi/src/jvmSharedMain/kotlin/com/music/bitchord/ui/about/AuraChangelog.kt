@@ -110,6 +110,26 @@ data class ChangelogEntry(
  */
 val AURA_CHANGELOG_ENTRIES: List<ChangelogEntry> = listOf(
     ChangelogEntry(
+        id = "auramusic-v3-1-liquid-glass-and-player-specs",
+        date = "October 20, 2026",
+        time = "02:30 PM IST",
+        title = "AuraMusic v3.1: 5 Liquid Glass Icons, Audio Route Pill & Track Specs Sheet",
+        tag = "Major Release",
+        tagColor = Color(0xFF67E8F9),
+        category = ChangelogCategory.QueueUI,
+        description = "A massive visual and technical upgrade! Personalize your phone's home screen with 5 dynamic 3D Liquid Glass app icons. Enjoy Apple Music-style interactive Audio Output routing, comprehensive Song Info specifications with bit-exact audio stats, and an organized 3-tab layout for your offline and downloaded music.",
+        highlights = listOf(
+            "5 Custom 3D Liquid Glass App Icons: Azure, Obsidian, Crimson, Amethyst, and Prism with instant launcher switching in Settings.",
+            "Interactive Audio Output Route Pill in Player: 1-tap Bluetooth, headphone, and speaker switching with Lossless audio indicator.",
+            "Song Info & Technical Specs Sheet: Deep-dive into bitrates, sample rates, duration, release year, songwriters, and Behind the Track lore.",
+            "Organized Downloads & Local Music: 3 dedicated tabs for Songs, Artists, and Albums.",
+            "Compact Home Greeting: ~60% smaller greeting banner with instant 1-tap playback resume.",
+            "Automated In-App Sideload Updates: Seamless update popups and in-app APK installer for WhatsApp & sideloaded users.",
+        ),
+        buildChallenge = "Switching Android launcher icons dynamically without causing app crashes or losing the home screen shortcut, while formatting adaptive icons so 3D glass borders are preserved on all OEM launcher shapes.",
+        buildSolution = "Implemented safe Android <activity-alias> components where target aliases are enabled first before previous aliases are disabled, paired with density-specific mipmaps and a 72% safe-zone adaptive canvas.",
+    ),
+    ChangelogEntry(
         id = "smart-sleep-timer-fade-out",
         date = "October 19, 2026",
         time = "11:20 PM IST",

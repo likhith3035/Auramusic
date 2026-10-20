@@ -3737,6 +3737,9 @@ fun BitChordDesktopApp() {
                             loadingMore = homeLoadingMore,
                             recentlyPlayedLoading = homeRecentsLoading,
                             leadHero = false,
+                            currentSong = selectedSong,
+                            isPlaying = playback.isPlaying,
+                            onPlayPause = { if (selectedSong != null) togglePlayPauseFromUser() },
                             accountName = activeAccount?.name?.takeIf(String::isNotBlank),
                             onFeatureClick = { feature ->
                                 when (feature) {

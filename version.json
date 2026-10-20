@@ -1,0 +1,8 @@
+{
+  "version": "3.1.0",
+  "versionCode": 30,
+  "isMandatory": false,
+  "releaseUrl": "https://github.com/likhith3035/Auramusic/releases/latest",
+  "apkUrl": null,
+  "notes": "### What's New in AuraMusic v3.1:\n- 🎨 **5 Liquid Glass App Icons**: Choose between Azure, Obsidian, Crimson, Amethyst, and Prism glass icons in Settings > Appearance.\n- 🎧 **Audio Output Route Pill**: Apple Music & Spotify-style interactive pill showing current speaker/headphones with 1-tap switcher.\n- ℹ️ **Song Info & Track Specs**: Bottom sheet displaying audio codec, bitrate, duration, release year, songwriters, and Behind the Track synopsis.\n- 📁 **Organized Offline & Local Music**: Dedicated tabs for Songs, Artists, and Albums in Downloads and Local Music.\n- ⚡ **Compact Home Greeting & Quick Resume**: ~60% smaller greeting banner with instant 1-tap playback resume.\n- 🚀 **Performance & Stability Enhancements**: Smoother transitions and faster audio loading."
+}

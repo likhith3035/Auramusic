@@ -551,3 +551,34 @@ private fun ArtistChip(
         }
     }
 }
+
+/**
+ * Slide-up player drawer hosting SongInfoContent with frosted glass backdrop.
+ */
+@Composable
+fun SongInfoSheet(
+    song: Song,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    onDismiss: () -> Unit,
+    onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (String) -> Unit,
+    onShare: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    PlayerDrawer(
+        hazeState = hazeState,
+        onDismiss = onDismiss,
+        title = "Song Details & Credits",
+        modifier = modifier,
+    ) {
+        SongInfoContent(
+            song = song,
+            onClose = onDismiss,
+            onOpenArtist = onOpenArtist,
+            onOpenAlbum = onOpenAlbum,
+            onShare = onShare,
+            scrollable = true,
+            modifier = Modifier.padding(bottom = 24.dp),
+        )
+    }
+}
