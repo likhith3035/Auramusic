@@ -230,11 +230,11 @@ jobs:
       - run: ls -lh dist
 
       - name: Publish the release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: AuraMusic ${{ github.ref_name }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
+          name: AuraMusic ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
           draft: false
           prerelease: false
           generate_release_notes: true
