@@ -325,7 +325,6 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import com.music.bitchord.audio.AuraIntroAudioCue
 import com.music.bitchord.ui.splash.AuraSplashScreen
-import com.music.bitchord.ui.onboarding.AuraOnboardingScreen
 import com.music.bitchord.ui.home.AuraFeature
 import com.music.bitchord.ui.player.SmartSleepTimerSheet
 
@@ -410,38 +409,25 @@ class MainActivity : AppCompatActivity() {
                 // A measured constraint cannot be stale — it is the very width
                 // the split is about to be laid out in.
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    var showOnboarding by rememberSaveable { mutableStateOf(false) }
                     var showWhatsNew by rememberSaveable { mutableStateOf(false) }
                     BitChordApp(
                         darkTheme = darkTheme,
                         windowWidth = maxWidth,
                         windowHeight = maxHeight,
                         appBackdrop = appBackdrop,
-                        onOpenOnboarding = { showOnboarding = true },
                     )
-                    val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
                     val lastSeenWhatsNewVersion by AppSettings.lastSeenWhatsNewVersion.collectAsStateWithLifecycle()
                     var showSplash by rememberSaveable { mutableStateOf(true) }
                     if (showSplash) {
                         AuraSplashScreen(
                             onFinished = {
                                 showSplash = false
-                                if (!onboardingCompleted) {
-                                    showOnboarding = true
-                                } else if (lastSeenWhatsNewVersion < 4) {
+                                if (lastSeenWhatsNewVersion < 4) {
                                     showWhatsNew = true
                                 }
                             },
                             onPlayIntroCue = {
                                 AuraIntroAudioCue.playChime(this@MainActivity)
-                            },
-                        )
-                    } else if (showOnboarding) {
-                        AuraOnboardingScreen(
-                            onFinished = {
-                                AppSettings.setOnboardingCompleted(true)
-                                AppSettings.setLastSeenWhatsNewVersion(4)
-                                showOnboarding = false
                             },
                         )
                     } else if (showWhatsNew) {
@@ -515,7 +501,6 @@ private fun BitChordApp(
     windowHeight: Dp,
     appBackdrop: LayerBackdrop,
     viewModel: MainViewModel = viewModel(),
-    onOpenOnboarding: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -3214,7 +3199,6 @@ private fun BitChordApp(
                                             AuraFeature.KARAOKE_LYRICS -> showNowPlaying = true
                                             AuraFeature.SLEEP_TIMER -> showSleepTimer = true
                                             AuraFeature.REPLAY_2026 -> showReplay = true
-                                            AuraFeature.ONBOARDING_TOUR -> onOpenOnboarding()
                                         }
                                     },
                                     onMoodClick = { mood ->

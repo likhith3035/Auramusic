@@ -100,14 +100,6 @@ enum class AuraFeature(
         icon = "✨",
         gradientColors = listOf(Color(0xFFFFB703), Color(0xFFFB8500)),
     ),
-    ONBOARDING_TOUR(
-        title = "Welcome Tour",
-        subtitle = "Revisit all features and setup tips",
-        badge = "TOUR",
-        actionLabel = "Explore",
-        icon = "🚀",
-        gradientColors = listOf(Color(0xFF06D6A0), Color(0xFF118AB2)),
-    ),
 }
 
 /**
