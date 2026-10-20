@@ -57,7 +57,11 @@ object AppUpdateChecker {
     /** Where this update's APK download currently stands, for the dialog's progress row. */
     sealed interface DownloadState {
         data object Idle : DownloadState
-        data class Downloading(val fraction: Float) : DownloadState
+        data class Downloading(
+            val fraction: Float,
+            val bytesRead: Long = 0L,
+            val totalBytes: Long = 0L,
+        ) : DownloadState
         data class Ready(val file: File) : DownloadState
         data class Failed(val message: String) : DownloadState
     }
@@ -155,7 +159,7 @@ object AppUpdateChecker {
         val info = _available.value ?: return@withContext
         val url = info.apkUrl ?: return@withContext
         downloadCancelled = false
-        _download.value = DownloadState.Downloading(0f)
+        _download.value = DownloadState.Downloading(0f, 0L, 0L)
 
         runCatching {
             val dir = File(context.cacheDir, CACHE_SUBDIR).apply { mkdirs() }
@@ -167,7 +171,7 @@ object AppUpdateChecker {
             Http.client.newCall(request).execute().use { response ->
                 check(response.isSuccessful) { "Download failed: HTTP ${response.code}" }
                 val body = response.body ?: error("Empty download body")
-                val total = body.contentLength().takeIf { it > 0 }
+                val total = body.contentLength().takeIf { it > 0 } ?: 0L
 
                 body.byteStream().use { input ->
                     target.outputStream().use { output ->
@@ -182,10 +186,14 @@ object AppUpdateChecker {
                             if (read == -1) break
                             output.write(buffer, 0, read)
                             readTotal += read
-                            total?.let {
-                                _download.value =
-                                    DownloadState.Downloading((readTotal.toFloat() / it).coerceIn(0f, 1f))
-                            }
+                            val frac = if (total > 0L) {
+                                (readTotal.toFloat() / total).coerceIn(0f, 1f)
+                            } else 0f
+                            _download.value = DownloadState.Downloading(
+                                fraction = frac,
+                                bytesRead = readTotal,
+                                totalBytes = total,
+                            )
                         }
                     }
                 }
