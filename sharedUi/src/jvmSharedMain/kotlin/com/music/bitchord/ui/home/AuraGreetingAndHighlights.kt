@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -606,7 +607,7 @@ fun AuraGreetingHeader(
 
 /**
  * Feature Highlights carousel showcasing AuraMusic's flagship features
- * with one-tap action triggers and high-end visual design.
+ * with uniform compact card dimensions, space-saving layout, and one-tap interaction.
  */
 @Composable
 fun FeatureHighlightsStrip(
@@ -617,100 +618,116 @@ fun FeatureHighlightsStrip(
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
     ) {
         items(AuraFeature.values()) { feature ->
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (nothingOsMode) NothingThemeTokens.Surface else Color(0xFF141724),
+                shape = RoundedCornerShape(16.dp),
+                color = if (nothingOsMode) NothingThemeTokens.Surface else Color(0xFF131622),
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.10f),
+                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.09f),
                 ),
                 modifier = Modifier
-                    .width(220.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .width(162.dp)
+                    .height(98.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .clickable { onFeatureClick(feature) },
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(percent = 50),
-                            color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else feature.gradientColors.first().copy(alpha = 0.20f),
-                        ) {
-                            Text(
-                                text = feature.badge,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 9.sp,
-                                    letterSpacing = 1.sp,
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Subtle ambient accent glow in top-right corner
+                    if (!nothingOsMode) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(56.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            feature.gradientColors.first().copy(alpha = 0.22f),
+                                            Color.Transparent,
+                                        ),
+                                    ),
                                 ),
-                                color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first(),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            )
-                        }
-
-                        Text(feature.icon, fontSize = 20.sp)
+                        )
                     }
 
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        text = feature.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                        ),
-                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    Text(
-                        text = feature.subtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                        ),
-                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.65f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 11.dp, vertical = 9.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(percent = 50),
-                            color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first(),
-                            modifier = Modifier.clickable { onFeatureClick(feature) },
+                        // Top Row: Compact Category Badge + Feature Icon
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Surface(
+                                shape = RoundedCornerShape(percent = 50),
+                                color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else feature.gradientColors.first().copy(alpha = 0.18f),
+                                border = if (nothingOsMode) androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border) else null,
+                            ) {
+                                Text(
+                                    text = feature.badge,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 8.5.sp,
+                                        letterSpacing = 0.8.sp,
+                                    ),
+                                    color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first(),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+
+                            Text(feature.icon, fontSize = 16.sp)
+                        }
+
+                        // Bottom Section: Title, Subtitle, and subtle arrow
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = feature.actionLabel,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                text = feature.title,
+                                style = MaterialTheme.typography.titleSmall.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
+                                    letterSpacing = (-0.2).sp,
                                 ),
-                                color = if (nothingOsMode) NothingThemeTokens.White else Color.Black,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
+
+                            Spacer(Modifier.height(2.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = feature.subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.sp,
+                                        lineHeight = 13.sp,
+                                    ),
+                                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.60f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+
+                                Text(
+                                    text = "→",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first().copy(alpha = 0.90f),
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
                         }
                     }
                 }
