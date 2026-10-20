@@ -1,0 +1,36 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- Base full-bleed ambient background gradient -->
+    <path android:pathData="M0,0h1024v1024h-1024z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="512"
+                android:startY="0"
+                android:endX="512"
+                android:endY="1024"
+                android:type="linear">
+                <item android:color="#3F0719" android:offset="0.0" />
+                <item android:color="#22030D" android:offset="0.5" />
+                <item android:color="#0B0104" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Ambient radial glow center -->
+    <path android:pathData="M 512,160 A 352,352 0 1 1 511.9,160 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="512"
+                android:centerY="512"
+                android:gradientRadius="352"
+                android:type="radial">
+                <item android:color="#2AFF1744" android:offset="0.0" />
+                <item android:color="#00FF1744" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
