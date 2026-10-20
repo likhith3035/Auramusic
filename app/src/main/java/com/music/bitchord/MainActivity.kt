@@ -440,10 +440,8 @@ class MainActivity : AppCompatActivity() {
                         AuraOnboardingScreen(
                             onFinished = {
                                 AppSettings.setOnboardingCompleted(true)
+                                AppSettings.setLastSeenWhatsNewVersion(4)
                                 showOnboarding = false
-                                if (lastSeenWhatsNewVersion < 4) {
-                                    showWhatsNew = true
-                                }
                             },
                         )
                     } else if (showWhatsNew) {

@@ -16,6 +16,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +25,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.ui.AppUi
+import com.music.bitchord.ui.player.PlayerBackHandler
 import com.music.bitchord.ui.theme.NothingThemeTokens
 
 /**
@@ -102,6 +110,14 @@ fun AuraOnboardingScreen(
 ) {
     var currentStepIndex by remember { mutableIntStateOf(0) }
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+
+    PlayerBackHandler(enabled = true) {
+        if (currentStepIndex > 0) {
+            currentStepIndex--
+        } else {
+            onFinished()
+        }
+    }
 
     val currentStep = ONBOARDING_STEPS[currentStepIndex]
     val isLastStep = currentStepIndex == ONBOARDING_STEPS.lastIndex
@@ -182,8 +198,9 @@ fun AuraOnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 22.dp)
-                .padding(top = 44.dp, bottom = 32.dp),
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Top App Bar: Brand mark + Tactile Glassmorphic Skip Pill
@@ -252,10 +269,29 @@ fun AuraOnboardingScreen(
             Spacer(Modifier.height(24.dp))
 
             // Center Content: Interactive Visualizer + Carousel Slide Content
+            var totalDragX by remember { mutableFloatStateOf(0f) }
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .pointerInput(currentStepIndex) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { totalDragX = 0f },
+                            onDragEnd = {
+                                if (totalDragX < -50f && currentStepIndex < ONBOARDING_STEPS.lastIndex) {
+                                    currentStepIndex++
+                                } else if (totalDragX > 50f && currentStepIndex > 0) {
+                                    currentStepIndex--
+                                }
+                                totalDragX = 0f
+                            },
+                            onDragCancel = { totalDragX = 0f },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                totalDragX += dragAmount
+                            },
+                        )
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 AnimatedContent(
@@ -276,7 +312,9 @@ fun AuraOnboardingScreen(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
                     ) {
                         // High-End Hero Showcase Card Container
                         Surface(
@@ -929,35 +967,67 @@ fun AuraOnboardingScreen(
                     }
                 }
 
-                // Action Button
-                Button(
-                    onClick = {
-                        if (isLastStep) {
-                            onFinished()
-                        } else {
-                            currentStepIndex++
-                        }
-                    },
-                    shape = RoundedCornerShape(percent = 50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
-                        contentColor = if (nothingOsMode) NothingThemeTokens.White else Color.Black,
-                    ),
-                    modifier = Modifier.height(46.dp),
+                // Action Buttons: Back + Next / Finish
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = if (isLastStep) {
-                            if (nothingOsMode) "START LISTENING →" else "Get Started ✨"
-                        } else {
-                            if (nothingOsMode) "NEXT →" else "Next →"
+                    if (currentStepIndex > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = if (nothingOsMode) NothingThemeTokens.Surface else Color.White.copy(alpha = 0.10f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.15f),
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(percent = 50))
+                                .clickable { currentStepIndex-- },
+                        ) {
+                            Text(
+                                text = if (nothingOsMode) "← BACK" else "← Back",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp,
+                                    letterSpacing = if (nothingOsMode) 1.sp else 0.sp,
+                                ),
+                                color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                            )
+                        }
+                    }
+
+                    // Action Button
+                    Button(
+                        onClick = {
+                            if (isLastStep) {
+                                onFinished()
+                            } else {
+                                currentStepIndex++
+                            }
                         },
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = if (nothingOsMode) 1.sp else 0.sp,
+                        shape = RoundedCornerShape(percent = 50),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
+                            contentColor = if (nothingOsMode) NothingThemeTokens.White else Color.Black,
                         ),
-                    )
+                        modifier = Modifier.height(46.dp),
+                    ) {
+                        Text(
+                            text = if (isLastStep) {
+                                if (nothingOsMode) "START LISTENING →" else "Get Started ✨"
+                            } else {
+                                if (nothingOsMode) "NEXT →" else "Next →"
+                            },
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                letterSpacing = if (nothingOsMode) 1.sp else 0.sp,
+                            ),
+                        )
+                    }
                 }
             }
         }

@@ -31,9 +31,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$arm64Src = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\app-prod-arm64-v8a-release-unsigned.apk"
-$univSrc = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\app-prod-universal-release-unsigned.apk"
+$arm64Src = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\AuraMusic-v3.2.0-arm64-v8a.apk"
+$armv7Src = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\AuraMusic-v3.2.0-armeabi-v7a.apk"
+$x8664Src = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\AuraMusic-v3.2.0-x86_64.apk"
+$univSrc = Join-Path $PSScriptRoot "app\build\outputs\apk\prod\release\AuraMusic-v3.2.0-universal.apk"
 Sign-Apk $arm64Src (Join-Path $releaseDir "AuraMusic-v3.2.0-arm64-v8a.apk")
+Sign-Apk $armv7Src (Join-Path $releaseDir "AuraMusic-v3.2.0-armeabi-v7a.apk")
+Sign-Apk $x8664Src (Join-Path $releaseDir "AuraMusic-v3.2.0-x86_64.apk")
 Sign-Apk $univSrc (Join-Path $releaseDir "AuraMusic-v3.2.0-universal.apk")
 
 Write-Host "`n========================================================" -ForegroundColor Green

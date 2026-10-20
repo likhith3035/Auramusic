@@ -24,6 +24,7 @@ import com.music.bitchord.ui.LocalPullToRefreshEnabled
 import com.music.bitchord.ui.screens.ExploreScreen
 import com.music.bitchord.ui.screens.HomeScreen
 import com.music.bitchord.ui.home.AuraFeature
+import com.music.bitchord.ui.onboarding.AuraOnboardingScreen
 import com.music.bitchord.ui.screens.CompactTrackRow
 import com.music.bitchord.ui.screens.LibraryGridPage
 import com.music.bitchord.ui.screens.LibraryLink
@@ -3361,6 +3362,17 @@ fun BitChordDesktopApp() {
                             onDismiss = { overlays.pipeline = false },
                         )
                     }
+                    if (overlays.onboardingTour) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.85f))
+                        ) {
+                            AuraOnboardingScreen(
+                                onFinished = { overlays.onboardingTour = false },
+                            )
+                        }
+                    }
                 },
             ) { contentPadding ->
                 // Desktop pages start at the same top edge as Library. Only preserve space for the
@@ -3759,9 +3771,7 @@ fun BitChordDesktopApp() {
                                         }
                                     }
                                     AuraFeature.REPLAY_2026 -> overlays.replay = true
-                                    AuraFeature.ONBOARDING_TOUR -> {
-                                        overlays.settingsPage = DesktopSettingsPage.MAIN
-                                    }
+                                    AuraFeature.ONBOARDING_TOUR -> overlays.onboardingTour = true
                                 }
                             },
                             onMoodClick = { mood ->

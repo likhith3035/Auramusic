@@ -30,6 +30,7 @@ internal class DesktopOverlays {
     var rename by mutableStateOf(false)
     var delete by mutableStateOf(false)
     var nowPlaying by mutableStateOf(false)
+    var onboardingTour by mutableStateOf(false)
 
     /**
      * Which page of Settings fills the page area, or none. A place like any other: it goes into
