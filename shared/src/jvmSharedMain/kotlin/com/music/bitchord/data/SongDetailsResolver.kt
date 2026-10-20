@@ -27,7 +27,7 @@ object SongDetailsResolver {
             var current = song
 
             // If artist links or album ids are missing, lookup track links from watch queue
-            if (current.artists.isEmpty() || current.albumId == null) {
+            if ((current.artists.isEmpty() || current.albumId == null) && current.videoId.isNotBlank() && current.localUri == null) {
                 val linked = runCatching {
                     withTimeoutOrNull(3000L) {
                         YtMusicRepository.trackLinks(song.videoId).getOrNull()
@@ -48,7 +48,7 @@ object SongDetailsResolver {
             var description: String? = null
 
             val albumId = current.albumId
-            if (albumId != null) {
+            if (albumId != null && current.localUri == null && !albumId.startsWith("local_")) {
                 val albumPage = runCatching {
                     withTimeoutOrNull(3500L) {
                         YtMusicRepository.browseSongs(albumId).getOrNull()

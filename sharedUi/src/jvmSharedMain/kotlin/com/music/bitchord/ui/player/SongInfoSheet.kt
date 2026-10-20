@@ -87,6 +87,7 @@ fun SongInfoContent(
     onShare: (() -> Unit)? = null,
     palette: ArtworkPalette? = null,
     scrollable: Boolean = false,
+    showHeader: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val effectivePalette = palette ?: rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX)
@@ -96,7 +97,7 @@ fun SongInfoContent(
 
     LaunchedEffect(song.videoId) {
         isLoading = true
-        details = SongDetailsResolver.resolve(song)
+        details = runCatching { SongDetailsResolver.resolve(song) }.getOrNull()
         isLoading = false
     }
 
@@ -110,30 +111,32 @@ fun SongInfoContent(
 
     Column(
         modifier = contentModifier
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = if (showHeader) 20.dp else 4.dp, vertical = if (showHeader) 16.dp else 4.dp),
     ) {
-        // Top navigation bar with Close button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Song Details & Credits",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = "Close",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (showHeader) {
+            // Top navigation bar with Close button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Song Details & Credits",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
+                IconButton(onClick = onClose) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-        }
 
-        Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(14.dp))
+        }
 
         // Hero Card with dynamic artwork ambient background
         Box(
@@ -465,6 +468,8 @@ private fun QuickActionButton(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -569,6 +574,7 @@ fun SongInfoSheet(
         hazeState = hazeState,
         onDismiss = onDismiss,
         title = "Song Details & Credits",
+        maxHeight = 640.dp,
         modifier = modifier,
     ) {
         SongInfoContent(
@@ -577,7 +583,8 @@ fun SongInfoSheet(
             onOpenArtist = onOpenArtist,
             onOpenAlbum = onOpenAlbum,
             onShare = onShare,
-            scrollable = true,
+            scrollable = false,
+            showHeader = false,
             modifier = Modifier.padding(bottom = 24.dp),
         )
     }
