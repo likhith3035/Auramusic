@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,9 +27,13 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.CircularProgressIndicator
@@ -83,6 +88,8 @@ fun SongInfoContent(
     onClose: () -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
+    onOpenLyrics: (() -> Unit)? = null,
+    onOpenMenu: (() -> Unit)? = null,
     onCopyLink: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     palette: ArtworkPalette? = null,
@@ -97,7 +104,8 @@ fun SongInfoContent(
 
     LaunchedEffect(song.videoId) {
         isLoading = true
-        details = runCatching { SongDetailsResolver.resolve(song) }.getOrNull()
+        val playStats = runCatching { PlayerPlatform.host.getSongPlayStats(song.videoId) }.getOrNull()
+        details = runCatching { SongDetailsResolver.resolve(song, playStats = playStats) }.getOrNull()
         isLoading = false
     }
 
@@ -243,7 +251,131 @@ fun SongInfoContent(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+
+        // Personal Listening History Card
+        val stats = details?.playStats
+        val playCount = stats?.playCount ?: 0
+        val totalMs = stats?.totalTimeMs ?: 0L
+        val lastPlayedMs = stats?.lastPlayedTimestamp
+
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = palette.accent.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.28f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = null,
+                        tint = palette.accent,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Your Listening History",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.accent,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (playCount >= 10) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = palette.accent.copy(alpha = 0.25f),
+                        ) {
+                            Text(
+                                text = if (playCount >= 25) "Heavy Rotation" else "On Repeat",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.accent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    // Play Count
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = when {
+                                playCount == 0 -> "1st listen"
+                                playCount == 1 -> "1 play"
+                                else -> "$playCount plays"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (playCount == 0) "Playing now" else "Total plays",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    // Total Listening Duration
+                    Column(modifier = Modifier.weight(1f)) {
+                        val durationStr = when {
+                            totalMs < 60_000L -> if (playCount == 0) "< 1 min" else "1 min"
+                            totalMs < 3_600_000L -> "${totalMs / 60_000L} mins"
+                            else -> "${totalMs / 3_600_000L}h ${(totalMs % 3_600_000L) / 60_000L}m"
+                        }
+                        Text(
+                            text = durationStr,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Time listened",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    // Last Listened Time
+                    Column(modifier = Modifier.weight(1f)) {
+                        val lastPlayedStr = if (lastPlayedMs == null || lastPlayedMs <= 0L) {
+                            "Listening now"
+                        } else {
+                            val diff = System.currentTimeMillis() - lastPlayedMs
+                            when {
+                                diff < 60_000L -> "Just now"
+                                diff < 3_600_000L -> "${diff / 60_000L}m ago"
+                                diff < 86_400_000L -> "${diff / 3_600_000L}h ago"
+                                diff < 172_800_000L -> "Yesterday"
+                                else -> "${diff / 86_400_000L}d ago"
+                            }
+                        }
+                        Text(
+                            text = lastPlayedStr,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Last played",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         // Quick Action Studio Pills
         Row(
@@ -261,13 +393,23 @@ fun SongInfoContent(
                 )
             }
 
-            if (onCopyLink != null) {
+            if (onOpenLyrics != null) {
                 QuickActionButton(
-                    icon = Icons.Rounded.Link,
-                    label = "Link",
+                    icon = Icons.Rounded.MusicNote,
+                    label = "Lyrics",
                     paletteAccent = palette.accent,
                     modifier = Modifier.weight(1f),
-                    onClick = onCopyLink,
+                    onClick = onOpenLyrics,
+                )
+            }
+
+            if (onOpenMenu != null) {
+                QuickActionButton(
+                    icon = Icons.Rounded.Radio,
+                    label = "Radio",
+                    paletteAccent = palette.accent,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenMenu,
                 )
             }
 
@@ -567,6 +709,8 @@ fun SongInfoSheet(
     onDismiss: () -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
+    onOpenLyrics: (() -> Unit)? = null,
+    onOpenMenu: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -582,6 +726,8 @@ fun SongInfoSheet(
             onClose = onDismiss,
             onOpenArtist = onOpenArtist,
             onOpenAlbum = onOpenAlbum,
+            onOpenLyrics = onOpenLyrics,
+            onOpenMenu = onOpenMenu,
             onShare = onShare,
             scrollable = false,
             showHeader = false,

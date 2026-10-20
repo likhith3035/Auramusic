@@ -3,6 +3,7 @@ package com.music.bitchord.data.stats
 import android.content.Context
 import android.util.Log
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.SongPlayStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -477,6 +478,45 @@ object ListeningStats {
         }
 
         DailyHighlightsSummary()
+    }
+
+    /**
+     * Total plays, total listened duration, and last-played timestamp for [videoId].
+     */
+    suspend fun trackStats(videoId: String): SongPlayStats = withContext(Dispatchers.IO) {
+        if (!ready || videoId.isBlank()) return@withContext SongPlayStats()
+        flushAndAwait()
+        var totalPlays = 0
+        var totalMs = 0L
+        var lastPlayed = 0L
+
+        synchronized(lock) {
+            open?.tracks?.get(videoId)?.let { entry ->
+                totalPlays += entry.plays
+                totalMs += entry.ms
+                if (entry.last > lastPlayed) lastPlayed = entry.last
+            }
+            dailyPlays.filter { it.videoId == videoId }.forEach { rec ->
+                if (rec.timestamp > lastPlayed) lastPlayed = rec.timestamp
+            }
+        }
+
+        val currentMonthKey = open?.key
+        months().forEach { month ->
+            if (month.toString() != currentMonthKey) {
+                read(month.toString())?.tracks?.find { it.id == videoId }?.let { entry ->
+                    totalPlays += entry.plays
+                    totalMs += entry.ms
+                    if (entry.last > lastPlayed) lastPlayed = entry.last
+                }
+            }
+        }
+
+        SongPlayStats(
+            playCount = totalPlays,
+            totalTimeMs = totalMs,
+            lastPlayedTimestamp = if (lastPlayed > 0L) lastPlayed else null,
+        )
     }
 
     /**

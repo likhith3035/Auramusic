@@ -1586,6 +1586,15 @@ fun NowPlayingScreen(
                     showSongInfoSheet = false
                     onOpenAlbum(id)
                 },
+                onOpenLyrics = {
+                    showSongInfoSheet = false
+                    lyricsOpen = true
+                    queueOpen = false
+                },
+                onOpenMenu = {
+                    showSongInfoSheet = false
+                    onOpenMenu()
+                },
             )
         }
         if (showAudioPipeline) {

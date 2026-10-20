@@ -20,8 +20,16 @@ object SongDetailsResolver {
         song: Song,
         audioQuality: String? = null,
         streamSource: String? = null,
+        playStats: com.music.bitchord.data.model.SongPlayStats? = null,
     ): SongDetails {
-        cache[song.videoId]?.let { return it }
+        cache[song.videoId]?.let { cached ->
+            if (playStats != null && cached.playStats != playStats) {
+                val updated = cached.copy(playStats = playStats)
+                cache[song.videoId] = updated
+                return updated
+            }
+            return cached
+        }
 
         return withContext(Dispatchers.IO) {
             var current = song
@@ -85,6 +93,7 @@ object SongDetailsResolver {
                 viewCountText = null,
                 likeCountText = null,
                 description = description,
+                playStats = playStats,
             )
 
             cache[song.videoId] = details

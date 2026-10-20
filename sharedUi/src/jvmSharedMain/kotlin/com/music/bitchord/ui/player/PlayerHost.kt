@@ -119,6 +119,9 @@ interface PlayerHost {
      * Restores playback speed back to the user's configured normal speed.
      */
     fun restorePlaybackSpeed() {}
+
+    /** Returns local playback and personal listening statistics for [videoId], if recorded. */
+    suspend fun getSongPlayStats(videoId: String): com.music.bitchord.data.model.SongPlayStats? = null
 }
 
 private val NoCast = MutableStateFlow(CastUi())
