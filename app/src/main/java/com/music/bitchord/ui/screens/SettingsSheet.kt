@@ -1611,10 +1611,16 @@ fun SettingsScreen(
                 val coroutineScope = rememberCoroutineScope()
                 var checkingUpdate by remember { mutableStateOf(false) }
                 val updateNotice by AppUpdateChecker.available.collectAsStateWithLifecycle()
+                val skippedVersion by AppSettings.skippedUpdateVersion.collectAsStateWithLifecycle()
+                val updateSubtitle = when {
+                    updateNotice != null -> "Update v${updateNotice?.version} available!"
+                    skippedVersion.isNotBlank() -> "Current build: v$version (v$skippedVersion skipped) • Tap to check"
+                    else -> "Current build: v$version • Tap to check latest release"
+                }
                 SettingsRow(
                     icon = Icons.Rounded.SystemUpdate,
                     title = "Check for Software Updates",
-                    subtitle = if (updateNotice != null) "Update v${updateNotice?.version} available!" else "Current build: v$version • Tap to check latest release",
+                    subtitle = updateSubtitle,
                     trailing = {
                         if (checkingUpdate) {
                             androidx.compose.material3.CircularProgressIndicator(
@@ -1633,6 +1639,7 @@ fun SettingsScreen(
                     },
                     onClick = {
                         if (updateNotice != null) {
+                            AppSettings.clearSkippedUpdateVersion()
                             onShowUpdateDialog?.invoke()
                         } else {
                             coroutineScope.launch {
@@ -1640,11 +1647,43 @@ fun SettingsScreen(
                                 val result = AppUpdateChecker.check()
                                 checkingUpdate = false
                                 if (result != null) {
+                                    AppSettings.clearSkippedUpdateVersion()
                                     onShowUpdateDialog?.invoke()
                                 } else {
                                     android.widget.Toast.makeText(context, "AuraMusic is up to date (v$version)", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
+                        }
+                    },
+                )
+            }
+            row("Include Beta Updates", "beta", "preview", "pre-release", "experimental", "test", "update") {
+                val includeBeta by AppSettings.includeBetaUpdates.collectAsStateWithLifecycle()
+                val coroutineScope = rememberCoroutineScope()
+                SettingsRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = "Include Beta & Preview Builds",
+                    subtitle = "Get early access to upcoming features and pre-release updates",
+                    trailing = {
+                        Switch(
+                            checked = includeBeta,
+                            onCheckedChange = { enabled ->
+                                AppSettings.setIncludeBetaUpdates(enabled)
+                                coroutineScope.launch {
+                                    AppUpdateChecker.check()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = {
+                        val next = !includeBeta
+                        AppSettings.setIncludeBetaUpdates(next)
+                        coroutineScope.launch {
+                            AppUpdateChecker.check()
                         }
                     },
                 )

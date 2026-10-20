@@ -33,9 +33,9 @@ internal object DesktopUpdateChecker {
     )
 
     private const val LATEST_RELEASE_URL =
-        "https://api.github.com/repos/likhith3035/AuraMusic/releases/latest"
+        "https://api.github.com/repos/likhith3035/Auramusic/releases/latest"
 
-    val currentVersion: String = System.getProperty("bitchord.version") ?: "1.8-beta1"
+    val currentVersion: String = System.getProperty("bitchord.version") ?: "3.1.1"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -66,15 +66,17 @@ internal object DesktopUpdateChecker {
     }.getOrNull()
 
     /**
-     * The release names its files `BitChord-<version>-windows-x64-setup.exe` and
-     * `BitChord-<version>-linux-x86_64.AppImage` (see .github/workflows/release.yml); match on the
-     * platform part so a version change does not matter.
+     * Matches desktop release artifacts:
+     * - Windows: .exe, .msi, -windows-x64-setup.exe
+     * - Linux: .AppImage, .deb, .rpm, .tar.gz
+     * - macOS: .dmg, .pkg
      */
     private fun installerUrl(release: JsonObject): String? {
         val suffixes = when {
-            DesktopPlatform.isWindows -> listOf("-windows-x64-setup.exe")
-            DesktopPlatform.isLinux -> listOf(".AppImage", "-linux-amd64.deb")
-            else -> return null
+            DesktopPlatform.isWindows -> listOf("-windows-x64-setup.exe", ".exe", ".msi")
+            DesktopPlatform.isLinux -> listOf(".AppImage", "-linux-amd64.deb", ".deb", ".rpm")
+            DesktopPlatform.isMac -> listOf(".dmg", ".pkg")
+            else -> listOf(".exe", ".AppImage", ".dmg")
         }
         val assets = release["assets"]?.jsonArray?.mapNotNull { it as? JsonObject }.orEmpty()
         for (suffix in suffixes) {

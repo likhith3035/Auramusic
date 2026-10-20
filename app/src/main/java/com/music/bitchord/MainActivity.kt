@@ -764,7 +764,10 @@ private fun BitChordApp(
     LaunchedEffect(updateNotice) {
         if (updateNotice != null && !updateDialogShown) {
             updateDialogShown = true
-            showUpdateDialog = true
+            val skipped = AppSettings.skippedUpdateVersion.value
+            if (updateNotice.isMandatory || updateNotice.version != skipped) {
+                showUpdateDialog = true
+            }
         }
     }
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -5072,15 +5075,19 @@ private fun BitChordApp(
                         }
                     },
                     onCancelDownload = {
-                        AppUpdateChecker.cancelDownload()
+                        AppUpdateChecker.cancelDownload(context)
                     },
                     onInstall = {
                         val ready = AppUpdateChecker.download.value as? AppUpdateChecker.DownloadState.Ready
                         ready?.let { AppUpdateChecker.installApk(context, it.file) }
                     },
                     onOpenReleasePage = {
-                        AppUpdateChecker.resetDownload()
+                        AppUpdateChecker.resetDownload(context)
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl)))
+                        showUpdateDialog = false
+                    },
+                    onSkipVersion = {
+                        AppSettings.skipUpdateVersion(update.version)
                         showUpdateDialog = false
                     },
                 )

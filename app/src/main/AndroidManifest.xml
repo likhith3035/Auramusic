@@ -435,6 +435,11 @@
             android:name=".widget.MediaWidgetActions"
             android:exported="false" />
 
+        <!-- Update download actions (Cancel download from ongoing notification). -->
+        <receiver
+            android:name=".data.AppUpdateActionReceiver"
+            android:exported="false" />
+
         <!--
           Hands the Replay poster to whichever app the user picks to send it
           with. The authority is derived from the applicationId rather than

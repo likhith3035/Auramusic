@@ -105,6 +105,7 @@ fun UpdateAvailableDialog(
     onCancelDownload: () -> Unit,
     onInstall: () -> Unit,
     onOpenReleasePage: () -> Unit,
+    onSkipVersion: (() -> Unit)? = null,
     isMandatory: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -423,10 +424,18 @@ fun UpdateAvailableDialog(
 
                     if (downloading.totalBytes > 0L || downloading.bytesRead > 0L) {
                         Spacer(Modifier.height(6.dp))
+                        val speedText = if (downloading.bytesPerSecond > 0L) {
+                            val etaSec = if (downloading.totalBytes > downloading.bytesRead) {
+                                (downloading.totalBytes - downloading.bytesRead) / downloading.bytesPerSecond
+                            } else 0L
+                            val etaStr = if (etaSec > 0L) " • ~${etaSec}s left" else ""
+                            " • ${formatSpeed(downloading.bytesPerSecond)}$etaStr"
+                        } else ""
+
                         val bytesText = if (downloading.totalBytes > 0L) {
-                            "${formatBytes(downloading.bytesRead)} / ${formatBytes(downloading.totalBytes)}"
+                            "${formatBytes(downloading.bytesRead)} / ${formatBytes(downloading.totalBytes)}$speedText"
                         } else {
-                            "${formatBytes(downloading.bytesRead)} downloaded"
+                            "${formatBytes(downloading.bytesRead)} downloaded$speedText"
                         }
                         Text(
                             text = bytesText,
@@ -663,9 +672,36 @@ fun UpdateAvailableDialog(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )
                     }
+
+                    if (!isMandatory && onSkipVersion != null) {
+                        TextButton(
+                            onClick = onSkipVersion,
+                            modifier = Modifier.height(28.dp),
+                        ) {
+                            Text(
+                                text = "Skip this version",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal,
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** Formats download transfer rate into human-readable speed strings (e.g. 3.2 MB/s). */
+private fun formatSpeed(bytesPerSec: Long): String {
+    if (bytesPerSec <= 0) return ""
+    val kb = bytesPerSec / 1024.0
+    val mb = kb / 1024.0
+    return when {
+        mb >= 1.0 -> String.format(Locale.US, "%.1f MB/s", mb)
+        else -> String.format(Locale.US, "%.0f KB/s", kb)
     }
 }
 

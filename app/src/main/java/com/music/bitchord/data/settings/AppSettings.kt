@@ -699,6 +699,12 @@ object AppSettings {
     /** Published by PlaybackService so the UI can open the system equalizer. */
     val audioSessionId = MutableStateFlow(0)
 
+    /** Update version skipped by the user so launch prompt is suppressed. */
+    val skippedUpdateVersion = MutableStateFlow("")
+
+    /** Whether update checks query the beta/preview channel in addition to stable releases. */
+    val includeBetaUpdates = MutableStateFlow(false)
+
     /**
      * True only while a Automix transition that is actually *mixing* is
      * audible — one that beat-matched, cued the incoming track into its
@@ -928,6 +934,8 @@ object AppSettings {
         spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
+        skippedUpdateVersion.value = prefs.getString(KEY_SKIPPED_UPDATE_VERSION, "").orEmpty()
+        includeBetaUpdates.value = prefs.getBoolean(KEY_INCLUDE_BETA_UPDATES, false)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
         downloadedMusicSort.value = readLocalMusicSort(KEY_DOWNLOADED_MUSIC_SORT)
         localMusicViewType.value = readLibraryViewType(KEY_LOCAL_MUSIC_VIEW_TYPE)
@@ -1276,6 +1284,21 @@ object AppSettings {
     fun setOnboardingCompleted(value: Boolean) {
         onboardingCompleted.value = value
         prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
+    }
+
+    fun skipUpdateVersion(version: String) {
+        skippedUpdateVersion.value = version
+        prefs.edit().putString(KEY_SKIPPED_UPDATE_VERSION, version).apply()
+    }
+
+    fun clearSkippedUpdateVersion() {
+        skippedUpdateVersion.value = ""
+        prefs.edit().remove(KEY_SKIPPED_UPDATE_VERSION).apply()
+    }
+
+    fun setIncludeBetaUpdates(enabled: Boolean) {
+        includeBetaUpdates.value = enabled
+        prefs.edit().putBoolean(KEY_INCLUDE_BETA_UPDATES, enabled).apply()
     }
 
     fun setLastSeenWhatsNewVersion(value: Int) {
@@ -2162,6 +2185,8 @@ object AppSettings {
     private const val KEY_LAST_VERSION_CODE = "last_version_code"
     private const val KEY_NEW_RELEASE_ALERTS = "new_release_alerts_enabled"
     private const val KEY_NEW_RELEASE_ALERT_FREQUENCY = "new_release_alert_frequency_hours"
+    private const val KEY_SKIPPED_UPDATE_VERSION = "skipped_update_version"
+    private const val KEY_INCLUDE_BETA_UPDATES = "include_beta_updates"
 }
 
 

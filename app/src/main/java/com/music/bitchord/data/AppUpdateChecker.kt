@@ -4,14 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -22,7 +25,7 @@ import java.io.File
 /**
  * BitChord ships as a sideloaded APK off GitHub Releases rather than through
  * a store, so there's nothing to push an update notice on its own — this
- * polls the repo's "latest release" once per launch and compares its tag
+ * polls the repo's releases once per launch and compares its tag
  * against the running build.
  *
  * The update itself is also handled here: the release's `.apk` asset is
@@ -46,6 +49,9 @@ object AppUpdateChecker {
     private const val LATEST_RELEASE_URL =
         "https://api.github.com/repos/likhith3035/Auramusic/releases/latest"
 
+    private const val ALL_RELEASES_URL =
+        "https://api.github.com/repos/likhith3035/Auramusic/releases?per_page=5"
+
     private const val FALLBACK_VERSION_URL =
         "https://raw.githubusercontent.com/likhith3035/Auramusic/main/version.json"
 
@@ -61,6 +67,7 @@ object AppUpdateChecker {
             val fraction: Float,
             val bytesRead: Long = 0L,
             val totalBytes: Long = 0L,
+            val bytesPerSecond: Long = 0L,
         ) : DownloadState
         data class Ready(val file: File) : DownloadState
         data class Failed(val message: String) : DownloadState
@@ -74,22 +81,31 @@ object AppUpdateChecker {
     private var downloadCancelled = false
 
     private fun fetchFromGitHubRelease(): UpdateInfo? = runCatching {
+        val includeBeta = AppSettings.includeBetaUpdates.value
+        val url = if (includeBeta) ALL_RELEASES_URL else LATEST_RELEASE_URL
         val request = Request.Builder()
-            .url(LATEST_RELEASE_URL)
+            .url(url)
             .header("User-Agent", "AuraMusic")
             .build()
         val body = Http.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) null else response.body?.string()
         } ?: return@runCatching null
-        val release = json.parseToJsonElement(body) as? JsonObject ?: return@runCatching null
+
+        val release = if (includeBeta) {
+            val releases = json.parseToJsonElement(body) as? JsonArray ?: return@runCatching null
+            releases.firstOrNull() as? JsonObject ?: return@runCatching null
+        } else {
+            json.parseToJsonElement(body) as? JsonObject ?: return@runCatching null
+        }
+
         val tag = release["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-        val url = release["html_url"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
+        val releaseUrl = release["html_url"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
         val apkUrl = apkAssetUrl(release)
         val notes = release["body"]?.jsonPrimitive?.contentOrNull
         val latest = tag.removePrefix("v")
         val isMandatory = notes?.contains("[MANDATORY]", ignoreCase = true) == true ||
             release["isMandatory"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
-        UpdateInfo(latest, url, apkUrl, notes, isMandatory)
+        UpdateInfo(latest, releaseUrl, apkUrl, notes, isMandatory)
     }.getOrNull()
 
     private fun fetchFromFallbackJson(): UpdateInfo? = runCatching {
@@ -132,34 +148,58 @@ object AppUpdateChecker {
     }
 
     /**
-     * The release usually carries exactly one `.apk`; take its direct download
-     * URL. A release without one (source-only draft, renamed asset) leaves
-     * [UpdateInfo.apkUrl] null and the UI falls back to opening the releases
-     * page as before.
+     * Smart ABI-Aware APK selection:
+     * 1. Inspects [android.os.Build.SUPPORTED_ABIS] (arm64-v8a, armeabi-v7a, x86_64, etc.).
+     * 2. Finds the APK tailored for the primary device ABI (faster native code, 50% smaller download).
+     * 3. Falls back to a universal APK if available.
+     * 4. Falls back to any uploaded APK.
      */
     private fun apkAssetUrl(release: JsonObject): String? = runCatching {
-        release["assets"]?.jsonArray
+        val assets = release["assets"]?.jsonArray
             ?.mapNotNull { it as? JsonObject }
-            ?.firstOrNull { asset ->
+            ?.filter { asset ->
                 asset["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk", ignoreCase = true) == true &&
                     asset["state"]?.jsonPrimitive?.contentOrNull == "uploaded"
+            } ?: emptyList()
+
+        if (assets.isEmpty()) return@runCatching null
+
+        val deviceAbis = Build.SUPPORTED_ABIS.map { it.lowercase() }
+
+        // 1. Device-specific architecture match (e.g. arm64-v8a, armeabi-v7a)
+        for (abi in deviceAbis) {
+            val matched = assets.firstOrNull { asset ->
+                val name = asset["name"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
+                name.contains(abi) || (abi == "arm64-v8a" && (name.contains("arm64") || name.contains("aarch64")))
             }
-            ?.get("browser_download_url")
-            ?.jsonPrimitive
-            ?.contentOrNull
+            if (matched != null) {
+                return@runCatching matched["browser_download_url"]?.jsonPrimitive?.contentOrNull
+            }
+        }
+
+        // 2. Universal build fallback
+        val universal = assets.firstOrNull { asset ->
+            val name = asset["name"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
+            name.contains("universal")
+        }
+        if (universal != null) {
+            return@runCatching universal["browser_download_url"]?.jsonPrimitive?.contentOrNull
+        }
+
+        // 3. Fallback to first uploaded APK
+        assets.firstOrNull()?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
     }.getOrNull()
 
     /**
      * Streams the current update's APK into the app cache, reporting progress
-     * through [download]. A finished file survives a cancelled dialog: until
-     * the state is reset, "Install Now" comes straight back without a second
-     * download.
+     * through [download] and system notifications.
      */
     suspend fun downloadApk(context: Context): Unit = withContext(Dispatchers.IO) {
         val info = _available.value ?: return@withContext
         val url = info.apkUrl ?: return@withContext
         downloadCancelled = false
-        _download.value = DownloadState.Downloading(0f, 0L, 0L)
+        _download.value = DownloadState.Downloading(0f, 0L, 0L, 0L)
+        AppUpdateNotificationHelper.showProgress(context, info.version, 0, 0L, 0L, 0L)
 
         runCatching {
             val dir = File(context.cacheDir, CACHE_SUBDIR).apply { mkdirs() }
@@ -168,38 +208,78 @@ object AppUpdateChecker {
             val target = File(dir, "bitchord-${info.version}.apk")
 
             val request = Request.Builder().url(url).build()
+            var total = 0L
             Http.client.newCall(request).execute().use { response ->
                 check(response.isSuccessful) { "Download failed: HTTP ${response.code}" }
                 val body = response.body ?: error("Empty download body")
-                val total = body.contentLength().takeIf { it > 0 } ?: 0L
+                total = body.contentLength().takeIf { it > 0 } ?: 0L
 
                 body.byteStream().use { input ->
                     target.outputStream().use { output ->
                         val buffer = ByteArray(64 * 1024)
                         var readTotal = 0L
+                        var lastNotifyTime = 0L
+                        var lastSpeedTime = SystemClock.elapsedRealtime()
+                        var bytesSinceSpeedSample = 0L
+                        var currentSpeed = 0L
+
                         while (true) {
                             if (downloadCancelled) {
                                 _download.value = DownloadState.Idle
+                                AppUpdateNotificationHelper.dismiss(context)
                                 return@withContext
                             }
                             val read = input.read(buffer)
                             if (read == -1) break
                             output.write(buffer, 0, read)
                             readTotal += read
+
+                            val now = SystemClock.elapsedRealtime()
+                            bytesSinceSpeedSample += read
+                            val speedElapsed = now - lastSpeedTime
+                            if (speedElapsed >= 400) {
+                                currentSpeed = (bytesSinceSpeedSample * 1000L) / speedElapsed
+                                lastSpeedTime = now
+                                bytesSinceSpeedSample = 0L
+                            }
+
                             val frac = if (total > 0L) {
                                 (readTotal.toFloat() / total).coerceIn(0f, 1f)
                             } else 0f
+
                             _download.value = DownloadState.Downloading(
                                 fraction = frac,
                                 bytesRead = readTotal,
                                 totalBytes = total,
+                                bytesPerSecond = currentSpeed,
                             )
+
+                            if (now - lastNotifyTime >= 500) {
+                                lastNotifyTime = now
+                                val percent = (frac * 100).toInt()
+                                AppUpdateNotificationHelper.showProgress(
+                                    context = context,
+                                    version = info.version,
+                                    percent = percent,
+                                    bytesRead = readTotal,
+                                    totalBytes = total,
+                                    bytesPerSec = currentSpeed,
+                                )
+                            }
                         }
                     }
                 }
             }
+
+            // Verify integrity
+            if (total > 0L && target.length() < total) {
+                error("Downloaded APK is incomplete: got ${target.length()} of $total bytes")
+            }
+
             _download.value = DownloadState.Ready(target)
+            AppUpdateNotificationHelper.showReady(context, info.version, target)
         }.onFailure { error ->
+            AppUpdateNotificationHelper.dismiss(context)
             _download.value = if (downloadCancelled) {
                 DownloadState.Idle
             } else {
@@ -209,13 +289,16 @@ object AppUpdateChecker {
     }
 
     /** Stops an in-flight download; the next read loop sees this and bails. */
-    fun cancelDownload() {
+    fun cancelDownload(context: Context? = null) {
         downloadCancelled = true
+        _download.value = DownloadState.Idle
+        context?.let { AppUpdateNotificationHelper.dismiss(it) }
     }
 
     /** Back to square one after a failure, so the dialog offers Download again. */
-    fun resetDownload() {
+    fun resetDownload(context: Context? = null) {
         _download.value = DownloadState.Idle
+        context?.let { AppUpdateNotificationHelper.dismiss(it) }
     }
 
     /**
@@ -274,6 +357,7 @@ object AppUpdateChecker {
             val b = c.parts.getOrElse(i) { 0 }
             if (a != b) return a > b
         }
-        return c.isPreRelease && !l.isPreRelease
+        // Identical numbers: a plain tag outranks its own beta tag.
+        return !l.isPreRelease && c.isPreRelease
     }
 }
