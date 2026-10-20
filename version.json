@@ -1,8 +1,8 @@
 {
-  "version": "3.1.0",
-  "versionCode": 30,
+  "version": "3.2.0",
+  "versionCode": 32,
   "isMandatory": false,
-  "releaseUrl": "https://github.com/likhith3035/Auramusic/releases/latest",
+  "releaseUrl": "https://github.com/likhith3035/Auramusic/releases/tag/v3.2.0",
   "apkUrl": null,
-  "notes": "### What's New in AuraMusic v3.1:\n- 🎨 **5 Liquid Glass App Icons**: Choose between Azure, Obsidian, Crimson, Amethyst, and Prism glass icons in Settings > Appearance.\n- 🎧 **Audio Output Route Pill**: Apple Music & Spotify-style interactive pill showing current speaker/headphones with 1-tap switcher.\n- ℹ️ **Song Info & Track Specs**: Bottom sheet displaying audio codec, bitrate, duration, release year, songwriters, and Behind the Track synopsis.\n- 📁 **Organized Offline & Local Music**: Dedicated tabs for Songs, Artists, and Albums in Downloads and Local Music.\n- ⚡ **Compact Home Greeting & Quick Resume**: ~60% smaller greeting banner with instant 1-tap playback resume.\n- 🚀 **Performance & Stability Enhancements**: Smoother transitions and faster audio loading."
+  "notes": "### What's New in AuraMusic v3.2.0:\n- 📲 **Smart ABI-Aware APK Matching**: Automatically downloads the exact architecture-specific APK (arm64-v8a, armeabi-v7a, x86_64), cutting download size by ~50% and preventing incompatible package errors.\n- ⚡ **Live Download Speed & Dynamic ETA**: Displays real-time MB/s transfer speed and remaining countdown in the update dialog.\n- 🔔 **Background System Notifications**: Download progress updates in the notification shade with a progress bar, cancel action, and 1-tap install on completion.\n- ⚙️ **Update Preferences**: 'Skip this version' option to suppress notifications for a specific release, plus a toggle for Beta & Preview builds.\n- 🏠 **Uniform Space-Saving Home Highlights**: High-aesthetic 162×98dp uniform cards reducing vertical space by ~40% so your music shelves are immediately visible.\n- ✨ **Flagship Post-Install Walkthrough**: 4 interactive showcase cards featuring Studio EQ DAC rack, Listen Together party room, Karaoke lyrics, and live theme switcher.\n- 💻 **Desktop Update Parity**: Universal cross-platform update detection for Windows, Linux, and macOS."
 }
