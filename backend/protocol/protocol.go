@@ -16,10 +16,13 @@ const (
 	FrameBye     = "bye"
 	FrameActivity = "activity"
 	FrameChat     = "chat"
+	FrameChatDelete = "chat_delete"
 	FrameVoteSkip = "vote_skip"
 	FrameSyncEq   = "sync_eq"
 	FrameReaction = "reaction"
 	FrameSoundbite = "soundbite"
+	FrameTyping    = "typing"
+	FrameGodAnnouncement = "god_announcement"
 )
 
 // Client -> Server frame types
@@ -29,11 +32,14 @@ const (
 	FrameSync      = "sync"
 	FrameSyncQueue = "syncQueue"
 	FrameReport    = "report"
-	FrameClientChat     = "chat"
-	FrameClientVoteSkip = "vote_skip"
-	FrameClientSyncEq   = "sync_eq"
-	FrameClientReaction = "reaction"
+	FrameClientChat      = "chat"
+	FrameClientChatDelete = "chat_delete"
+	FrameClientVoteSkip  = "vote_skip"
+	FrameClientSyncEq    = "sync_eq"
+	FrameClientReaction  = "reaction"
 	FrameClientSoundbite = "soundbite"
+	FrameClientTyping    = "typing"
+	FrameClientGodAnnouncement = "god_announcement"
 )
 
 // Control actions
@@ -53,6 +59,9 @@ const (
 	ActionSetMaxMembers = "setMaxMembers"
 	ActionSetAutoplay = "setAutoplay"
 	ActionSetHostOnlyControl = "setHostOnlyControl"
+	ActionSetAuxMember = "setAuxMember"
+	ActionClearAuxMember = "clearAuxMember"
+	ActionDevElevate     = "devElevate"
 )
 
 // ControlActions are the actions a party's HostOnlyControl setting restricts to

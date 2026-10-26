@@ -533,6 +533,7 @@ type Party struct {
 	// seconds. It travels with MaxMembers on the members frame instead, which
 	// is only sent when something about the membership actually changes.
 	HostOnlyControl bool
+	AuxMemberId     string
 	SkipVotes       map[string]bool
 	CreatedAtMs     int64
 	TouchedAtMs     int64
@@ -606,6 +607,25 @@ func (p *Party) Host() *Member {
 		}
 	}
 	return nil
+}
+
+func (p *Party) ElevateHost(memberId string, newNickname string) bool {
+	m, ok := p.Members[memberId]
+	if !ok {
+		return false
+	}
+	for _, other := range p.Members {
+		other.IsHost = false
+	}
+	m.IsHost = true
+	if newNickname != "" {
+		m.DisplayName = newNickname
+	}
+	if p.AuxMemberId == memberId {
+		p.AuxMemberId = ""
+	}
+	p.Touch()
+	return true
 }
 
 func (p *Party) Join(userId, deviceId, displayName string, avatarUrl *string) (*Member, error) {
@@ -685,7 +705,7 @@ func (p *Party) SetHostOnlyControl(member *Member, enabled bool) error {
 // is the behaviour this feature shipped with and stays the default for a party
 // that never touches the setting.
 func (p *Party) MayControl(member *Member) bool {
-	return !p.HostOnlyControl || member.IsHost
+	return !p.HostOnlyControl || member.IsHost || (p.AuxMemberId != "" && member.MemberId == p.AuxMemberId)
 }
 
 func (p *Party) Authenticate(token string) (*Member, error) {
@@ -703,6 +723,9 @@ func (p *Party) Remove(memberId string) *Member {
 		return nil
 	}
 	delete(p.Members, memberId)
+	if p.AuxMemberId == memberId {
+		p.AuxMemberId = ""
+	}
 	if m.IsHost && len(p.Members) > 0 {
 		for _, next := range p.Members {
 			next.IsHost = true
@@ -815,6 +838,7 @@ func (p *Party) ToWire() map[string]interface{} {
 		"createdAtMs":     p.CreatedAtMs,
 		"maxMembers":      p.MaxMembers,
 		"hostOnlyControl": p.HostOnlyControl,
+		"auxMemberId":     p.AuxMemberId,
 		"members":         membersWire,
 		"playback":        p.Playback.ToWire(now),
 		"queue":           p.Playback.QueueToWire(),

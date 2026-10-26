@@ -42,6 +42,7 @@ data class PartyMember(
     val displayName: String = "",
     val avatarUrl: String? = null,
     val isHost: Boolean = false,
+    val isFounder: Boolean = false,
     /** Whether they are currently holding a socket — not whether they are still in. */
     val connected: Boolean = false,
     val joinedAtMs: Long = 0,
@@ -122,6 +123,7 @@ data class PartySnapshot(
      * the shared free-for-all this feature shipped as, rather than as locked.
      */
     val hostOnlyControl: Boolean = false,
+    val auxMemberId: String? = null,
     val members: List<PartyMember> = emptyList(),
     val playback: PartyPlayback = PartyPlayback(),
     val queue: PartyQueue = PartyQueue(),
@@ -197,6 +199,8 @@ data class PartyChatMessage(
     val timestampMs: Long = 0,
     val text: String = "",
     val song: PartySongRecommendation? = null,
+    val imageUrl: String? = null,
+    val isFounder: Boolean = false,
     val upvotes: Int = 0,
     val upvoterIds: Set<String> = emptySet(),
     val autoQueued: Boolean = false,
@@ -205,6 +209,14 @@ data class PartyChatMessage(
     val replyToSender: String? = null,
     val replyToText: String? = null,
     val isPinned: Boolean = false,
+)
+
+/** Real-time ephemeral typing indicator event. */
+@Serializable
+data class PartyTypingEvent(
+    val senderId: String = "",
+    val senderName: String = "",
+    val isTyping: Boolean = false,
 )
 
 /** Real-time party soundbite audio effect. */

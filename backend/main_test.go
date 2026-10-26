@@ -33,6 +33,7 @@ func setupTestServer() *httptest.Server {
 	mux.HandleFunc("GET /api/stats/live/badge.svg", handleLiveBadge)
 	mux.HandleFunc("GET /stats", handleStatsDashboard)
 	mux.HandleFunc("GET /invite/{code}", handleInviteLanding)
+	mux.HandleFunc("GET /.well-known/assetlinks.json", handleAssetLinks)
 	mux.HandleFunc("GET /ws/parties/{code}", handleWebSocket)
 
 	return httptest.NewServer(corsMiddleware(mux))
@@ -498,3 +499,19 @@ func TestStatsDashboard(t *testing.T) {
 		t.Errorf("Expected stats page to contain 'AuraMusic Analytics'")
 	}
 }
+
+func TestAssetLinks(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/.well-known/assetlinks.json")
+	if err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("GET /.well-known/assetlinks.json failed: status %v, err %v", res.StatusCode, err)
+	}
+	buf := new(bytes.Buffer)
+	_, _ = buf.ReadFrom(res.Body)
+	if !strings.Contains(buf.String(), "com.music.bitchord") {
+		t.Errorf("Expected assetlinks to contain 'com.music.bitchord'")
+	}
+}
+

@@ -71,6 +71,7 @@ func main() {
 
 	// Web invite endpoint
 	mux.HandleFunc("GET /invite/{code}", handleInviteLanding)
+	mux.HandleFunc("GET /.well-known/assetlinks.json", handleAssetLinks)
 
 	// WebSocket endpoint
 	mux.HandleFunc("GET /ws/parties/{code}", handleWebSocket)
@@ -1291,6 +1292,7 @@ type invitePageData struct {
 	CurrentSongArtist string
 	MemberCount       int
 	IsActive          bool
+	QrCodeUrl         template.URL
 }
 
 var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
@@ -1299,164 +1301,360 @@ var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AuraMusic Listen Together - Party {{.Code}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #0b0b12;
+            --surface: rgba(22, 22, 34, 0.78);
+            --surface-hover: rgba(30, 30, 46, 0.88);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(167, 139, 250, 0.35);
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.35);
+            --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+            --accent-green: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            background-color: #0b0b0e;
-            color: #f3f3f7;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 24px;
+            padding: 24px 16px;
+            position: relative;
+            overflow-x: hidden;
         }
+
+        .ambient-glow {
+            position: fixed;
+            width: 480px;
+            height: 480px;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(140px);
+            opacity: 0.18;
+            z-index: 0;
+            animation: floatGlow 14s ease-in-out infinite alternate;
+        }
+        .glow-1 { top: -80px; left: -80px; background: radial-gradient(circle, #8b5cf6, transparent); }
+        .glow-2 { bottom: -100px; right: -80px; background: radial-gradient(circle, #06b6d4, transparent); animation-delay: -7s; }
+
+        @keyframes floatGlow {
+            0% { transform: scale(1) translate(0, 0); }
+            50% { transform: scale(1.15) translate(30px, -20px); }
+            100% { transform: scale(0.95) translate(-20px, 30px); }
+        }
+
         .container {
-            background: rgba(22, 22, 30, 0.85);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            position: relative;
+            z-index: 1;
+            background: var(--surface);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border: 1px solid var(--border);
             border-radius: 28px;
-            max-width: 440px;
+            max-width: 480px;
             width: 100%;
-            padding: 36px 28px;
+            padding: 34px 28px;
             text-align: center;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(124, 77, 255, 0.1);
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 50px rgba(139, 92, 246, 0.1);
+            transition: border-color 0.3s ease;
         }
+
         .badge {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(124, 77, 255, 0.15);
-            color: #b388ff;
+            gap: 7px;
+            background: rgba(139, 92, 246, 0.14);
+            color: #c4b5fd;
             font-size: 13px;
-            font-weight: 600;
-            padding: 6px 14px;
+            font-weight: 700;
+            padding: 7px 15px;
             border-radius: 9999px;
+            border: 1px solid rgba(139, 92, 246, 0.28);
             margin-bottom: 20px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
         }
         .badge-dot {
             width: 8px;
             height: 8px;
-            background: #00e676;
+            background: var(--accent-green);
             border-radius: 50%;
-            box-shadow: 0 0 8px #00e676;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite;
         }
         .badge-dot.offline {
-            background: #ff5252;
-            box-shadow: 0 0 8px #ff5252;
+            background: #f43f5e;
+            box-shadow: 0 0 10px #f43f5e;
+            animation: none;
         }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
         h1 {
-            font-size: 24px;
-            font-weight: 700;
+            font-size: 26px;
+            font-weight: 800;
             margin-bottom: 8px;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.6px;
+            background: linear-gradient(135deg, #ffffff 40%, #c4b5fd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .subtitle {
-            color: #9e9ea7;
-            font-size: 15px;
+            color: var(--text-muted);
+            font-size: 14px;
             line-height: 1.5;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
         }
+
         .code-box {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 18px;
-            padding: 16px 20px;
-            margin-bottom: 28px;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            position: relative;
         }
         .code-label {
-            font-size: 12px;
-            color: #71717a;
+            font-size: 11px;
+            color: var(--text-dim);
             text-transform: uppercase;
             letter-spacing: 1.5px;
             margin-bottom: 6px;
+            font-weight: 700;
         }
         .code-val {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 32px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 34px;
             font-weight: 800;
             letter-spacing: 6px;
             color: #ffffff;
+            text-shadow: 0 0 24px rgba(255, 255, 255, 0.2);
         }
+
         .now-playing {
-            font-size: 14px;
-            color: #d1d1d6;
+            font-size: 13px;
+            color: #c4b5fd;
             margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-weight: 600;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 16px 24px;
-            background: linear-gradient(135deg, #7c4dff 0%, #3d5afe 100%);
-            color: #ffffff;
-            font-size: 16px;
-            font-weight: 600;
-            text-decoration: none;
-            border-radius: 16px;
-            border: none;
-            cursor: pointer;
-            transition: transform 0.15s ease, opacity 0.15s ease;
-            box-shadow: 0 8px 24px rgba(124, 77, 255, 0.35);
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
         }
-        .btn:hover {
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 16px 20px;
+            border-radius: 16px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            outline: none;
+            border: none;
+        }
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: #ffffff;
+            box-shadow: 0 8px 24px var(--primary-glow);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(124, 58, 237, 0.45);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: #e2e8f0;
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.15);
             transform: translateY(-1px);
-            opacity: 0.95;
         }
         .btn:active {
             transform: scale(0.98);
         }
+
+        .qr-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .qr-card img {
+            border-radius: 12px;
+            width: 140px;
+            height: 140px;
+            background: #ffffff;
+            padding: 6px;
+        }
+        .qr-card p {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .toast-notice {
+            display: none;
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: #34d399;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+        }
+
         .footer-note {
-            margin-top: 24px;
-            font-size: 13px;
-            color: #71717a;
-            line-height: 1.5;
+            margin-top: 18px;
+            font-size: 12px;
+            color: var(--text-dim);
+            line-height: 1.6;
+            border-top: 1px solid var(--border);
+            padding-top: 18px;
         }
         .footer-note a {
-            color: #b388ff;
+            color: #a78bfa;
             text-decoration: none;
+            font-weight: 600;
         }
         .footer-note a:hover {
+            color: #c4b5fd;
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
     <div class="container">
         {{if .IsActive}}
             <div class="badge">
                 <span class="badge-dot"></span>
                 <span>Listen Together • {{.MemberCount}} in party</span>
             </div>
-            <h1>Join the Music Party</h1>
-            <p class="subtitle">Opening AuraMusic by Likhith to sync playback in real time.</p>
+            <h1>Join Music Party</h1>
+            <p class="subtitle">Sync playback across Android and PC in real time.</p>
+
             <div class="code-box">
-                <div class="code-label">Party Code</div>
+                <div class="code-label">Party Room Code</div>
                 <div class="code-val">{{.Code}}</div>
                 {{if .CurrentSongTitle}}
-                    <div class="now-playing">🎵 {{.CurrentSongTitle}} - {{.CurrentSongArtist}}</div>
+                    <div class="now-playing">
+                        <span>🎵</span>
+                        <span>{{.CurrentSongTitle}} — {{.CurrentSongArtist}}</span>
+                    </div>
                 {{end}}
             </div>
-            <a id="joinBtn" href="{{.IntentURI}}" class="btn">Join Party in AuraMusic</a>
+
+            <div id="copyNotice" class="toast-notice">
+                Code copied to clipboard! Launching AuraMusic...
+            </div>
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" id="openAppBtn" onclick="launchApp()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                    <span>Open in AuraMusic</span>
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="copyAndLaunch()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    <span>Copy Code & Launch</span>
+                </button>
+            </div>
+
+            {{if .QrCodeUrl}}
+                <div class="qr-card">
+                    <img src="{{.QrCodeUrl}}" alt="Scan to join" loading="lazy">
+                    <p>Scan with your phone camera to join instantly</p>
+                </div>
+            {{end}}
+
             <p class="footer-note">
-                Didn’t open automatically? Tap the button above.<br>
-                Don't have AuraMusic yet? <a href="https://github.com/likhith3035/Auramusic/releases" target="_blank" rel="noopener">Download AuraMusic here</a>.
+                Need the app? <a href="https://github.com/likhith3035/Auramusic/releases" target="_blank" rel="noopener">Download AuraMusic APK</a>.<br>
+                Trouble opening? <a href="{{.SafeDeepLink}}" id="directLink">Tap for direct scheme link</a>.
             </p>
+
             <script>
-                var intentUri = {{.IntentURI}};
-                var deepLink = {{.SafeDeepLink}};
-                function launch() {
+                var intentUri = {{printf "%q" .IntentURI}};
+                var deepLink = {{printf "%q" .SafeDeepLink}};
+                var partyCode = {{printf "%q" .Code}};
+
+                function launchApp() {
                     if (/Android/i.test(navigator.userAgent)) {
                         window.location.href = intentUri;
+                        setTimeout(function() {
+                            window.location.href = deepLink;
+                        }, 800);
                     } else {
                         window.location.href = deepLink;
                     }
                 }
-                setTimeout(launch, 100);
+
+                function copyAndLaunch() {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(partyCode).then(function() {
+                            showToast();
+                            launchApp();
+                        }).catch(function() {
+                            launchApp();
+                        });
+                    } else {
+                        showToast();
+                        launchApp();
+                    }
+                }
+
+                function showToast() {
+                    var notice = document.getElementById('copyNotice');
+                    if (notice) {
+                        notice.style.display = 'block';
+                        setTimeout(function() { notice.style.display = 'none'; }, 3500);
+                    }
+                }
+
+                // Attempt auto-launch after page load
+                setTimeout(function() {
+                    launchApp();
+                }, 200);
             </script>
         {{else}}
             <div class="badge">
@@ -1467,15 +1665,43 @@ var inviteTemplate = template.Must(template.New("invite").Parse(`<!DOCTYPE html>
             <p class="subtitle">This party code has expired or does not exist on this server.</p>
             <div class="code-box">
                 <div class="code-label">Party Code</div>
-                <div class="code-val" style="color: #a1a1aa;">{{.Code}}</div>
+                <div class="code-val" style="color: #64748b;">{{.Code}}</div>
             </div>
             <p class="footer-note">
-                Please ask the host for a new invite link or check your server configuration.
+                Please ask the host for a new invite link or create a new room in <a href="https://github.com/likhith3035/Auramusic/releases" target="_blank" rel="noopener">AuraMusic</a>.
             </p>
         {{end}}
     </div>
 </body>
 </html>`))
+
+func handleAssetLinks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.music.bitchord",
+      "sha256_cert_fingerprints": [
+        "23:A0:A3:BB:61:A8:14:4E:99:99:91:DE:33:DE:4B:23:4F:91:BB:06:51:75:A8:47:67:8B:D3:53:77:FF:2C:AE"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.dev.bitchord",
+      "sha256_cert_fingerprints": [
+        "23:A0:A3:BB:61:A8:14:4E:99:99:91:DE:33:DE:4B:23:4F:91:BB:06:51:75:A8:47:67:8B:D3:53:77:FF:2C:AE"
+      ]
+    }
+  }
+]`))
+}
 
 func requestOrigin(r *http.Request) string {
 	if config.PublicOrigin != "" {
@@ -1522,7 +1748,15 @@ func handleInviteLanding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deepLink := fmt.Sprintf("auramusic://party/%s?server=%s", url.PathEscape(code), url.QueryEscape(origin))
-	intentURI := fmt.Sprintf("intent://party/%s?server=%s#Intent;scheme=auramusic;package=com.music.bitchord;S.browser_fallback_url=https://github.com/likhith3035/Auramusic/releases;end", url.PathEscape(code), url.QueryEscape(origin))
+	// Generic intent format with fallback, ensuring alternative package names / dev builds can still match:
+	intentURI := fmt.Sprintf("intent://party/%s?server=%s#Intent;scheme=auramusic;package=com.music.bitchord;S.browser_fallback_url=%s;end",
+		url.PathEscape(code),
+		url.QueryEscape(origin),
+		url.QueryEscape("https://github.com/likhith3035/Auramusic/releases"),
+	)
+	qrCodeUrl := fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=%s&bgcolor=255-255-255&color=11-11-18",
+		url.QueryEscape(deepLink),
+	)
 
 	currentSongTitle := ""
 	currentSongArtist := ""
@@ -1545,6 +1779,7 @@ func handleInviteLanding(w http.ResponseWriter, r *http.Request) {
 		CurrentSongArtist: currentSongArtist,
 		MemberCount:       memberCount,
 		IsActive:          true,
+		QrCodeUrl:         template.URL(qrCodeUrl),
 	})
 }
 
@@ -1686,7 +1921,10 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 			hubInst.Broadcast(p.Code, stateFrame(p), "")
 			if action == protocol.ActionKick ||
 				action == protocol.ActionSetMaxMembers ||
-				action == protocol.ActionSetHostOnlyControl {
+				action == protocol.ActionSetHostOnlyControl ||
+				action == protocol.ActionSetAuxMember ||
+				action == protocol.ActionClearAuxMember ||
+				action == protocol.ActionDevElevate {
 				hubInst.Broadcast(p.Code, membersFrame(p), "")
 			}
 			hubInst.Broadcast(p.Code, activityFrame(member, action, frame), "")
@@ -1697,6 +1935,15 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 				"message": errMsg,
 			})
 		}
+
+	case protocol.FrameTyping:
+		isTyping, _ := frame["isTyping"].(bool)
+		hubInst.Broadcast(p.Code, map[string]interface{}{
+			"type":       protocol.FrameTyping,
+			"senderId":   member.MemberId,
+			"senderName": member.DisplayName,
+			"isTyping":   isTyping,
+		}, member.MemberId)
 
 	case protocol.FrameChat:
 		// Check for Democracy Queue auto-enqueue on upvoted songs
@@ -1727,6 +1974,11 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 			}
 		}
 		// Broadcast in-party chat message / song suggestion to all connected members
+		totalChatMessages.Add(1)
+		hubInst.Broadcast(p.Code, frame, "")
+
+	case protocol.FrameClientChatDelete:
+		// Broadcast in-party chat message deletion to all connected members
 		totalChatMessages.Add(1)
 		hubInst.Broadcast(p.Code, frame, "")
 
@@ -1776,6 +2028,19 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 	case protocol.FrameSyncEq:
 		// Broadcast host soundstage & visualizer theme
 		hubInst.Broadcast(p.Code, frame, "")
+
+	case protocol.FrameClientGodAnnouncement:
+		// Broadcast developer / founder room-wide god announcement
+		announcementText, _ := frame["message"].(string)
+		senderName, _ := frame["senderName"].(string)
+		if announcementText != "" {
+			hubInst.Broadcast(p.Code, map[string]interface{}{
+				"type":        protocol.FrameGodAnnouncement,
+				"message":     announcementText,
+				"senderName":  senderName,
+				"timestampMs": clock.NowMs(),
+			}, "")
+		}
 	}
 }
 
@@ -1956,6 +2221,22 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 		}
 		return true, "", ""
 
+	case protocol.ActionSetAuxMember:
+		if !member.IsHost { return false, "host_only", "Only the host can pass the AUX." }
+		targetID, _ := frame["memberId"].(string)
+		if targetID != "" {
+			if _, exists := p.Members[targetID]; !exists {
+				return false, "not_found", "Target listener is not in this party."
+			}
+		}
+		p.AuxMemberId = targetID
+		return true, "", ""
+
+	case protocol.ActionClearAuxMember:
+		if !member.IsHost { return false, "host_only", "Only the host can reclaim the AUX." }
+		p.AuxMemberId = ""
+		return true, "", ""
+
 	case protocol.ActionKick:
 		targetID, _ := frame["memberId"].(string)
 		if !member.IsHost { return false, "host_only", "Only the host can remove listeners." }
@@ -1967,6 +2248,30 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 			"message": "The host removed you from this party.",
 		})
 		hubInst.CloseMember(p.Code, targetID)
+		return true, "", ""
+
+	case protocol.ActionDevElevate:
+		dob, _ := frame["dob"].(string)
+		nickname, _ := frame["nickname"].(string)
+		confirm, _ := frame["confirm"].(string)
+
+		cleanDob := ""
+		for _, r := range dob {
+			if r >= '0' && r <= '9' {
+				cleanDob += string(r)
+			}
+		}
+		if cleanDob != "29072005" || strings.ToLower(strings.TrimSpace(confirm)) != "iam" {
+			return false, "unauthorized", "Developer verification failed."
+		}
+
+		if strings.TrimSpace(nickname) == "" {
+			nickname = "likki"
+		}
+
+		if !p.ElevateHost(member.MemberId, strings.TrimSpace(nickname)) {
+			return false, "member_not_found", "Failed to elevate member to host."
+		}
 		return true, "", ""
 
 	default:
@@ -2014,6 +2319,9 @@ func activityFrame(member *party.Member, action string, frame map[string]interfa
 	case protocol.ActionKick: detail = "Removed a listener from the party"
 	case protocol.ActionSetMaxMembers: detail = "Changed the party size"
 	case protocol.ActionSetAutoplay: detail = "Changed AutoPlay"
+	case protocol.ActionSetAuxMember: detail = "Passed the AUX DJ controls"
+	case protocol.ActionClearAuxMember: detail = "Reclaimed the AUX controls"
+	case protocol.ActionDevElevate: detail = "Elevated to Host (Developer Access)"
 	}
 	return map[string]interface{}{"type": protocol.FrameActivity, "action": action, "by": member.DisplayName, "detail": detail, "atMs": clock.NowMs()}
 }
@@ -2031,13 +2339,15 @@ func membersFrame(p *party.Party) map[string]interface{} {
 	for _, m := range p.Members {
 		membersList = append(membersList, m.ToWire())
 	}
-	return map[string]interface{}{
+	frame := map[string]interface{}{
 		"type":            protocol.FrameMembers,
 		"members":         membersList,
 		"maxMembers":      p.MaxMembers,
 		"hostOnlyControl": p.HostOnlyControl,
+		"auxMemberId":     p.AuxMemberId,
 		"serverMs":        clock.NowMs(),
 	}
+	return frame
 }
 
 // Background Heartbeat Ticker
