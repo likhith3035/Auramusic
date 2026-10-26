@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -177,6 +178,22 @@ fun EqualizerScreen(
 
             when (mode) {
                 EqualizerMode.DYNAMIC -> {
+                    DynamicFrequencyCurve(
+                        x = toneX,
+                        y = toneY,
+                        focused = focused,
+                        enabled = enabled,
+                    )
+
+                    DynamicSoundstagePresets(
+                        currentX = toneX,
+                        currentY = toneY,
+                        enabled = enabled,
+                        onSelect = { x, y ->
+                            AppSettings.setEqualizerTone(x, y)
+                        },
+                    )
+
                     SettingsGroup(
                         header = stringResource(R.string.equalizer_tone),
                         footer = stringResource(
@@ -189,7 +206,11 @@ fun EqualizerScreen(
                             onChange = { newX, newY -> AppSettings.setEqualizerTone(newX, newY) },
                             enabled = enabled,
                         )
-                        ToneReadout(x = toneX, y = toneY)
+                        ToneReadout(
+                            x = toneX,
+                            y = toneY,
+                            onReset = { AppSettings.setEqualizerTone(0, 0) },
+                        )
                         RowDivider()
                         ChoiceRow(
                             label = stringResource(R.string.equalizer_broad),
@@ -326,18 +347,291 @@ fun EqualizerScreen(
 
 // ---- Tone pad --------------------------------------------------------------
 
+// ---- Dynamic Tone Pad & Spectrum ------------------------------------------
+
+@Composable
+private fun DynamicFrequencyCurve(
+    x: Int,
+    y: Int,
+    focused: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val hzLabels = listOf("60", "150", "400", "1k", "2.5k", "6k", "14k")
+    val tiltDb = x * EqLayout.TONE_DB_PER_STEP
+    val contourDb = y * EqLayout.TONE_DB_PER_STEP
+    val range = EqLayout.MANUAL_RANGE_DB
+
+    val b0Target = (-tiltDb * 1.0f).coerceIn(-range, range)
+    val b1Target = (-tiltDb * 0.85f).coerceIn(-range, range)
+    val b2Target = (-tiltDb * 0.40f + contourDb * (if (focused) 0.15f else 0.40f)).coerceIn(-range, range)
+    val b3Target = (contourDb * (if (focused) 1.0f else 0.88f)).coerceIn(-range, range)
+    val b4Target = (tiltDb * 0.40f + contourDb * (if (focused) 0.15f else 0.40f)).coerceIn(-range, range)
+    val b5Target = (tiltDb * 0.85f).coerceIn(-range, range)
+    val b6Target = (tiltDb * 1.0f).coerceIn(-range, range)
+
+    val b0 by animateFloatAsState(b0Target, spring(stiffness = Spring.StiffnessLow), label = "dynB0")
+    val b1 by animateFloatAsState(b1Target, spring(stiffness = Spring.StiffnessLow), label = "dynB1")
+    val b2 by animateFloatAsState(b2Target, spring(stiffness = Spring.StiffnessLow), label = "dynB2")
+    val b3 by animateFloatAsState(b3Target, spring(stiffness = Spring.StiffnessLow), label = "dynB3")
+    val b4 by animateFloatAsState(b4Target, spring(stiffness = Spring.StiffnessLow), label = "dynB4")
+    val b5 by animateFloatAsState(b5Target, spring(stiffness = Spring.StiffnessLow), label = "dynB5")
+    val b6 by animateFloatAsState(b6Target, spring(stiffness = Spring.StiffnessLow), label = "dynB6")
+    val animatedBands = listOf(b0, b1, b2, b3, b4, b5, b6)
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 9.sp,
+        color = onSurfaceVariant.copy(alpha = 0.7f),
+    )
+
+    val dynamicTag = when {
+        x == 0 && y == 0 -> "BALANCED FLAT • 0 dB"
+        x < 0 && y > 0 -> "WARM & FORWARD • ${signed(x)} / ${signed(y)}"
+        x > 0 && y > 0 -> "BRIGHT & VOCAL • ${signed(x)} / ${signed(y)}"
+        x < 0 && y < 0 -> "DEEP BASS SCOOP • ${signed(x)} / ${signed(y)}"
+        x > 0 && y < 0 -> "CRISP AIR SCOOP • ${signed(x)} / ${signed(y)}"
+        x < 0 -> "WARM TILT • ${signed(x)}"
+        x > 0 -> "BRIGHT TILT • ${signed(x)}"
+        y > 0 -> "VOCAL PUNCH • ${signed(y)}"
+        else -> "SCOOPED MIDS • ${signed(y)}"
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = GROUP_INSET, vertical = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF13131A),
+                        Color(0xFF0C0C10),
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        primaryColor.copy(alpha = 0.28f),
+                        Color(0xFF22222E),
+                    ),
+                ),
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(top = 12.dp, bottom = 8.dp, start = 10.dp, end = 10.dp),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 6.dp, end = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (enabled) Color(0xFF00F5D4) else Color.Gray),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "DYNAMIC ACOUSTIC RESPONSE",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (enabled) Color(0xFF00F5D4) else onSurfaceVariant,
+                        letterSpacing = 0.8.sp,
+                    )
+                }
+                Text(
+                    text = dynamicTag,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = primaryColor,
+                    fontSize = 10.sp,
+                )
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .padding(horizontal = 4.dp),
+            ) {
+                val w = size.width
+                val h = size.height
+                val padY = 12.dp.toPx()
+                val usableH = h - padY * 2
+                val midY = padY + usableH / 2f
+
+                val stepDb = listOf(12f, 6f, 0f, -6f, -12f)
+                stepDb.forEach { db ->
+                    val yPos = midY - (db / range) * (usableH / 2f)
+                    val isZero = abs(db) < 0.1f
+                    drawLine(
+                        color = if (isZero) primaryColor.copy(alpha = 0.35f) else gridColor,
+                        start = Offset(0f, yPos),
+                        end = Offset(w, yPos),
+                        strokeWidth = if (isZero) 1.5.dp.toPx() else 1.dp.toPx(),
+                    )
+                }
+
+                val count = animatedBands.size
+                val stepX = w / (count - 1)
+                val points = animatedBands.mapIndexed { i, db ->
+                    val clamped = db.coerceIn(-range, range)
+                    Offset(
+                        x = i * stepX,
+                        y = midY - (clamped / range) * (usableH / 2f),
+                    )
+                }
+
+                val path = Path()
+                val fillPath = Path()
+                if (points.isNotEmpty()) {
+                    path.moveTo(points[0].x, points[0].y)
+                    fillPath.moveTo(points[0].x, midY)
+                    fillPath.lineTo(points[0].x, points[0].y)
+
+                    for (i in 0 until points.size - 1) {
+                        val p0 = points[i]
+                        val p1 = points[i + 1]
+                        val cx = (p0.x + p1.x) / 2f
+                        path.cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                        fillPath.cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                    }
+
+                    fillPath.lineTo(points.last().x, midY)
+                    fillPath.close()
+
+                    val fillBrush = Brush.verticalGradient(
+                        colors = listOf(
+                            primaryColor.copy(alpha = if (enabled) 0.22f else 0.05f),
+                            Color.Transparent,
+                        ),
+                        startY = padY,
+                        endY = h,
+                    )
+                    drawPath(fillPath, brush = fillBrush)
+
+                    val curveBrush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFFF59E0B),
+                            Color(0xFF10B981),
+                            Color(0xFF06B6D4),
+                        ),
+                    )
+                    drawPath(
+                        path = path,
+                        brush = if (enabled) curveBrush else Brush.linearGradient(listOf(Color.Gray, Color.DarkGray)),
+                        style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                    )
+
+                    points.forEach { pt ->
+                        drawCircle(
+                            color = Color(0xFF0C0C10),
+                            radius = 4.dp.toPx(),
+                            center = pt,
+                        )
+                        drawCircle(
+                            color = if (enabled) primaryColor else Color.Gray,
+                            radius = 2.5.dp.toPx(),
+                            center = pt,
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                hzLabels.forEach { label ->
+                    Text(
+                        text = label,
+                        style = labelStyle,
+                        modifier = Modifier.width(28.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class SoundstageMacro(
+    val title: String,
+    val emoji: String,
+    val x: Int,
+    val y: Int,
+)
+
+private val SOUNDSTAGE_MACROS = listOf(
+    SoundstageMacro("Warm Vinyl", "🎛️", -3, 1),
+    SoundstageMacro("Crystal Air", "✨", 3, -2),
+    SoundstageMacro("Vocal Punch", "🎙️", 0, 3),
+    SoundstageMacro("Club Bass", "🔊", -4, -2),
+    SoundstageMacro("Studio Flat", "⚖️", 0, 0),
+)
+
+@Composable
+private fun DynamicSoundstagePresets(
+    currentX: Int,
+    currentY: Int,
+    enabled: Boolean,
+    onSelect: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = GROUP_INSET, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SOUNDSTAGE_MACROS.forEach { macro ->
+            val isSelected = currentX == macro.x && currentY == macro.y
+            val bgColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+            else Color(0xFF14141E)
+            val borderColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+            else Color(0xFF262638)
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(bgColor)
+                    .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+                    .clickable(enabled = enabled) {
+                        haptics.play(Haptic.Select)
+                        onSelect(macro.x, macro.y)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(text = macro.emoji, fontSize = 13.sp)
+                    Text(
+                        text = macro.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFE2E8F0),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /**
- * The dot grid and its puck.
- *
- * Drawn rather than composed: eleven by eleven is 121 dots, and 121 layout
- * nodes re-measured on every frame of a drag is a stutter on the exact gesture
- * that has to feel direct. One [Canvas] redraws them for the cost of the
- * circles themselves.
- *
- * The puck snaps to whole steps as the finger moves, with a tick at each one,
- * and springs between them rather than teleporting — a control that jumps
- * between dots reads as the touch being dropped, and the spring is what says it
- * was caught.
+ * The dot grid and its puck with 4-quadrant dynamic lighting and guidance badges.
  */
 @Composable
 private fun TonePad(
@@ -347,20 +641,13 @@ private fun TonePad(
     onChange: (Int, Int) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    val primaryColor = MaterialTheme.colorScheme.primary
     val dotColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val puckColor = MaterialTheme.colorScheme.background
-    val shadowColor = Color.Black.copy(alpha = 0.16f)
     val steps = EqLayout.TONE_STEPS
 
-    // The gesture block below is keyed on something that never changes, so it is
-    // started once and captures whatever was in scope then. Read through these
-    // and a second gesture begins from where the puck actually is, rather than
-    // from where it was the first time this screen composed.
     val latestX by rememberUpdatedState(x)
     val latestY by rememberUpdatedState(y)
 
-    // Spring, not tween: the puck has to keep up with a fast drag and still
-    // settle rather than arrive and stop dead.
     val animatedX by animateFloatAsState(
         targetValue = x.toFloat(),
         animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessHigh),
@@ -372,84 +659,222 @@ private fun TonePad(
         label = "tonePadY",
     )
 
-    Canvas(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = ROW_INSET, vertical = 18.dp)
-            .height(PAD_HEIGHT)
-            .pointerInput(steps, enabled) {
-                if (!enabled) return@pointerInput
-                awaitEachGesture {
-                    // Claimed on the way down, before the scrolling parent gets
-                    // to count this as the start of a fling. Everything in this
-                    // screen scrolls; a pad that only took the gesture once it
-                    // had moved would lose every vertical drag to the page.
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    var lastX = latestX
-                    var lastY = latestY
-                    fun report(offset: Offset) {
-                        val (newX, newY) = stepAt(offset, size.toSize(), PUCK_RADIUS.toPx(), steps)
-                        if (newX != lastX || newY != lastY) {
-                            lastX = newX
-                            lastY = newY
-                            haptics.play(Haptic.Tick)
-                            onChange(newX, newY)
-                        }
-                    }
-                    report(down.position)
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            change.consume()
-                            break
-                        }
-                        if (change.positionChanged()) {
-                            change.consume()
-                            report(change.position)
-                        }
-                    }
-                }
-            },
+            .padding(horizontal = ROW_INSET, vertical = 8.dp),
     ) {
-        val inset = PUCK_RADIUS.toPx()
-        val usableWidth = size.width - inset * 2
-        val usableHeight = size.height - inset * 2
-        val columns = steps * 2
-        val dotRadius = DOT_RADIUS.toPx()
-
-        for (column in 0..columns) {
-            for (row in 0..columns) {
-                // The row and column through dead centre are drawn up, so the
-                // origin is findable without a reading — the same job the
-                // detent does on a balance slider.
-                val onAxis = column == steps || row == steps
-                drawCircle(
-                    color = dotColor.copy(alpha = if (onAxis) 0.55f else 0.3f),
-                    radius = dotRadius,
-                    center = Offset(
-                        inset + usableWidth * column / columns,
-                        inset + usableHeight * row / columns,
-                    ),
-                )
-            }
-        }
-
-        val puckCentre = Offset(
-            inset + usableWidth * (animatedX + steps) / columns,
-            inset + usableHeight * (steps - animatedY) / columns,
-        )
-        // Three soft rings instead of a blur: a real shadow pass on a view this
-        // small costs more than the circles it would be shading.
-        for (ring in 3 downTo 1) {
-            drawCircle(
-                color = shadowColor.copy(alpha = shadowColor.alpha / ring),
-                radius = inset + ring * 2f,
-                center = puckCentre.copy(y = puckCentre.y + ring),
+        // Quadrant Guidance Tags Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "🔥 WARM BASS",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
+                color = Color(0xFFF59E0B).copy(alpha = 0.8f),
+                letterSpacing = 0.5.sp,
+            )
+            Text(
+                text = "✨ BRIGHT AIR",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
+                color = Color(0xFF06B6D4).copy(alpha = 0.8f),
+                letterSpacing = 0.5.sp,
             )
         }
-        drawCircle(color = puckColor, radius = inset, center = puckCentre)
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(PAD_HEIGHT)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF0F0F17))
+                .border(1.dp, Color(0xFF222232), RoundedCornerShape(16.dp))
+                .pointerInput(steps, enabled) {
+                    if (!enabled) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        var lastX = latestX
+                        var lastY = latestY
+                        fun report(offset: Offset) {
+                            val (newX, newY) = stepAt(offset, size.toSize(), PUCK_RADIUS.toPx(), steps)
+                            if (newX != lastX || newY != lastY) {
+                                lastX = newX
+                                lastY = newY
+                                haptics.play(Haptic.Tick)
+                                onChange(newX, newY)
+                            }
+                        }
+                        report(down.position)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                break
+                            }
+                            if (change.positionChanged()) {
+                                change.consume()
+                                report(change.position)
+                            }
+                        }
+                    }
+                },
+        ) {
+            val inset = PUCK_RADIUS.toPx()
+            val usableWidth = size.width - inset * 2
+            val usableHeight = size.height - inset * 2
+            val columns = steps * 2
+            val dotRadius = DOT_RADIUS.toPx()
+
+            // 4-Quadrant Ambient Lighting
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFF59E0B).copy(alpha = 0.14f), Color.Transparent),
+                    center = Offset(0f, 0f),
+                    radius = size.width * 0.6f,
+                ),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF06B6D4).copy(alpha = 0.14f), Color.Transparent),
+                    center = Offset(size.width, 0f),
+                    radius = size.width * 0.6f,
+                ),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF8B5CF6).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(0f, size.height),
+                    radius = size.width * 0.6f,
+                ),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFEC4899).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(size.width, size.height),
+                    radius = size.width * 0.6f,
+                ),
+            )
+
+            // Crosshair central axis lines
+            val centerX = inset + usableWidth * 0.5f
+            val centerY = inset + usableHeight * 0.5f
+            drawLine(
+                color = primaryColor.copy(alpha = 0.16f),
+                start = Offset(centerX, inset),
+                end = Offset(centerX, size.height - inset),
+                strokeWidth = 1.dp.toPx(),
+            )
+            drawLine(
+                color = primaryColor.copy(alpha = 0.16f),
+                start = Offset(inset, centerY),
+                end = Offset(size.width - inset, centerY),
+                strokeWidth = 1.dp.toPx(),
+            )
+
+            // Grid dots
+            for (column in 0..columns) {
+                for (row in 0..columns) {
+                    val onAxis = column == steps || row == steps
+                    drawCircle(
+                        color = if (onAxis) primaryColor.copy(alpha = 0.50f) else dotColor.copy(alpha = 0.25f),
+                        radius = if (onAxis) dotRadius * 1.2f else dotRadius,
+                        center = Offset(
+                            inset + usableWidth * column / columns,
+                            inset + usableHeight * row / columns,
+                        ),
+                    )
+                }
+            }
+
+            // Center zero detent glow ring when puck is at center
+            if (x == 0 && y == 0) {
+                drawCircle(
+                    color = primaryColor.copy(alpha = 0.20f),
+                    radius = inset * 1.4f,
+                    center = Offset(centerX, centerY),
+                )
+            }
+
+            // Animated Puck Center
+            val puckCentre = Offset(
+                inset + usableWidth * (animatedX + steps) / columns,
+                inset + usableHeight * (steps - animatedY) / columns,
+            )
+
+            // Dynamic puck color based on quadrant
+            val puckAccent = when {
+                animatedX < -0.4f -> Color(0xFFF59E0B)
+                animatedX > 0.4f -> Color(0xFF06B6D4)
+                animatedY > 0.5f -> Color(0xFF10B981)
+                animatedY < -0.5f -> Color(0xFFEC4899)
+                else -> primaryColor
+            }
+
+            // Glowing halo rings
+            for (ring in 3 downTo 1) {
+                drawCircle(
+                    color = puckAccent.copy(alpha = 0.14f / ring),
+                    radius = inset + ring * 5f,
+                    center = puckCentre,
+                )
+            }
+
+            // Lens Puck Body
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF28293E), Color(0xFF12121E)),
+                    center = puckCentre,
+                    radius = inset,
+                ),
+                radius = inset,
+                center = puckCentre,
+            )
+
+            // Hairline Specular Highlight Border
+            drawCircle(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.75f), puckAccent.copy(alpha = 0.40f)),
+                    startY = puckCentre.y - inset,
+                    endY = puckCentre.y + inset,
+                ),
+                radius = inset,
+                center = puckCentre,
+                style = Stroke(width = 1.8.dp.toPx()),
+            )
+
+            // Glowing center core dot
+            drawCircle(
+                color = puckAccent,
+                radius = 3.5.dp.toPx(),
+                center = puckCentre,
+            )
+        }
+
+        // Quadrant Guidance Tags Footer
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "🎧 WARM SCOOP",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
+                color = Color(0xFF8B5CF6).copy(alpha = 0.8f),
+                letterSpacing = 0.5.sp,
+            )
+            Text(
+                text = "⚡ CRISP SCOOP",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
+                color = Color(0xFFEC4899).copy(alpha = 0.8f),
+                letterSpacing = 0.5.sp,
+            )
+        }
     }
 }
 
@@ -460,46 +885,123 @@ private fun stepAt(offset: Offset, size: Size, inset: Float, steps: Int): Pair<I
     val fractionX = ((offset.x - inset) / usableWidth).coerceIn(0f, 1f)
     val fractionY = ((offset.y - inset) / usableHeight).coerceIn(0f, 1f)
     val x = (fractionX * steps * 2).roundToInt() - steps
-    // Screen coordinates grow downwards and the control does not: up is more.
     val y = steps - (fractionY * steps * 2).roundToInt()
     return x to y
 }
 
-/** The two numbers under the pad: how far it is tilted, and how far contoured. */
+/** Interactive readout chips showing tilt and contour values with 1-tap center reset. */
 @Composable
-private fun ToneReadout(x: Int, y: Int) {
+private fun ToneReadout(
+    x: Int,
+    y: Int,
+    onReset: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val isCentered = x == 0 && y == 0
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = Icons.Rounded.Waves,
-            contentDescription = stringResource(R.string.equalizer_tilt),
-            tint = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = signed(x),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.width(22.dp))
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.ShowChart,
-            contentDescription = stringResource(R.string.equalizer_contour),
-            tint = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = signed(y),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        // Tilt Chip
+        Box(
+            modifier = Modifier
+                .padding(end = 6.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF141420))
+                .border(1.dp, Color(0xFF28283C), RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Waves,
+                    contentDescription = stringResource(R.string.equalizer_tilt),
+                    tint = if (x < 0) Color(0xFFF59E0B) else if (x > 0) Color(0xFF06B6D4) else Color(0xFF94A3B8),
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = when {
+                        x < 0 -> "Warm (${signed(x)})"
+                        x > 0 -> "Bright (${signed(x)})"
+                        else -> "Tilt: 0"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+            }
+        }
+
+        // Contour Chip
+        Box(
+            modifier = Modifier
+                .padding(end = if (!isCentered) 6.dp else 0.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF141420))
+                .border(1.dp, Color(0xFF28283C), RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ShowChart,
+                    contentDescription = stringResource(R.string.equalizer_contour),
+                    tint = if (y > 0) Color(0xFF10B981) else if (y < 0) Color(0xFFEC4899) else Color(0xFF94A3B8),
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = when {
+                        y > 0 -> "Vocal (${signed(y)})"
+                        y < 0 -> "Scoop (${signed(y)})"
+                        else -> "Contour: 0"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+            }
+        }
+
+        // Quick Zero Detent Button
+        if (!isCentered) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        onReset()
+                    }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Center",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text = "Center",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
     }
 }
 

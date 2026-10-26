@@ -1674,14 +1674,16 @@ class PlaybackService : MediaLibraryService() {
         crossfade = controller
         controller.start()
 
+        val sessionPlayer = newSessionPlayer(exoPlayer, controller)
         mediaSession = MediaLibrarySession.Builder(
             this,
-            newSessionPlayer(exoPlayer, controller),
+            sessionPlayer,
             MediaLibraryCallback(),
         )
             .setId(SESSION_ID)
             .setSessionActivity(sessionActivity())
             .build()
+        sessionPlayer.reanchorSessionTimeline()
         refreshCustomLayouts()
 
         // Last, so a receiver that outlived the app is adopted by a service
@@ -1690,7 +1692,7 @@ class PlaybackService : MediaLibraryService() {
         CastController.attach(castPlayback)
     }
 
-    private fun newSessionPlayer(player: Player, crossfade: CrossfadeController) = SessionPlayer(
+    private fun newSessionPlayer(player: Player, crossfade: CrossfadeController): SessionPlayer = SessionPlayer(
         player,
         crossfade,
         onUserIntent = { partySync?.onLocalIntent() },
@@ -2294,7 +2296,9 @@ class PlaybackService : MediaLibraryService() {
         incoming.addListener(playbackListener)
         incoming.addAnalyticsListener(formatListener)
 
-        mediaSession?.player = newSessionPlayer(incoming, requireNotNull(crossfade))
+        val sessionPlayer = newSessionPlayer(incoming, requireNotNull(crossfade))
+        mediaSession?.player = sessionPlayer
+        sessionPlayer.reanchorSessionTimeline()
 
         incoming.volume = 1f
         outgoing.stop()
@@ -2718,7 +2722,9 @@ class PlaybackService : MediaLibraryService() {
         incoming.addListener(playbackListener)
         incoming.addAnalyticsListener(formatListener)
 
-        mediaSession?.player = newSessionPlayer(incoming, requireNotNull(crossfade))
+        val sessionPlayer = newSessionPlayer(incoming, requireNotNull(crossfade))
+        mediaSession?.player = sessionPlayer
+        sessionPlayer.reanchorSessionTimeline()
 
         // The queue moving on used to arrive here as an item transition on the
         // one player that owned the queue. It cannot any more — the incoming
@@ -5922,7 +5928,9 @@ class PlaybackService : MediaLibraryService() {
         val newCrossfade = createCrossfadeController()
         crossfade = newCrossfade
         newCrossfade.start()
-        mediaSession?.player = newSessionPlayer(newActive, newCrossfade)
+        val sessionPlayer = newSessionPlayer(newActive, newCrossfade)
+        mediaSession?.player = sessionPlayer
+        sessionPlayer.reanchorSessionTimeline()
         applyOutputRoute()
         if (items.isNotEmpty()) newActive.prepare()
         newActive.playWhenReady = playWhenReady
@@ -6813,11 +6821,60 @@ class PlaybackService : MediaLibraryService() {
         override fun getContentBufferedPosition() =
             if (cast.active) cast.positionMs else super.getContentBufferedPosition()
 
-        override fun getDuration(): Long =
-            if (cast.active && cast.durationMs != C.TIME_UNSET) cast.durationMs else super.getDuration()
+        private fun fallbackDurationMs(): Long {
+            val item = currentMediaItem ?: return C.TIME_UNSET
+            val metaDur = item.mediaMetadata.durationMs
+            if (metaDur != null && metaDur > 0L && metaDur != C.TIME_UNSET) return metaDur
+            val extraDur = item.mediaMetadata.extras?.getString(EXTRA_DURATION)
+            val sec = TrackMatcher.secondsOf(extraDur)
+            if (sec != null && sec > 0) return sec * 1000L
+            return C.TIME_UNSET
+        }
 
-        override fun getContentDuration(): Long =
-            if (cast.active && cast.durationMs != C.TIME_UNSET) cast.durationMs else super.getContentDuration()
+        override fun getDuration(): Long {
+            if (cast.active && cast.durationMs != C.TIME_UNSET) return cast.durationMs
+            val base = super.getDuration()
+            if (base > 0L && base != C.TIME_UNSET) return base
+            return fallbackDurationMs()
+        }
+
+        override fun getContentDuration(): Long {
+            if (cast.active && cast.durationMs != C.TIME_UNSET) return cast.durationMs
+            val base = super.getContentDuration()
+            if (base > 0L && base != C.TIME_UNSET) return base
+            return fallbackDurationMs()
+        }
+
+        override fun isCurrentMediaItemSeekable(): Boolean {
+            if (super.isCurrentMediaItemSeekable()) return true
+            val d = getDuration()
+            return d > 0L && d != C.TIME_UNSET
+        }
+
+        override fun isCurrentMediaItemDynamic(): Boolean {
+            val d = getDuration()
+            if (d > 0L && d != C.TIME_UNSET) return false
+            return super.isCurrentMediaItemDynamic()
+        }
+
+        override fun isCurrentMediaItemLive(): Boolean = false
+
+        override fun isCommandAvailable(command: Int): Boolean {
+            if (command == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM && !locked()) {
+                val d = getDuration()
+                if (d > 0L && d != C.TIME_UNSET) return true
+            }
+            return super.isCommandAvailable(command)
+        }
+
+        override fun getAvailableCommands(): Player.Commands {
+            val base = super.getAvailableCommands()
+            val d = getDuration()
+            if (!locked() && d > 0L && d != C.TIME_UNSET && !base.contains(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+                return base.buildUpon().add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM).build()
+            }
+            return base
+        }
 
         // The receiver is a remote output with a volume of its own, which is
         // what makes the hardware keys move it instead of the phone's.
@@ -6896,6 +6953,58 @@ class PlaybackService : MediaLibraryService() {
                 null,
                 currentMediaItemIndex,
                 currentMediaItem,
+                null,
+                currentPeriodIndex,
+                currentPosition,
+                contentPosition,
+                C.INDEX_UNSET,
+                C.INDEX_UNSET,
+            )
+            listeners.forEach {
+                it.onPositionDiscontinuity(position, position, Player.DISCONTINUITY_REASON_INTERNAL)
+            }
+            val events = Player.Events(flags.build())
+            listeners.forEach { it.onEvents(this, events) }
+        }
+
+        /**
+         * Re-anchors the platform MediaSession timeline, position, and metadata.
+         *
+         * External controllers (specifically Android SystemUI's lock screen and notification
+         * SeekBarViewModel) extrapolate the track timeline locally. When a player handoff
+         * occurs (crossfade, version swap) or an item starts while resolving, this forces
+         * an immediate timeline & position synchronization so the lock screen scrubber
+         * never freezes or falls back to an unseekable state.
+         */
+        fun reanchorSessionTimeline() {
+            val currentItem = currentMediaItem
+            val timeline = currentTimeline
+            val meta = getMediaMetadata()
+            val state = getPlaybackState()
+            val playing = isPlaying()
+            val commands = getAvailableCommands()
+
+            val flags = FlagSet.Builder()
+                .add(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)
+                .add(Player.EVENT_TIMELINE_CHANGED)
+                .add(Player.EVENT_MEDIA_ITEM_TRANSITION)
+                .add(Player.EVENT_MEDIA_METADATA_CHANGED)
+                .add(Player.EVENT_PLAYBACK_STATE_CHANGED)
+                .add(Player.EVENT_IS_PLAYING_CHANGED)
+                .add(Player.EVENT_POSITION_DISCONTINUITY)
+
+            listeners.forEach {
+                it.onAvailableCommandsChanged(commands)
+                it.onTimelineChanged(timeline, Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED)
+                it.onMediaItemTransition(currentItem, Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
+                it.onMediaMetadataChanged(meta)
+                it.onPlaybackStateChanged(state)
+                it.onIsPlayingChanged(playing)
+            }
+            val position = Player.PositionInfo(
+                null,
+                currentMediaItemIndex,
+                currentItem,
                 null,
                 currentPeriodIndex,
                 currentPosition,
@@ -7135,11 +7244,18 @@ class PlaybackService : MediaLibraryService() {
         override fun getMediaMetadata(): MediaMetadata {
             val base = wrappedPlayer.mediaMetadata
             val subtitle = getSubtitle()
-            return if (!subtitle.isNullOrBlank()) {
-                base.buildUpon().setSubtitle(subtitle).build()
-            } else {
-                base
+            val dur = if (base.durationMs == null || base.durationMs == C.TIME_UNSET) {
+                fallbackDurationMs().takeIf { it > 0L && it != C.TIME_UNSET }
+            } else null
+
+            var builder: MediaMetadata.Builder? = null
+            if (!subtitle.isNullOrBlank()) {
+                builder = (builder ?: base.buildUpon()).setSubtitle(subtitle)
             }
+            if (dur != null) {
+                builder = (builder ?: base.buildUpon()).setDurationMs(dur)
+            }
+            return builder?.build() ?: base
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {

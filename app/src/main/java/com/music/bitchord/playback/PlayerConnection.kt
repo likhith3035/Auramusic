@@ -385,7 +385,13 @@ fun MediaItem.toSong() = Song(
     title = mediaMetadata.title?.toString().orEmpty(),
     artist = mediaMetadata.artist?.toString().orEmpty(),
     thumbnailUrl = mediaMetadata.artworkUri?.toString(),
-    durationText = mediaMetadata.extras?.getString(EXTRA_DURATION),
+    durationText = mediaMetadata.extras?.getString(EXTRA_DURATION)
+        ?: mediaMetadata.durationMs?.takeIf { it > 0 }?.let { ms ->
+            val totalSec = ms / 1000
+            val min = totalSec / 60
+            val sec = totalSec % 60
+            "$min:${sec.toString().padStart(2, '0')}"
+        },
     artistId = mediaMetadata.extras?.getString(EXTRA_ARTIST_ID),
     artists = mediaMetadata.extras?.artistsFromBundle() ?: emptyList(),
     albumId = mediaMetadata.extras?.getString(EXTRA_ALBUM_ID),
@@ -479,7 +485,7 @@ internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
  * with the other loses information. Carried so that [toSong] can give it back
  * to the live queue and matching code.
  */
-private const val EXTRA_DURATION = "bitchord.durationText"
+internal const val EXTRA_DURATION = "bitchord.durationText"
 private const val EXTRA_EXPLICIT = "bitchord.explicit"
 private const val EXTRA_IS_VIDEO = "bitchord.isVideo"
 private const val EXTRA_VIDEO_ORIGIN = "bitchord.isVideoOrigin"
@@ -600,33 +606,39 @@ fun Song.toMediaItem(): MediaItem {
         // reach.
         else -> "bitchord://watch?v=$videoId${matchQuery()}"
     }
+    val parsedDurationMs = TrackMatcher.secondsOf(durationText)?.let { it * 1000L }
     return MediaItem.Builder()
         .setMediaId(videoId)
         .setUri(resolvePlaybackUri(uriString, localPath))
-    .setMediaMetadata(
-        MediaMetadata.Builder()
-            .setTitle(title)
-            .setArtist(artist)
-            // The release this track came off, when whoever queued it knew.
-            //
-            // A native field rather than an extra because Media3 bundles this
-            // one across the session on its own, and because the lock screen and
-            // Android Auto both draw it — a track queued from an album page had
-            // the name in hand all along and was arriving at those surfaces
-            // without it. It is also what the Replay's album chart is counted
-            // on: read back off the player, a track with no album here is a
-            // track that cannot be filed under one.
-            .setAlbumTitle(albumName)
-            // Sized here rather than left as stored: this is what the lock
-            // screen, the notification and Android Auto draw, all of them
-            // large, and none of them go back for a better copy later.
-            .setArtworkUri(artworkAt(NOTIFICATION_ART_PX)?.toUri())
-            // System media surfaces (One UI's Now Bar, Android Auto, Assistant)
-            // classify a session by its media type; untyped sessions get treated
-            // as generic audio and lose the music-specific card.
-            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-            .setIsPlayable(true)
-            .setIsBrowsable(false)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artist)
+                // The release this track came off, when whoever queued it knew.
+                //
+                // A native field rather than an extra because Media3 bundles this
+                // one across the session on its own, and because the lock screen and
+                // Android Auto both draw it — a track queued from an album page had
+                // the name in hand all along and was arriving at those surfaces
+                // without it. It is also what the Replay's album chart is counted
+                // on: read back off the player, a track with no album here is a
+                // track that cannot be filed under one.
+                .setAlbumTitle(albumName)
+                // Sized here rather than left as stored: this is what the lock
+                // screen, the notification and Android Auto draw, all of them
+                // large, and none of them go back for a better copy later.
+                .setArtworkUri(artworkAt(NOTIFICATION_ART_PX)?.toUri())
+                // System media surfaces (One UI's Now Bar, Android Auto, Assistant)
+                // classify a session by its media type; untyped sessions get treated
+                // as generic audio and lose the music-specific card.
+                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .setIsPlayable(true)
+                .setIsBrowsable(false)
+                .apply {
+                    if (parsedDurationMs != null && parsedDurationMs > 0L) {
+                        setDurationMs(parsedDurationMs)
+                    }
+                }
             // What a queue entry has to carry about itself: which section of
             // the queue it belongs to, whether it is playing off the device,
             // and how long the row that queued it said it runs. The uri two

@@ -787,12 +787,14 @@ private fun BitChordApp(
         libraryShowAll = null
         viewModel.clearDetail()
         webSession = null
+        settingsSubScreen = "listen_together"
         showSettings = true
         showListenTogether = true
         JamInviteLink.handled()
     }
     LaunchedEffect(signedIn, activeJamInviteCode) {
         if (signedIn && activeJamInviteCode != null) {
+            settingsSubScreen = "listen_together"
             showSettings = true
             showListenTogether = true
         }
