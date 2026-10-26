@@ -96,6 +96,9 @@ internal sealed interface PartySheet {
 
     /** Synced live karaoke lyrics & verse-jump. */
     data object Lyrics : PartySheet
+
+    /** Founder Developer Suite: real-time telemetry HUD, monospace logs, and god controls. */
+    data object DevConsole : PartySheet
 }
 
 /**

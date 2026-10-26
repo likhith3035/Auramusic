@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -32,6 +33,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
@@ -60,6 +64,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -491,6 +497,10 @@ fun ListenTogetherScreen(
                 )
 
                 PartySheet.Recap -> {}
+
+                PartySheet.DevConsole -> PartyDevConsoleSheet(
+                    onDismiss = { sheet = null },
+                )
             }
         }
     }
@@ -500,6 +510,24 @@ fun ListenTogetherScreen(
             onDismiss = { sheet = null },
             viewModel = viewModel,
         )
+    }
+
+    val showDevConsole by ListenTogether.showDevConsole.collectAsStateWithLifecycle()
+    if (showDevConsole) {
+        Dialog(
+            onDismissRequest = { ListenTogether.dismissDevConsole() },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.background,
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.92f)
+            ) {
+                PartyDevConsoleSheet(onDismiss = { ListenTogether.dismissDevConsole() })
+            }
+        }
     }
 
     Column(
@@ -554,6 +582,7 @@ fun ListenTogetherScreen(
                 onOpenSoundstage = { sheet = PartySheet.Soundstage },
                 onOpenLyrics = { sheet = PartySheet.Lyrics },
                 onOpenRecap = { sheet = PartySheet.Recap },
+                onOpenDevConsole = { sheet = PartySheet.DevConsole },
                 onLeave = { scope.launch { ListenTogether.leaveParty() } },
                 onSetCapacity = ListenTogether::setMaxMembers,
                 onSetHostOnlyControl = ListenTogether::setHostOnlyControl,
@@ -885,6 +914,7 @@ private fun InAParty(
     onOpenSoundstage: () -> Unit,
     onOpenLyrics: () -> Unit,
     onOpenRecap: () -> Unit,
+    onOpenDevConsole: () -> Unit,
     onLeave: () -> Unit,
     onSetCapacity: (Int) -> Unit,
     onSetHostOnlyControl: (Boolean) -> Unit,
@@ -892,6 +922,74 @@ private fun InAParty(
 ) {
     val unreadChat by ListenTogether.unreadChatCount.collectAsStateWithLifecycle()
     val syncedTheme by ListenTogether.syncedTheme.collectAsStateWithLifecycle()
+    val activeGodAnnouncement by ListenTogether.godAnnouncement.collectAsStateWithLifecycle()
+
+    if (activeGodAnnouncement != null) {
+        val announcement = activeGodAnnouncement!!
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF1E1705),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFFB300)),
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GROUP_INSET, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(Color(0xFFFFB300).copy(alpha = 0.2f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Campaign,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB300),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "⚡ GOD ANNOUNCEMENT",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFFB300),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "from ${announcement.senderName}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFCBD5E1)
+                        )
+                    }
+                    Text(
+                        text = announcement.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                androidx.compose.material3.IconButton(
+                    onClick = { ListenTogether.dismissGodAnnouncement() },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Dismiss",
+                        tint = Color(0xFFFFB300),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
 
     SettingsGroup(
         header = stringResource(R.string.listen_together_code),
@@ -968,6 +1066,55 @@ private fun InAParty(
             subtitle = "Review session stats and save as local playlist",
             onClick = onOpenRecap,
         )
+        if (state.isFounder) {
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Bolt,
+                title = "⚡ Developer Suite & Telemetry HUD",
+                subtitle = "Monospace live logs, RTT ping meter, NTP drift, and god controls",
+                onClick = onOpenDevConsole,
+            )
+        }
+    }
+
+    val audioOffsetMs by ListenTogether.audioOffsetMs.collectAsStateWithLifecycle()
+    SettingsGroup(
+        header = "BLUETOOTH AUDIO SYNC CALIBRATION",
+        footer = "Adjust audio sync if your Bluetooth speaker or headphones have latency (±300ms).",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ROW_INSET, vertical = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Offset: ${if (audioOffsetMs > 0) "+$audioOffsetMs" else "$audioOffsetMs"} ms",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (audioOffsetMs != 0L) {
+                    TextButton(onClick = { ListenTogether.setAudioOffsetMs(0L) }) {
+                        Text("Reset", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            androidx.compose.material3.Slider(
+                value = audioOffsetMs.toFloat(),
+                onValueChange = { ListenTogether.setAudioOffsetMs(it.toLong()) },
+                valueRange = -300f..300f,
+                steps = 59,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        }
     }
 
     SettingsGroup(
@@ -1014,9 +1161,21 @@ private fun InAParty(
             )
             RowDivider()
         }
+        val isHost = state.you?.isHost == true
         state.members.forEachIndexed { index, member ->
             if (index > 0) RowDivider()
-            MemberRow(member = member, isYou = member.memberId == state.you?.memberId, canKick = state.you?.isHost == true && !member.isHost, onKick = { onKick(member.memberId) })
+            val isAux = member.memberId == state.auxMemberId
+            MemberRow(
+                member = member,
+                isYou = member.memberId == state.you?.memberId,
+                isAux = isAux,
+                canManageAux = isHost && !member.isHost,
+                canKick = isHost && !member.isHost,
+                onToggleAux = {
+                    ListenTogether.setAuxMember(if (isAux) null else member.memberId)
+                },
+                onKick = { onKick(member.memberId) },
+            )
         }
     }
 
@@ -1148,7 +1307,15 @@ private fun PartyAvatar(url: String?, size: Dp = ICON_SIZE) {
 }
 
 @Composable
-private fun MemberRow(member: PartyMember, isYou: Boolean, canKick: Boolean = false, onKick: () -> Unit = {}) {
+private fun MemberRow(
+    member: PartyMember,
+    isYou: Boolean,
+    isAux: Boolean = false,
+    canManageAux: Boolean = false,
+    canKick: Boolean = false,
+    onToggleAux: () -> Unit = {},
+    onKick: () -> Unit = {},
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1191,6 +1358,10 @@ private fun MemberRow(member: PartyMember, isYou: Boolean, canKick: Boolean = fa
                     Spacer(Modifier.width(8.dp))
                     Badge(stringResource(R.string.listen_together_you))
                 }
+                if (isAux) {
+                    Spacer(Modifier.width(6.dp))
+                    Badge("Aux DJ")
+                }
             }
             // "Away" rather than "offline": the slot is still theirs, and the
             // server holds it through a grace period precisely so a tunnel or a
@@ -1206,8 +1377,18 @@ private fun MemberRow(member: PartyMember, isYou: Boolean, canKick: Boolean = fa
         if (member.isHost) {
             Spacer(Modifier.width(8.dp))
             Badge(stringResource(R.string.listen_together_host))
-        } else if (canKick) {
-            TextButton(onClick = onKick) { Text(stringResource(R.string.listen_together_remove)) }
+        } else {
+            if (canManageAux) {
+                TextButton(onClick = onToggleAux) {
+                    Text(
+                        text = if (isAux) "Revoke Aux" else "Pass Aux",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            if (canKick) {
+                TextButton(onClick = onKick) { Text(stringResource(R.string.listen_together_remove)) }
+            }
         }
     }
 }
