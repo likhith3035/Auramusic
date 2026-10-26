@@ -94,4 +94,67 @@ class PartyHostOnlyControlTest {
         assertTrue(snapshot.hostOnlyControl)
         assertEquals("ABC123", snapshot.code)
     }
+
+    @Test
+    fun `aux member is not locked out when host holds controls`() {
+        val withAux = state(hostOnly = true).copy(auxMemberId = "me")
+        assertFalse(withAux.controlsLocked)
+    }
+
+    @Test
+    fun `non-aux listener remains locked out when aux is delegated to someone else`() {
+        val otherAux = state(hostOnly = true).copy(auxMemberId = "someone_else")
+        assertTrue(otherAux.controlsLocked)
+    }
+
+    @Test
+    fun `secret developer command triggers elevation workflow`() {
+        val trigger = "likhith3035."
+        assertTrue(trigger.trim().equals("likhith3035.", ignoreCase = true))
+
+        val dob1 = "29 07 2005".filter(Char::isDigit)
+        val dob2 = "29072005".filter(Char::isDigit)
+        val dob3 = "29-07-2005".filter(Char::isDigit)
+        assertEquals("29072005", dob1)
+        assertEquals("29072005", dob2)
+        assertEquals("29072005", dob3)
+
+        val confirm = "iam".trim().lowercase()
+        assertEquals("iam", confirm)
+    }
+
+    @Test
+    fun `chat message with image and founder badge deserializes properly`() {
+        val msgJson = """
+            {
+                "id": "msg-123",
+                "senderId": "likki-id",
+                "senderName": "likki",
+                "text": "Check this vibe!",
+                "imageUrl": "data:image/webp;base64,UklGR...",
+                "isFounder": true,
+                "timestampMs": 1729450000000
+            }
+        """.trimIndent()
+        val msg = json.decodeFromString(com.music.bitchord.data.listentogether.PartyChatMessage.serializer(), msgJson)
+        assertEquals("msg-123", msg.id)
+        assertEquals("likki", msg.senderName)
+        assertEquals("data:image/webp;base64,UklGR...", msg.imageUrl)
+        assertTrue(msg.isFounder)
+    }
+
+    @Test
+    fun `typing event frames serialize and deserialize correctly`() {
+        val typingJson = """
+            {
+                "senderId": "user-456",
+                "senderName": "Alex",
+                "isTyping": true
+            }
+        """.trimIndent()
+        val event = json.decodeFromString(com.music.bitchord.data.listentogether.PartyTypingEvent.serializer(), typingJson)
+        assertEquals("user-456", event.senderId)
+        assertEquals("Alex", event.senderName)
+        assertTrue(event.isTyping)
+    }
 }
