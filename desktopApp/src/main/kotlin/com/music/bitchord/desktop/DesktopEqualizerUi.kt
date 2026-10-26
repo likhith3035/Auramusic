@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -42,13 +43,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import com.music.bitchord.playback.EqLayout
 import com.music.bitchord.playback.EqualizerPreset
@@ -193,16 +200,22 @@ private fun DynamicTab() {
     val y by DesktopEqualizerSettings.toneY.collectAsState()
     val focused by DesktopEqualizerSettings.focused.collectAsState()
 
-    SectionLabel(DesktopStrings["equalizer_tone", "Tone"])
+    SectionLabel(DesktopStrings["equalizer_presets", "Soundstage Presets"])
+    DynamicSoundstagePresets(currentX = x, currentY = y, onSelect = DesktopEqualizerSettings::setTone)
+
+    Spacer(Modifier.height(10.dp))
+    DesktopDynamicFrequencyCurve(x = x, y = y, focused = focused)
+
+    Spacer(Modifier.height(10.dp))
+    SectionLabel(DesktopStrings["equalizer_tone", "Tone Matrix"])
     TonePad(x, y, DesktopEqualizerSettings::setTone)
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Readout(DesktopStrings["equalizer_tilt", "Tilt"], x)
-        Spacer(Modifier.width(28.dp))
-        Readout(DesktopStrings["equalizer_contour", "Contour"], y)
-    }
+
+    ToneReadoutBar(
+        x = x,
+        y = y,
+        onReset = { DesktopEqualizerSettings.setTone(0, 0) },
+    )
+
     Row(Modifier.padding(horizontal = panelInset(22.dp)), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         WidthChoice(DesktopStrings["equalizer_broad", "Broad"], !focused) {
             DesktopEqualizerSettings.setFocused(false)
@@ -223,16 +236,288 @@ private fun DynamicTab() {
     )
 }
 
+private data class DesktopTonePreset(
+    val name: String,
+    val icon: String,
+    val x: Int,
+    val y: Int,
+)
+
+private val DESKTOP_TONE_PRESETS = listOf(
+    DesktopTonePreset("Warm Vinyl", "🎛️", -4, -2),
+    DesktopTonePreset("Crystal Air", "✨", 4, 3),
+    DesktopTonePreset("Vocal Punch", "🎙️", 0, 4),
+    DesktopTonePreset("Club Bass", "🔊", -3, 2),
+    DesktopTonePreset("Studio Flat", "⚖️", 0, 0),
+)
+
 @Composable
-private fun Readout(label: String, value: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = DesktopSecondary)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            if (value > 0) "+$value" else value.toString(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
-        )
+private fun DynamicSoundstagePresets(
+    currentX: Int,
+    currentY: Int,
+    onSelect: (Int, Int) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = panelInset(22.dp)),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        DESKTOP_TONE_PRESETS.forEach { preset ->
+            val isActive = currentX == preset.x && currentY == preset.y
+            val bgColor = if (isActive) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f)
+            val textColor = if (isActive) Color.White else DesktopSecondary
+
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(bgColor)
+                    .clickable { onSelect(preset.x, preset.y) }
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(preset.icon, fontSize = 12.sp)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    preset.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    color = textColor,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Live 7-band acoustic spectrum curve calculated directly from (x, y, focused).
+ */
+@Composable
+private fun DesktopDynamicFrequencyCurve(
+    x: Int,
+    y: Int,
+    focused: Boolean,
+) {
+    val tiltMultiplier = if (focused) 0.8f else 1.2f
+    val contourMultiplier = if (focused) 1.5f else 1.2f
+
+    val tiltDb = x * EqLayout.TONE_DB_PER_STEP * tiltMultiplier
+    val contourDb = y * EqLayout.TONE_DB_PER_STEP * contourMultiplier
+
+    // 7 sample frequencies matching graphic bands: 60Hz, 150Hz, 400Hz, 1kHz, 2.5kHz, 6kHz, 14kHz
+    val bandWeights = remember(tiltDb, contourDb) {
+        listOf(
+            -tiltDb * 1.0f + contourDb * 0.2f,
+            -tiltDb * 0.7f + contourDb * 0.1f,
+            -tiltDb * 0.3f - contourDb * 0.4f,
+            0f + contourDb * 1.0f,
+            tiltDb * 0.3f - contourDb * 0.4f,
+            tiltDb * 0.7f + contourDb * 0.1f,
+            tiltDb * 1.0f + contourDb * 0.3f,
+        ).map { it.coerceIn(-12f, 12f) }
+    }
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = panelInset(22.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF141418))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "ACOUSTIC FREQUENCY RESPONSE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DesktopSecondary.copy(alpha = 0.8f),
+                )
+                Text(
+                    if (x == 0 && y == 0) "0 dB FLAT" else "${if (x >= 0) "+$x" else "$x"} / ${if (y >= 0) "+$y" else "$y"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = DesktopAccent.copy(alpha = 0.7f),
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            Canvas(Modifier.fillMaxWidth().height(68.dp)) {
+                val w = size.width
+                val h = size.height
+                val midY = h / 2f
+                val maxDb = 12f
+
+                // Draw horizontal reference lines: +6dB, 0dB, -6dB
+                val zeroY = midY
+                val plus6Y = midY - (6f / maxDb) * (h * 0.42f)
+                val minus6Y = midY + (6f / maxDb) * (h * 0.42f)
+
+                drawLine(
+                    color = Color.White.copy(alpha = 0.06f),
+                    start = Offset(0f, plus6Y),
+                    end = Offset(w, plus6Y),
+                    strokeWidth = 1f,
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = 0.18f),
+                    start = Offset(0f, zeroY),
+                    end = Offset(w, zeroY),
+                    strokeWidth = 1f,
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = 0.06f),
+                    start = Offset(0f, minus6Y),
+                    end = Offset(w, minus6Y),
+                    strokeWidth = 1f,
+                )
+
+                // Compute points
+                val points = bandWeights.mapIndexed { i, db ->
+                    val px = (i.toFloat() / (bandWeights.size - 1)) * w
+                    val py = midY - (db / maxDb) * (h * 0.42f)
+                    Offset(px, py)
+                }
+
+                // Spline path
+                val curvePath = Path().apply {
+                    moveTo(points[0].x, points[0].y)
+                    for (i in 0 until points.size - 1) {
+                        val p0 = points[i]
+                        val p1 = points[i + 1]
+                        val cx = (p0.x + p1.x) / 2f
+                        cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                    }
+                }
+
+                // Fill under curve
+                val fillPath = Path().apply {
+                    addPath(curvePath)
+                    lineTo(w, midY)
+                    lineTo(0f, midY)
+                    close()
+                }
+
+                val fillBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF38BDF8).copy(alpha = 0.22f),
+                        Color(0xFF818CF8).copy(alpha = 0.08f),
+                        Color.Transparent,
+                    ),
+                    startY = 0f,
+                    endY = h,
+                )
+                drawPath(fillPath, fillBrush)
+
+                // Stroke curve with glowing gradient
+                val strokeBrush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFFF59E0B),
+                        Color(0xFF10B981),
+                        Color(0xFF06B6D4),
+                    )
+                )
+                drawPath(
+                    curvePath,
+                    brush = strokeBrush,
+                    style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
+
+                // Nodes on curve
+                points.forEach { pt ->
+                    drawCircle(Color.White, radius = 2.2.dp.toPx(), center = pt)
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Frequency labels
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                listOf("60Hz", "150Hz", "400Hz", "1kHz", "2.5kHz", "6kHz", "14kHz").forEach { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        color = DesktopSecondary.copy(alpha = 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToneReadoutBar(
+    x: Int,
+    y: Int,
+    onReset: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = panelInset(22.dp), vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            val tiltDesc = when {
+                x < 0 -> "Warmer"
+                x > 0 -> "Brighter"
+                else -> "Balanced"
+            }
+            val contourDesc = when {
+                y < 0 -> "Scooped"
+                y > 0 -> "Forward"
+                else -> "Neutral"
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(DesktopStrings["equalizer_tilt", "Tilt"], style = MaterialTheme.typography.bodySmall, color = DesktopSecondary)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "${if (x > 0) "+$x" else "$x"} ($tiltDesc)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(DesktopStrings["equalizer_contour", "Contour"], style = MaterialTheme.typography.bodySmall, color = DesktopSecondary)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "${if (y > 0) "+$y" else "$y"} ($contourDesc)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+            }
+        }
+
+        if (x != 0 || y != 0) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onReset)
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Refresh, "Center", tint = DesktopAccent, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Center", style = MaterialTheme.typography.labelSmall, color = DesktopAccent)
+            }
+        }
     }
 }
 
@@ -259,21 +544,14 @@ private fun WidthChoice(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * The dot grid and its puck.
- *
- * Drawn rather than composed: eleven by eleven is 121 dots, and 121 layout nodes re-measured on
- * every frame of a drag is a stutter on the exact gesture that has to feel direct.
+ * The dot grid and its puck, enhanced with quadrant ambient glows, crosshairs, and glowing lens puck.
  */
 @Composable
 private fun TonePad(x: Int, y: Int, onChange: (Int, Int) -> Unit) {
     val steps = EqLayout.TONE_STEPS
-    // The gesture block is keyed on something that never changes, so it captures whatever was in
-    // scope then. Read through these and a second drag starts from where the puck actually is.
     val latestX by rememberUpdatedState(x)
     val latestY by rememberUpdatedState(y)
 
-    // Spring, not tween: the puck has to keep up with a fast drag and still settle rather than
-    // arrive and stop dead.
     val animatedX by animateFloatAsState(
         x.toFloat(),
         spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessHigh),
@@ -285,76 +563,203 @@ private fun TonePad(x: Int, y: Int, onChange: (Int, Int) -> Unit) {
         label = "tonePadY",
     )
 
-    Canvas(
+    Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = panelInset(22.dp))
             .height(200.dp)
-            .pointerInput(steps) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    var lastX = latestX
-                    var lastY = latestY
-                    fun report(offset: Offset) {
-                        val (newX, newY) = stepAt(offset, size.toSize(), PUCK_RADIUS.toPx(), steps)
-                        if (newX != lastX || newY != lastY) {
-                            lastX = newX
-                            lastY = newY
-                            onChange(newX, newY)
-                        }
-                    }
-                    report(down.position)
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            change.consume()
-                            break
-                        }
-                        if (change.positionChanged()) {
-                            change.consume()
-                            report(change.position)
-                        }
-                    }
-                }
-            },
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF101014))
     ) {
-        val inset = PUCK_RADIUS.toPx()
-        val usableWidth = size.width - inset * 2
-        val usableHeight = size.height - inset * 2
-        val columns = steps * 2
-
-        for (column in 0..columns) {
-            for (row in 0..columns) {
-                // The row and column through dead centre are drawn up, so the origin is findable
-                // without a reading.
-                val onAxis = column == steps || row == steps
-                drawCircle(
-                    color = Color.White.copy(alpha = if (onAxis) 0.45f else 0.22f),
-                    radius = DOT_RADIUS.toPx(),
-                    center = Offset(
-                        inset + usableWidth * column / columns,
-                        inset + usableHeight * row / columns,
-                    ),
-                )
-            }
-        }
-
-        val centre = Offset(
-            inset + usableWidth * (animatedX + steps) / columns,
-            inset + usableHeight * (steps - animatedY) / columns,
+        // Corner direction badges
+        Text(
+            "🔥 WARM BASS",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFF59E0B).copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
         )
-        // Three soft rings instead of a blur: a shadow pass on something this small costs more than
-        // the circles it would be shading.
-        for (ring in 3 downTo 1) {
+        Text(
+            "✨ BRIGHT AIR",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF06B6D4).copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+        )
+        Text(
+            "🎧 WARM SCOOP",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF8B5CF6).copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+        )
+        Text(
+            "⚡ CRISP SCOOP",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFEC4899).copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+        )
+
+        Canvas(
+            Modifier
+                .matchParentSize()
+                .pointerInput(steps) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        var lastX = latestX
+                        var lastY = latestY
+                        fun report(offset: Offset) {
+                            val (newX, newY) = stepAt(offset, size.toSize(), PUCK_RADIUS.toPx(), steps)
+                            if (newX != lastX || newY != lastY) {
+                                lastX = newX
+                                lastY = newY
+                                onChange(newX, newY)
+                            }
+                        }
+                        report(down.position)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                break
+                            }
+                            if (change.positionChanged()) {
+                                change.consume()
+                                report(change.position)
+                            }
+                        }
+                    }
+                },
+        ) {
+            val inset = PUCK_RADIUS.toPx()
+            val usableWidth = size.width - inset * 2
+            val usableHeight = size.height - inset * 2
+            val columns = steps * 2
+
+            // Draw 4 quadrant soft glows
             drawCircle(
-                color = Color.Black.copy(alpha = 0.16f / ring),
-                radius = inset + ring * 2f,
-                center = centre.copy(y = centre.y + ring),
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFF59E0B).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(inset, inset),
+                    radius = usableWidth * 0.45f
+                ),
+                radius = usableWidth * 0.45f,
+                center = Offset(inset, inset)
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF06B6D4).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(size.width - inset, inset),
+                    radius = usableWidth * 0.45f
+                ),
+                radius = usableWidth * 0.45f,
+                center = Offset(size.width - inset, inset)
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF8B5CF6).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(inset, size.height - inset),
+                    radius = usableWidth * 0.45f
+                ),
+                radius = usableWidth * 0.45f,
+                center = Offset(inset, size.height - inset)
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFEC4899).copy(alpha = 0.12f), Color.Transparent),
+                    center = Offset(size.width - inset, size.height - inset),
+                    radius = usableWidth * 0.45f
+                ),
+                radius = usableWidth * 0.45f,
+                center = Offset(size.width - inset, size.height - inset)
+            )
+
+            // Centre crosshairs
+            val midX = inset + usableWidth * 0.5f
+            val midY = inset + usableHeight * 0.5f
+            drawLine(
+                color = Color.White.copy(alpha = 0.12f),
+                start = Offset(inset, midY),
+                end = Offset(size.width - inset, midY),
+                strokeWidth = 1f,
+            )
+            drawLine(
+                color = Color.White.copy(alpha = 0.12f),
+                start = Offset(midX, inset),
+                end = Offset(midX, size.height - inset),
+                strokeWidth = 1f,
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.14f),
+                radius = 18f,
+                center = Offset(midX, midY),
+                style = Stroke(width = 1f)
+            )
+
+            // Grid dots
+            for (column in 0..columns) {
+                for (row in 0..columns) {
+                    val onAxis = column == steps || row == steps
+                    drawCircle(
+                        color = Color.White.copy(alpha = if (onAxis) 0.50f else 0.18f),
+                        radius = (if (onAxis) DOT_RADIUS.toPx() * 1.2f else DOT_RADIUS.toPx()),
+                        center = Offset(
+                            inset + usableWidth * column / columns,
+                            inset + usableHeight * row / columns,
+                        ),
+                    )
+                }
+            }
+
+            val centre = Offset(
+                inset + usableWidth * (animatedX + steps) / columns,
+                inset + usableHeight * (steps - animatedY) / columns,
+            )
+
+            // Puck glow tint matching direction
+            val puckGlowColor = when {
+                animatedX < 0 && animatedY > 0 -> Color(0xFFF59E0B)
+                animatedX >= 0 && animatedY > 0 -> Color(0xFF06B6D4)
+                animatedX < 0 && animatedY <= 0 -> Color(0xFF8B5CF6)
+                else -> Color(0xFFEC4899)
+            }
+
+            // Glow aura
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(puckGlowColor.copy(alpha = 0.40f), Color.Transparent),
+                    center = centre,
+                    radius = inset * 2.2f,
+                ),
+                radius = inset * 2.2f,
+                center = centre,
+            )
+
+            // Outer specular ring
+            drawCircle(
+                color = Color.White.copy(alpha = 0.85f),
+                radius = inset,
+                center = centre,
+                style = Stroke(width = 2.dp.toPx())
+            )
+            // Solid center core
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White, puckGlowColor),
+                    center = centre,
+                    radius = inset * 0.75f,
+                ),
+                radius = inset * 0.75f,
+                center = centre,
             )
         }
-        drawCircle(color = Color.White, radius = inset, center = centre)
     }
 }
 

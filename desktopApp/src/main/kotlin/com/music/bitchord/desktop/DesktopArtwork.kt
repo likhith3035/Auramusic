@@ -49,10 +49,16 @@ internal object DesktopArtworkCache {
         if (url.isNullOrBlank()) return null
         images.get(url)?.let { return it }
         return runCatching {
-            URI(url).toURL().openConnection().apply {
-                connectTimeout = 10_000
-                readTimeout = 10_000
-            }.getInputStream().use { stream -> stream.readBytes().decodeToImageBitmap() }
+            if (url.startsWith("data:image/")) {
+                val base64 = url.substringAfter("base64,")
+                val bytes = java.util.Base64.getDecoder().decode(base64)
+                bytes.decodeToImageBitmap()
+            } else {
+                URI(url).toURL().openConnection().apply {
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                }.getInputStream().use { stream -> stream.readBytes().decodeToImageBitmap() }
+            }
         }.getOrNull()?.also { images.put(url, it) }
     }
 }
@@ -66,7 +72,7 @@ fun DesktopArtwork(
     contentDescription: String? = null,
     px: Int? = null,
 ) {
-    val sized = if (px != null) url.artworkAt(px) else url
+    val sized = if (px != null && url?.startsWith("data:") != true) url.artworkAt(px) else url
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = sized) {
         value = withContext(Dispatchers.IO) {
             DesktopArtworkCache.load(sized)

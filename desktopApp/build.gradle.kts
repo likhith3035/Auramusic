@@ -401,23 +401,23 @@ val windowsPortableAssemble by tasks.registering {
 
         // `lib\*` rather than a spelled-out classpath: the wildcard is what keeps this working when
         // a dependency is added, and the JVM is what expands it.
-        File(target, "BitChord.bat").writeText(
-            buildString {
-                appendLine("@echo off")
-                appendLine("setlocal")
-                appendLine("rem BitChord, portable. Needs a Java 21+ runtime on PATH or in JAVA_HOME.")
-                appendLine("set \"HERE=%~dp0\"")
-                appendLine("set \"RUNNER=java\"")
-                appendLine("if defined JAVA_HOME set \"RUNNER=%JAVA_HOME%\\bin\\java\"")
-                append("\"%RUNNER%\" -Dbitchord.version=$version")
-                if (moduleIndex.isNotBlank()) append(" -Dbitchord.module.index=$moduleIndex")
-                if (lastfmKey.isNotBlank() && lastfmSharedSecret.isNotBlank()) {
-                    append(" -Dbitchord.lastfm.key=$lastfmKey -Dbitchord.lastfm.secret=$lastfmSharedSecret")
-                }
-                appendLine(" -cp \"%HERE%lib\\*\" $mainClass %*")
-                appendLine("endlocal")
-            },
-        )
+        val batContent = buildString {
+            appendLine("@echo off")
+            appendLine("setlocal")
+            appendLine("rem AuraMusic, portable. Needs a Java 21+ runtime on PATH or in JAVA_HOME.")
+            appendLine("set \"HERE=%~dp0\"")
+            appendLine("set \"RUNNER=java\"")
+            appendLine("if defined JAVA_HOME set \"RUNNER=%JAVA_HOME%\\bin\\java\"")
+            append("\"%RUNNER%\" -Dbitchord.version=$version")
+            if (moduleIndex.isNotBlank()) append(" -Dbitchord.module.index=$moduleIndex")
+            if (lastfmKey.isNotBlank() && lastfmSharedSecret.isNotBlank()) {
+                append(" -Dbitchord.lastfm.key=$lastfmKey -Dbitchord.lastfm.secret=$lastfmSharedSecret")
+            }
+            appendLine(" -cp \"%HERE%lib\\*\" $mainClass %*")
+            appendLine("endlocal")
+        }
+        File(target, "BitChord.bat").writeText(batContent)
+        File(target, "AuraMusic.bat").writeText(batContent)
 
         // What "it builds" is not the same as "it runs", and the difference is exactly what shipped
         // a broken archive.
