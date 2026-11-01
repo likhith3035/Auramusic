@@ -51,3 +51,8 @@ dist/
 *.apk
 *.zip
 
+
+# Local promo & media
+promo/
+"references by me/"
+references by me/

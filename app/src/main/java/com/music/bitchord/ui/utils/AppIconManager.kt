@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.settings.AppIcon
 import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,19 @@ object AppIconManager {
      * ActivityManager from abruptly finishing the foreground task).
      */
     fun init(application: Application) {
+        // In debug builds, guarantee the default launcher alias is always enabled so Android Studio's
+        // run configuration can deploy and start MainActivityDefault via ADB without failure.
+        if (BuildConfig.DEBUG) {
+            val defaultComponent = ComponentName(application.packageName, AppIcon.DEFAULT.aliasName)
+            try {
+                application.packageManager.setComponentEnabledSetting(
+                    defaultComponent,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP,
+                )
+            } catch (_: Exception) {}
+        }
+
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 runningActivities++
@@ -104,6 +118,9 @@ object AppIconManager {
         try {
             for (icon in AppIcon.entries) {
                 if (icon != currentIcon) {
+                    // In debug builds, never disable DEFAULT alias so Android Studio run config doesn't break
+                    if (BuildConfig.DEBUG && icon == AppIcon.DEFAULT) continue
+
                     val otherComponent = ComponentName(packageName, icon.aliasName)
                     val state = pm.getComponentEnabledSetting(otherComponent)
                     if (state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
@@ -131,6 +148,19 @@ object AppIconManager {
         val currentIcon = AppSettings.appIcon.value
 
         for (icon in AppIcon.entries) {
+            // In debug builds, keep DEFAULT alias enabled for Android Studio runner
+            if (BuildConfig.DEBUG && icon == AppIcon.DEFAULT) {
+                val component = ComponentName(packageName, icon.aliasName)
+                try {
+                    pm.setComponentEnabledSetting(
+                        component,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        PackageManager.DONT_KILL_APP,
+                    )
+                } catch (_: Exception) {}
+                continue
+            }
+
             val component = ComponentName(packageName, icon.aliasName)
             val desiredState = if (icon == currentIcon) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED

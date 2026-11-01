@@ -202,4 +202,10 @@
     <string name="member_since">Member since</string>
     <string name="import_spotify">Import Spotify</string>
     <string name="import_spotify_subtitle">From a playlist link</string>
+    <string name="video_quality">Video quality</string>
+    <string name="video_quality_auto">Auto</string>
+    <string name="mix_view_bars">%1$d Bars</string>
+    <string name="mix_view_one_bar">1 Bar</string>
+    <string name="mix_view_seconds">%1$d sec</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>
