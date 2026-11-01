@@ -11,10 +11,17 @@
     <!-- Saving a track to Music outlives the screen it was asked from. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Ambient audio capture for Shazam music and lyric identification -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Touch feedback. The system's own haptics switch is honoured on top of
          this, so granting it doesn't override a user who turned buzzing off. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Bit-perfect output: setting Android 14's preferred mixer attributes
+         for a USB DAC. A normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <!--
       Asked for only when the output picker is first opened, and only on API 31+
@@ -125,6 +132,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.BitChord">
             <intent-filter>

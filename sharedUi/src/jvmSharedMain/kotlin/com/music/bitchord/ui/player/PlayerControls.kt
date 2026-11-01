@@ -1,5 +1,7 @@
 package com.music.bitchord.ui.player
 
+import androidx.compose.runtime.compositionLocalOf
+
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -829,6 +831,7 @@ internal fun CircleGlyph(
     onClick: () -> Unit,
     active: Boolean = false,
     haptic: Haptic = Haptic.Tap,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
     val discAlpha by animateFloatAsState(
@@ -836,7 +839,7 @@ internal fun CircleGlyph(
         label = "glyphDisc",
     )
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(34.dp)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = discAlpha))
@@ -2029,3 +2032,10 @@ private fun TrackAnalysisState.localizedLabel(): String = when (this) {
     TrackAnalysisState.WAITING -> stringResource(Res.string.waiting)
     TrackAnalysisState.FAILED -> stringResource(Res.string.failed)
 }
+
+/**
+ * The pale tint the player sets its secondary text and glyphs in, or white
+ * where there is no sleeve colour to echo. The title, transport, seek and
+ * volume bars stay white on purpose.
+ */
+internal val LocalPlayerTint = compositionLocalOf { Color.White }

@@ -41,6 +41,11 @@ interface AppUiHost {
     val onboardingCompleted: StateFlow<Boolean>
 
     fun setOnboardingCompleted(value: Boolean)
+
+    /** Whether developer gate for Aura AI has been unlocked via "auramusic by likhith". */
+    val auraAiUnlocked: StateFlow<Boolean>
+
+    fun setAuraAiUnlocked(value: Boolean)
 }
 
 object AppUi {
