@@ -98,10 +98,14 @@ fun rememberFullArtworkBlurImage(
     prepare: Boolean = true,
 ): ImageBitmap? {
     val context = LocalPlatformContext.current
-    var image by remember(imageUrl) { mutableStateOf(imageUrl?.let(fullBlurCache::get)) }
+    var image by remember { mutableStateOf(imageUrl?.let(fullBlurCache::get)) }
 
     LaunchedEffect(imageUrl, artPx, prepare) {
-        if (!prepare || imageUrl == null || image != null) return@LaunchedEffect
+        imageUrl?.let(fullBlurCache::get)?.let {
+            image = it
+            return@LaunchedEffect
+        }
+        if (!prepare || imageUrl == null) return@LaunchedEffect
         val request = ImageRequest.Builder(context)
             // Same URL as the player's 1200px sleeve, so this is a small decode
             // from Coil's shared fetch/disk result rather than another download.

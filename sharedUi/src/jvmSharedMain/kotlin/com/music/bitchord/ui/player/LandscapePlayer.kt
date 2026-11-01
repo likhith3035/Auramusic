@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,10 +33,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.MoreHoriz
-import com.music.bitchord.ui.AppUi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,8 +60,11 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
+import com.music.bitchord.ui.components.ExplicitBadge
+import com.music.bitchord.ui.components.menuAnchor
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.theme.stableStatusBarInsets
 import com.music.bitchord.data.canvas.CanvasArtwork
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.Song
@@ -157,7 +157,9 @@ internal fun LandscapePlayerLayout(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
+                // The status bar counted whether or not it is showing, so the
+                // layout holds still when the player hides it.
+                .windowInsetsPadding(WindowInsets.safeDrawing.union(stableStatusBarInsets())),
             contentAlignment = Alignment.TopCenter,
         ) {
             val compact = maxHeight < LANDSCAPE_COMPACT_HEIGHT
@@ -254,7 +256,7 @@ internal fun LandscapePlayerLayout(
                     .height(5.dp)
                     .shadow(2.dp, RoundedCornerShape(3.dp), clip = false)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color.White.copy(alpha = 0.70f)),
+                    .background(LocalPlayerTint.current.copy(alpha = 0.70f)),
             )
         }
     }
@@ -416,7 +418,6 @@ internal fun LandscapeCredits(
     /** The menu glyph is briefly the undo arrow after a quality upgrade. */
     showRevertCue: Boolean,
     onToggleLike: () -> Unit,
-    onDownload: (() -> Unit)? = null,
     onOpenMenu: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     /** Null browse id for anyone but the lead credit — see [NowPlayingScreen]. */
@@ -432,13 +433,15 @@ internal fun LandscapeCredits(
         ) {
             Column {
                 var titleOverflowing by remember { mutableStateOf(false) }
+                val artistColor = LocalPlayerTint.current.copy(alpha = 0.55f)
                 MarqueeText(
                     text = song.title,
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
                     onOverflowChange = { titleOverflowing = it },
+                    // Before the title, in the artist line's colour.
                     leading = if (song.isExplicit == true) {
-                        { ExplicitBadge(Color.White) }
+                        { ExplicitBadge(artistColor) }
                     } else {
                         null
                     },
@@ -451,7 +454,7 @@ internal fun LandscapeCredits(
                         artistCredits(song.artist, song.artists, song.artistId)
                     },
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.W500),
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = artistColor,
                     // A title that's also scrolling gets to go first — starting
                     // together reads as clutter, so the artist waits a beat.
                     startDelayMillis = if (titleOverflowing) MARQUEE_ARTIST_STAGGER_MS else 0L,
@@ -461,12 +464,12 @@ internal fun LandscapeCredits(
         }
         Spacer(Modifier.width(10.dp))
         // Same gate as the portrait player's: no account to like against for a
-        // guest, and no YouTube identity to rate a local file or a finished
-        // download against either.
-        if (signedIn && song.localUri == null) {
+        // guest — but a local file or a finished download is liked on the
+        // device, which needs none.
+        if (signedIn || song.localUri != null) {
             val liked = likeStatus == LikeStatus.LIKE
             CircleGlyph(
-                icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
+                icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
                 contentDescription = stringResource(
                     if (liked) Res.string.remove_from_liked else Res.string.like,
                 ),
@@ -476,28 +479,11 @@ internal fun LandscapeCredits(
             )
             Spacer(Modifier.width(8.dp))
         }
-        if (onDownload != null && song.localUri == null) {
-            val downloaded = song.videoId in AppUi.host.downloadedIds()
-            CircleGlyph(
-                icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
-                contentDescription = stringResource(
-                    if (downloaded) Res.string.downloaded else Res.string.download,
-                ),
-                onClick = {
-                    if (downloaded) {
-                        onOpenMenu()
-                    } else {
-                        onDownload()
-                    }
-                },
-                active = downloaded,
-            )
-            Spacer(Modifier.width(8.dp))
-        }
         CircleGlyph(
             icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),
             onClick = onOpenMenu,
+            modifier = Modifier.menuAnchor(),
         )
     }
 }
@@ -524,7 +510,6 @@ internal fun LandscapeLyricsPane(
     pickBar: @Composable () -> Unit = {},
     romanizationToggle: @Composable () -> Unit,
     translationToggle: @Composable () -> Unit,
-    shareToggle: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     panel: @Composable (Modifier) -> Unit,
 ) {
@@ -577,13 +562,7 @@ internal fun LandscapeLyricsPane(
                     onStatusClick = onStatusClick,
                 )
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                shareToggle()
-                Box(Modifier.size(34.dp)) { if (hasLyrics) translationToggle() }
-            }
+            Box(Modifier.size(34.dp)) { if (hasLyrics) translationToggle() }
         }
         }
     }
