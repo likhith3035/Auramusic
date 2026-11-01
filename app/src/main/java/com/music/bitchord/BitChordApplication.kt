@@ -9,6 +9,7 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
+import coil3.request.allowHardware
 import coil3.request.crossfade
 import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.DebugLog
@@ -75,15 +76,15 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // share one keystore master key and a first launch must not have two
         // threads racing to create it. Joined before onCreate returns, so
         // nothing that runs after startup can see any of them half open.
-        val backgroundInit = thread(name = "startup-init") {
+        thread(name = "startup-init", priority = Thread.NORM_PRIORITY) {
             SourceRegistry.init(this)
             AndroidStreamHooks.initInnerTubeX(this)
-            // Its own directory: canvas clips are looping video, not audio, and
-            // belong in a cache AudioCache's own limit and eviction policy were
-            // never sized for. See CanvasCache's doc for why this one exists at
-            // all — it is the fix for canvas clips re-fetching the same few
-            // seconds of video from the network on every loop.
             CanvasCache.init(this)
+            SearchHistory.init(this)
+            ListeningStats.init(this)
+            ArtistFacts.init(this)
+            SpotifyToken.init(this)
+            AudioCache.init(this)
         }
         // Migration-safe: an old single cookie becomes the first encrypted
         // session, while newer installs restore the profile the listener chose.
@@ -129,17 +130,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // The device's own listening record. Opened here rather than in
         // PlaybackService because the Replay page reads it from the UI side and
         // both live in this process — one owner, one directory.
-        ListeningStats.init(this)
         // After AppSettings, whose switch decides whether half of it runs.
-        ArtistFacts.init(this)
-        // One cache directory can only be opened once per process, and
-        // PlaybackService shares this one — so it's opened here, not there.
-        AudioCache.init(this)
-        // The offscreen WebView that mints a Spotify access token from the
-        // listener's own session cookie needs a Context, and nothing in the
-        // suspend call chain that reaches it (a track's canvas lookup) has
-        // one to hand — see SpotifyToken's doc for why.
-        SpotifyToken.init(this)
         // A sideloaded update is just a new APK over the old one, so app data —
         // including whatever the old build left in these caches — survives it
         // untouched. Wipe both on the first launch of a higher versionCode so a
@@ -156,7 +147,6 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         initLastfm()
         // The public "apps open right now" count; see Presence.
         com.music.bitchord.data.presence.AndroidPresence.install(this)
-        backgroundInit.join()
     }
 
     /**
@@ -194,7 +184,29 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
             // Covers arriving with a hard cut read as the list flickering as
             // it scrolls; a short fade reads as them developing.
             .crossfade(200)
+            .allowHardware(!emulatedGpu)
             .build()
+
+    /**
+     * Whether graphics here go through an emulator's GL translator rather than
+     * a real GPU driver — see [newImageLoader].
+     *
+     * On BlueStacks (Android 9) uploading a hardware bitmap aborts the whole
+     * process: the renderer turns a cover into a texture, the translator
+     * answers GL_INVALID_ENUM, and hwui's own error check kills the app —
+     * `glGenTextures error! GL_INVALID_ENUM`, from RenderThread, each time the
+     * app came back to the foreground with a 640px cover to decode. Covers in
+     * ordinary bitmaps never take that path.
+     *
+     * Asked of the driver on disk rather than of build properties, because
+     * emulators spoof those — BlueStacks reports itself as a Qualcomm Galaxy
+     * S22. `libEGL_emulation` is the AOSP emulator's translator, which no
+     * phone ships.
+     */
+    private val emulatedGpu: Boolean by lazy {
+        listOf("/vendor/lib64", "/vendor/lib", "/system/lib64", "/system/lib")
+            .any { java.io.File("$it/egl/libEGL_emulation.so").exists() }
+    }
 
     private fun initLastfm() {
         val sessionKey = AppSettings.lastfmSessionKey.value

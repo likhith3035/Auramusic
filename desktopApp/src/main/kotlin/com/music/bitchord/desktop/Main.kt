@@ -160,8 +160,19 @@ private fun desktopMain() = application {
             LocalDesktopWindowScope provides this,
         ) {
             Box(Modifier.fillMaxSize()) {
-                BitChordDesktopApp()
                 var showSplash by remember { mutableStateOf(true) }
+                var mountApp by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    // Allow the splash screen to paint immediately on the GPU before mounting desktop app UI
+                    kotlinx.coroutines.delay(64)
+                    mountApp = true
+                }
+
+                if (mountApp || !showSplash) {
+                    BitChordDesktopApp()
+                }
+
                 if (showSplash) {
                     AuraSplashScreen(
                         onFinished = { showSplash = false },

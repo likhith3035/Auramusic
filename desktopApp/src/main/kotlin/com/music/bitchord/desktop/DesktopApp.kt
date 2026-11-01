@@ -3759,6 +3759,9 @@ fun BitChordDesktopApp() {
                                         }
                                     }
                                     AuraFeature.REPLAY_2026 -> overlays.replay = true
+                                    AuraFeature.AURA_AI -> {
+                                        // Aura AI companion trigger
+                                    }
                                 }
                             },
                             onMoodClick = { mood ->

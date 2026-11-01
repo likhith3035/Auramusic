@@ -14,6 +14,7 @@ import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.playback.EqLayout
 import com.music.bitchord.playback.EqualizerPreset
+import com.music.bitchord.data.ai.AuraAiPersona
 import kotlinx.coroutines.flow.MutableStateFlow
 
 
@@ -57,6 +58,33 @@ enum class OutputPcmMode(val label: String) {
     PCM_16("16-bit PCM"),
     FLOAT_32("32-bit float"),
 }
+/**
+ * Which exclusive output, if any, a track is sent to unchanged. Declared in
+ * the order the settings picker lists them; persisted by name, so the order
+ * can change freely.
+ *
+ * Bit-perfect output bypasses the equalizer, loudness normalization,
+ * crossfade, Automix, playback speed and software volume: any of them would
+ * change the samples. Volume belongs to the DAC.
+ *
+ * See [com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput].
+ */
+enum class BitPerfectMode {
+    OFF,
+
+    /**
+     * BitChord's own USB Audio Class driver on libusb: any Android version,
+     * volume set on the DAC itself. Requires USB permission.
+     */
+    USB_DIRECT,
+
+    /** An AAudio exclusive stream to a built-in DAC, for digital audio players. */
+    DAP_EXCLUSIVE,
+
+    /** Android 14's bit-perfect mixer for a USB DAC. */
+    USB_ANDROID,
+}
+
 
 /**
  * What to keep when a track is saved to the device.
@@ -248,6 +276,24 @@ object AppSettings {
     /** Prefer an attached USB audio output over the system's normal route. */
     val preferUsbDac = MutableStateFlow(false)
 
+    /** Unprocessed output to a DAC; see [BitPerfectMode]. */
+    val bitPerfectMode = MutableStateFlow(BitPerfectMode.OFF)
+
+    /**
+     * Lets direct USB play to a DAC with no volume control BitChord can set:
+     * full scale, with the DAC's own knob (if any) the only volume. Off unless
+     * the listener accepts a second warning.
+     */
+    val usbAllowFixedVolume = MutableStateFlow(false)
+
+    /**
+     * Lets the exclusive output convert a track its DAC can't take as it is, to
+     * the DAC's highest format. Off, such a track goes to normal output and no
+     * sample on the exclusive path is ever changed.
+     */
+    val convertForLimitedDac = MutableStateFlow(false)
+
+
     /**
      * Level every track to the same loudness, using YouTube's own
      * normalization figure for it — see
@@ -390,6 +436,8 @@ object AppSettings {
 
     /** Hides the volume slider on the main player, leaving the rest of the layout to reflow. */
     val hideVolumeBar = MutableStateFlow(false)
+    val hideStatusBarInPlayer = MutableStateFlow(false)
+    const val KEY_HIDE_STATUS_BAR_IN_PLAYER = "hide_status_bar_in_player" 
 
     /** Hides the "Playing from" / "Played by" caption at the top of the main player. */
     val hideSongStatus = MutableStateFlow(false)
@@ -462,6 +510,12 @@ object AppSettings {
 
     /** Automatically collapses the lower controls after Spotify Canvas settles. */
     val spotifyCanvasAutoHide = MutableStateFlow(true)
+
+    /** Whether Aura AI has been unlocked via the secret developer search query. */
+    val auraAiUnlocked = MutableStateFlow(false)
+    val grokApiKey = MutableStateFlow("")
+    val geminiApiKey = MutableStateFlow("")
+    val auraAiPersona = MutableStateFlow(AuraAiPersona.COMPANION)
 
     /** Tries Spotify before Apple Music and the other animated-art providers. */
     val prioritizeSpotifyCanvas = MutableStateFlow(false)
@@ -835,7 +889,13 @@ object AppSettings {
             )
         }.getOrDefault(OutputPcmMode.PCM_16)
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
-        newReleaseAlertsEnabled.value = prefs.getBoolean(KEY_NEW_RELEASE_ALERTS, true)
+        bitPerfectMode.value = runCatching {
+            BitPerfectMode.valueOf(prefs.getString(KEY_BIT_PERFECT_MODE, null) ?: BitPerfectMode.OFF.name)
+        }.getOrDefault(BitPerfectMode.OFF)
+        usbAllowFixedVolume.value = prefs.getBoolean(KEY_USB_ALLOW_FIXED_VOLUME, false)
+        convertForLimitedDac.value = prefs.getBoolean(KEY_CONVERT_FOR_LIMITED_DAC, false)
+
+                newReleaseAlertsEnabled.value = prefs.getBoolean(KEY_NEW_RELEASE_ALERTS, true)
         newReleaseAlertFrequencyHours.value = prefs.getInt(KEY_NEW_RELEASE_ALERT_FREQUENCY, 12)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
@@ -882,6 +942,7 @@ object AppSettings {
         )
         stopOnTaskRemoved.value = prefs.getBoolean(KEY_STOP_ON_TASK_REMOVED, false)
         hideVolumeBar.value = prefs.getBoolean(KEY_HIDE_VOLUME_BAR, false)
+        hideStatusBarInPlayer.value = prefs.getBoolean(KEY_HIDE_STATUS_BAR_IN_PLAYER, false)
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
@@ -948,6 +1009,12 @@ object AppSettings {
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_URI, "").orEmpty()
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
         webdavUsername.value = prefs.getString(KEY_WEBDAV_USERNAME, "").orEmpty()
+        auraAiUnlocked.value = prefs.getBoolean(KEY_AURA_AI_UNLOCKED, false)
+        grokApiKey.value = prefs.getString(KEY_GROK_API_KEY, "").orEmpty()
+        geminiApiKey.value = prefs.getString(KEY_GEMINI_API_KEY, "").orEmpty()
+        auraAiPersona.value = runCatching {
+            AuraAiPersona.valueOf(prefs.getString(KEY_AURA_AI_PERSONA, null) ?: AuraAiPersona.COMPANION.name)
+        }.getOrDefault(AuraAiPersona.COMPANION)
         webdavPassword.value = authStore.webdavPassword.orEmpty()
         smbHost.value = prefs.getString(KEY_SMB_HOST, "").orEmpty()
         smbShare.value = prefs.getString(KEY_SMB_SHARE, "").orEmpty()
@@ -1319,6 +1386,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_STOP_ON_TASK_REMOVED, value).apply()
     }
 
+    fun setHideStatusBarInPlayer(value: Boolean) {
+        hideStatusBarInPlayer.value = value
+        prefs.edit().putBoolean(KEY_HIDE_STATUS_BAR_IN_PLAYER, value).apply()
+    }
+
     fun setHideVolumeBar(value: Boolean) {
         hideVolumeBar.value = value
         prefs.edit().putBoolean(KEY_HIDE_VOLUME_BAR, value).apply()
@@ -1337,6 +1409,26 @@ object AppSettings {
     fun setDontRepeatSuggestions(value: Boolean) {
         dontRepeatSuggestions.value = value
         prefs.edit().putBoolean(KEY_DONT_REPEAT_SUGGESTIONS, value).apply()
+    }
+
+    fun setAuraAiUnlocked(value: Boolean) {
+        auraAiUnlocked.value = value
+        prefs.edit().putBoolean(KEY_AURA_AI_UNLOCKED, value).apply()
+    }
+
+    fun setGrokApiKey(value: String) {
+        grokApiKey.value = value
+        prefs.edit().putString(KEY_GROK_API_KEY, value).apply()
+    }
+
+    fun setGeminiApiKey(value: String) {
+        geminiApiKey.value = value
+        prefs.edit().putString(KEY_GEMINI_API_KEY, value).apply()
+    }
+
+    fun setAuraAiPersona(value: AuraAiPersona) {
+        auraAiPersona.value = value
+        prefs.edit().putString(KEY_AURA_AI_PERSONA, value.name).apply()
     }
 
     fun setPreferMusicOnly(value: Boolean) {
@@ -1636,6 +1728,24 @@ object AppSettings {
         preferUsbDac.value = value
         prefs.edit().putBoolean(KEY_PREFER_USB_DAC, value).apply()
     }
+
+    fun setBitPerfectMode(value: BitPerfectMode) {
+        bitPerfectMode.value = value
+        prefs.edit().putString(KEY_BIT_PERFECT_MODE, value.name).apply()
+    }
+
+    fun setUsbAllowFixedVolume(value: Boolean) {
+        usbAllowFixedVolume.value = value
+        prefs.edit().putBoolean(KEY_USB_ALLOW_FIXED_VOLUME, value).apply()
+    }
+
+    fun setConvertForLimitedDac(value: Boolean) {
+        convertForLimitedDac.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_FOR_LIMITED_DAC, value).apply()
+    }
+
+
+    
 
     fun setLoudnessOffOnSpeaker(value: Boolean) {
         loudnessOffOnSpeaker.value = value
@@ -2079,6 +2189,9 @@ object AppSettings {
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
+    private const val KEY_BIT_PERFECT_MODE = "bit_perfect_mode"
+    private const val KEY_USB_ALLOW_FIXED_VOLUME = "usb_allow_fixed_volume"
+    private const val KEY_CONVERT_FOR_LIMITED_DAC = "convert_for_limited_dac"
     private const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
     private const val KEY_LOUDNESS_OFF_ON_SPEAKER = "loudness_off_on_speaker"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
@@ -2114,6 +2227,10 @@ object AppSettings {
     private const val KEY_NOTHING_OS_MODE = "nothing_os_mode"
     private const val KEY_APP_ICON = "app_icon"
     private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed_v1"
+    private const val KEY_AURA_AI_UNLOCKED = "aura_ai_unlocked"
+    private const val KEY_GROK_API_KEY = "grok_api_key"
+    private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+    private const val KEY_AURA_AI_PERSONA = "aura_ai_persona"
     private const val KEY_LAST_SEEN_WHATS_NEW_VERSION = "last_seen_whats_new_version"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_LYRICS_OFFSET_MS = "lyrics_offset_ms"

@@ -21,6 +21,9 @@ object AndroidAppUiHost : AppUiHost {
     override val onboardingCompleted get() = AppSettings.onboardingCompleted
     override fun setOnboardingCompleted(value: Boolean) = AppSettings.setOnboardingCompleted(value)
 
+    override val auraAiUnlocked get() = AppSettings.auraAiUnlocked
+    override fun setAuraAiUnlocked(value: Boolean) = AppSettings.setAuraAiUnlocked(value)
+
     @Composable
     override fun downloadedIds(): Set<String> {
         val saved by Downloads.saved.collectAsStateWithLifecycle()

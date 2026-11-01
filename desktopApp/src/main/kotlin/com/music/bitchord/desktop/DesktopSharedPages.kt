@@ -106,6 +106,16 @@ internal object DesktopAppUiHost : AppUiHost {
 
     override fun setOnboardingCompleted(value: Boolean) {}
 
+    private val _auraAiUnlocked = MutableStateFlow(persistence.boolean(KEY_AURA_AI_UNLOCKED, true))
+    override val auraAiUnlocked: StateFlow<Boolean> = _auraAiUnlocked
+
+    override fun setAuraAiUnlocked(value: Boolean) {
+        persistence.saveBoolean(KEY_AURA_AI_UNLOCKED, value)
+        _auraAiUnlocked.value = value
+    }
+
+    private const val KEY_AURA_AI_UNLOCKED = "aura_ai_unlocked"
+
     private const val KEY_SWIPE_PLAY_NEXT = "swipe_play_next"
     private const val KEY_HOME_RECENTS_VIEW = "home_recents_view"
 }

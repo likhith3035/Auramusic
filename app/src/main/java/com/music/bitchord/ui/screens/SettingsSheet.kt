@@ -81,6 +81,11 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Psychology
+import com.music.bitchord.data.ai.AuraAccessGate
+import com.music.bitchord.data.ai.AuraAiPersona
 import com.music.bitchord.data.AppUpdateChecker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -191,6 +196,7 @@ fun SettingsScreen(
     onSpotifyCanvasAuth: () -> Unit,
     onAppLanguage: () -> Unit,
     onShowUpdateDialog: (() -> Unit)? = null,
+    onAuraAiChat: (() -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -302,6 +308,10 @@ fun SettingsScreen(
     var confirmClearSongCache by remember { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
+    val auraAiUnlocked by AppSettings.auraAiUnlocked.collectAsStateWithLifecycle()
+    val auraAiPersona by AppSettings.auraAiPersona.collectAsStateWithLifecycle()
+    var showAuraUnlockCelebration by remember { mutableStateOf(false) }
+    var showCustomApiKeysDialog by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
 
     val batterySettingsLauncher = rememberLauncherForActivityResult(
@@ -403,8 +413,21 @@ fun SettingsScreen(
         )
         SearchField(
             query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            onSubmit = {},
+            onQueryChange = { query ->
+                searchQuery = query
+                if (AuraAccessGate.isAuraAiUnlockCode(query)) {
+                    AppSettings.setAuraAiUnlocked(true)
+                    showAuraUnlockCelebration = true
+                    searchQuery = ""
+                }
+            },
+            onSubmit = {
+                if (AuraAccessGate.isAuraAiUnlockCode(searchQuery)) {
+                    AppSettings.setAuraAiUnlocked(true)
+                    showAuraUnlockCelebration = true
+                    searchQuery = ""
+                }
+            },
             placeholder = stringResource(R.string.settings_search_hint),
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
         )
@@ -1707,6 +1730,92 @@ fun SettingsScreen(
             }
         }
 
+        if (auraAiUnlocked) {
+            SearchableSettingsGroup(search, header = "Aura AI & Developer") {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                row("Aura AI Companion", "ai", "aura", "chat", "bot", "assistant", "likhith", "companion") {
+                    SettingsRow(
+                        icon = Icons.Rounded.AutoAwesome,
+                        title = "Aura AI Companion",
+                        subtitle = "Acoustic psychology, roasts & instant recommendations",
+                        badge = "ACTIVE",
+                        onClick = { onAuraAiChat?.invoke() },
+                    )
+                }
+                row("Aura AI Persona", "persona", "personality", "roast", "mentor", "friend", "chill", "analytic") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Psychology,
+                        title = "AI Personality Persona",
+                        subtitle = auraAiPersona.displayName + " • " + auraAiPersona.subtitle,
+                        onClick = {
+                            val nextPersona = when (auraAiPersona) {
+                                AuraAiPersona.COMPANION -> AuraAiPersona.SAVAGE_ROASTER
+                                AuraAiPersona.SAVAGE_ROASTER -> AuraAiPersona.MUSICOLOGIST
+                                AuraAiPersona.MUSICOLOGIST -> AuraAiPersona.NIGHT_DJ
+                                AuraAiPersona.NIGHT_DJ -> AuraAiPersona.COMPANION
+                            }
+                            AppSettings.setAuraAiPersona(nextPersona)
+                        },
+                    )
+                }
+                row("Developer: Kami Likhith", "developer", "creator", "kami", "likhith", "github", "linkedin", "instagram", "portfolio") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Person,
+                        title = "Created by Kami Likhith",
+                        subtitle = "Solo creator & engineer behind AuraMusic (BitChord)",
+                        trailing = {
+                            Text(
+                                text = "@likhith3035",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        onClick = { uriHandler.openUri("https://github.com/likhith3035") },
+                    )
+                }
+                row("GitHub Profile", "github", "code", "repo", "likhith3035") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Language,
+                        title = "GitHub (@likhith3035)",
+                        subtitle = "https://github.com/likhith3035",
+                        onClick = { uriHandler.openUri("https://github.com/likhith3035") },
+                    )
+                }
+                row("LinkedIn Profile", "linkedin", "connect", "likhith-kami") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Person,
+                        title = "LinkedIn (Kami Likhith)",
+                        subtitle = "https://linkedin.com/in/likhith-kami",
+                        onClick = { uriHandler.openUri("https://linkedin.com/in/likhith-kami") },
+                    )
+                }
+                row("Instagram Profile", "instagram", "social", "lucky__likhith") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Person,
+                        title = "Instagram (@lucky__likhith)",
+                        subtitle = "https://www.instagram.com/lucky__likhith",
+                        onClick = { uriHandler.openUri("https://www.instagram.com/lucky__likhith") },
+                    )
+                }
+                row("Custom AI API Keys", "key", "groq", "gemini", "token", "ai key") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Key,
+                        title = "Custom AI API Keys (Optional)",
+                        subtitle = "Configure custom Groq & Gemini API keys or use built-in failover",
+                        onClick = { showCustomApiKeysDialog = true },
+                    )
+                }
+                row("Lock Aura AI", "lock", "hide", "disable", "gate") {
+                    SettingsRow(
+                        icon = Icons.Rounded.Lock,
+                        title = "Lock Aura AI",
+                        subtitle = "Lock companion until developer code is re-entered",
+                        onClick = { AppSettings.setAuraAiUnlocked(false) },
+                    )
+                }
+            }
+        }
+
         // Read after every group above has had its turn at the query, which is
         // what makes this an accurate "nothing here" rather than a guess.
         if (!search.anyMatch) {
@@ -1726,7 +1835,7 @@ fun SettingsScreen(
 
             Text(
                 text = buildAnnotatedString {
-                    append("AuraMusic $version by likhith  ")
+                    append("AuraMusic $version by Kami Likhith  ")
                     val linkStyles = TextLinkStyles(
                         style = SpanStyle(
                             color = MaterialTheme.colorScheme.primary,
@@ -1736,9 +1845,13 @@ fun SettingsScreen(
                     withLink(LinkAnnotation.Url("https://github.com/likhith3035", linkStyles)) {
                         append("GitHub")
                     }
-                    append("  ")
-                    withLink(LinkAnnotation.Url("https://devlikhith.vercel.app/", linkStyles)) {
-                        append("Developer")
+                    append(" • ")
+                    withLink(LinkAnnotation.Url("https://linkedin.com/in/likhith-kami", linkStyles)) {
+                        append("LinkedIn")
+                    }
+                    append(" • ")
+                    withLink(LinkAnnotation.Url("https://www.instagram.com/lucky__likhith", linkStyles)) {
+                        append("Instagram")
                     }
                     append("\n~YouTube Music & Listen Together Backend")
                 },
@@ -2024,6 +2137,118 @@ fun SettingsScreen(
     if (showChangelog) {
         AuraChangelogDialog(
             onDismissRequest = { showChangelog = false },
+        )
+    }
+
+    if (showAuraUnlockCelebration) {
+        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        AlertDialog(
+            onDismissRequest = { showAuraUnlockCelebration = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✨ Aura AI Companion Unlocked!", style = MaterialTheme.typography.titleLarge)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "Developed with passion by Kami Likhith",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "You've unlocked Aura AI — the acoustic intelligence companion built directly into AuraMusic.\n\n" +
+                                "🌟 Core Superpowers:\n" +
+                                "• Acoustic Psychology & Chronotype Analysis\n" +
+                                "• Musical Taste Roasting & Listening Stats\n" +
+                                "• 3-Word Lyric Search (Telugu cinema, Hindi & Global)\n" +
+                                "• 1-Tap Playable Smart Song Cards\n" +
+                                "• Aura Radar (Shazam Audio Fingerprinting)\n" +
+                                "• AI Vocal Stem Separator & Live Karaoke\n" +
+                                "• Aura Neural DJ Beatmatching\n\n" +
+                                "Connect with Kami Likhith:",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(onClick = { uriHandler.openUri("https://github.com/likhith3035") }) {
+                            Text("GitHub")
+                        }
+                        TextButton(onClick = { uriHandler.openUri("https://linkedin.com/in/likhith-kami") }) {
+                            Text("LinkedIn")
+                        }
+                        TextButton(onClick = { uriHandler.openUri("https://www.instagram.com/lucky__likhith") }) {
+                            Text("Instagram")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAuraUnlockCelebration = false
+                    onAuraAiChat?.invoke()
+                }) {
+                    Text("Launch Aura AI ✨")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAuraUnlockCelebration = false }) {
+                    Text("Done")
+                }
+            },
+        )
+    }
+
+    if (showCustomApiKeysDialog) {
+        var grokInput by remember { mutableStateOf(AppSettings.grokApiKey.value) }
+        var geminiInput by remember { mutableStateOf(AppSettings.geminiApiKey.value) }
+        AlertDialog(
+            onDismissRequest = { showCustomApiKeysDialog = false },
+            title = { Text("Custom AI API Keys (Optional)") },
+            text = {
+                Column {
+                    Text(
+                        text = "Leave empty to use AuraMusic's built-in multi-tier key failover pool.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                    OutlinedTextField(
+                        value = grokInput,
+                        onValueChange = { grokInput = it },
+                        label = { Text("Groq API Key (gsk_...)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = geminiInput,
+                        onValueChange = { geminiInput = it },
+                        label = { Text("Google Gemini API Key (AQ...)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    AppSettings.setGrokApiKey(grokInput.trim())
+                    AppSettings.setGeminiApiKey(geminiInput.trim())
+                    showCustomApiKeysDialog = false
+                }) {
+                    Text("Save Keys")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomApiKeysDialog = false }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
 }
