@@ -100,6 +100,14 @@ enum class AuraFeature(
         icon = "✨",
         gradientColors = listOf(Color(0xFFFFB703), Color(0xFFFB8500)),
     ),
+    AURA_AI(
+        title = "Aura AI Companion",
+        subtitle = "Acoustic psychology, roasts & instant recommendations",
+        badge = "GEN-AI",
+        actionLabel = "Chat",
+        icon = "✨",
+        gradientColors = listOf(Color(0xFF8A2387), Color(0xFFE94057), Color(0xFFF27121)),
+    ),
 }
 
 /**
