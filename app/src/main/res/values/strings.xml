@@ -1234,4 +1234,14 @@
     <string name="bit_perfect_status_inexact">%1$s · not exact: this source isn\'t lossless PCM</string>
     <string name="bit_perfect_status_waiting">Waiting for a lossless track on a supported output</string>
     <string name="bit_perfect_status_unavailable">Not available for this track (%1$s)</string>
+    <!-- AuraMusic Onboarding Experience -->
+    <string name="onboarding_title">Millions of songs,\nstream on AuraMusic</string>
+    <string name="onboarding_name_prompt">What should we call you?</string>
+    <string name="onboarding_name_hint">Your name</string>
+    <string name="onboarding_name_footer">Friends see this when you Listen Together. You can change it later in Settings.</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_connect_title">Connect your YouTube account</string>
+    <string name="onboarding_connect_body">Bring your library, playlists and mixes with you, and start a Listen Together party with friends.</string>
+    <string name="onboarding_sign_in_google">Sign in with Google</string>
+    <string name="onboarding_skip_sign_in">Skip sign in</string>
 </resources>
