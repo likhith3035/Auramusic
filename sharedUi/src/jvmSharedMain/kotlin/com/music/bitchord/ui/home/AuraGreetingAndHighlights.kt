@@ -27,8 +27,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,12 +48,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.ui.components.PAGE_GUTTER
+import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.NothingThemeTokens
 import java.util.Calendar
 
@@ -57,7 +67,7 @@ enum class AuraFeature(
     val subtitle: String,
     val badge: String,
     val actionLabel: String,
-    val icon: String,
+    val icon: ImageVector,
     val gradientColors: List<Color>,
 ) {
     STUDIO_EQ(
@@ -65,7 +75,7 @@ enum class AuraFeature(
         subtitle = "Parametric audio curve & bass boost",
         badge = "STUDIO",
         actionLabel = "Tune EQ",
-        icon = "🎛️",
+        icon = Icons.Rounded.GraphicEq,
         gradientColors = listOf(Color(0xFF00C6FF), Color(0xFF0072FF)),
     ),
     LISTEN_TOGETHER(
@@ -73,7 +83,7 @@ enum class AuraFeature(
         subtitle = "Zero-drift party rooms with live soundbites",
         badge = "SOCIAL",
         actionLabel = "Party",
-        icon = "📻",
+        icon = Icons.Rounded.Radio,
         gradientColors = listOf(Color(0xFFFF007F), Color(0xFF7928CA)),
     ),
     KARAOKE_LYRICS(
@@ -81,7 +91,7 @@ enum class AuraFeature(
         subtitle = "Word-by-word karaoke & live translation",
         badge = "LIVE",
         actionLabel = "Sing",
-        icon = "🎤",
+        icon = Icons.Rounded.Mic,
         gradientColors = listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)),
     ),
     SLEEP_TIMER(
@@ -89,7 +99,7 @@ enum class AuraFeature(
         subtitle = "Gentle fade-out while you drift to sleep",
         badge = "NIGHT",
         actionLabel = "Timer",
-        icon = "🌙",
+        icon = Icons.Rounded.Bedtime,
         gradientColors = listOf(Color(0xFF8338EC), Color(0xFF3A86FF)),
     ),
     REPLAY_2026(
@@ -97,7 +107,7 @@ enum class AuraFeature(
         subtitle = "Your top artists, tracks & hologram card",
         badge = "SPECIAL",
         actionLabel = "View",
-        icon = "✨",
+        icon = Icons.Rounded.Star,
         gradientColors = listOf(Color(0xFFFFB703), Color(0xFFFB8500)),
     ),
     AURA_AI(
@@ -105,17 +115,16 @@ enum class AuraFeature(
         subtitle = "Acoustic psychology, roasts & instant recommendations",
         badge = "GEN-AI",
         actionLabel = "Chat",
-        icon = "✨",
+        icon = Icons.Rounded.AutoAwesome,
         gradientColors = listOf(Color(0xFF8A2387), Color(0xFFE94057), Color(0xFFF27121)),
     ),
 }
 
 /**
- * Time of day categorization with curated celestial styling, mood responses, and icons.
+ * Time of day categorization with curated celestial styling, mood responses, and clean styling.
  */
 enum class TimeOfDay(
     val greeting: String,
-    val emoji: String,
     val periodTag: String,
     val dotMatrixGreeting: String,
     val subtitles: List<String>,
@@ -124,7 +133,6 @@ enum class TimeOfDay(
 ) {
     MORNING(
         greeting = "Good morning",
-        emoji = "🌅",
         periodTag = "SUNRISE VIBES",
         dotMatrixGreeting = "G O O D   M O R N I N G",
         subtitles = listOf(
@@ -132,7 +140,7 @@ enum class TimeOfDay(
             "Crisp morning melodies brewed to fuel your day",
             "Your morning coffee soundtrack is curated and ready",
         ),
-        moodPills = listOf("⚡ Morning Energy", "☕ Acoustic Brew", "🧘 Mindful Wakeup", "✨ Fresh Beats"),
+        moodPills = listOf("Morning Energy", "Acoustic Brew", "Mindful Wakeup", "Fresh Beats"),
         gradientColors = listOf(
             Color(0xFF381512).copy(alpha = 0.55f),
             Color(0xFF1E1026).copy(alpha = 0.65f),
@@ -141,15 +149,14 @@ enum class TimeOfDay(
     ),
     AFTERNOON(
         greeting = "Good afternoon",
-        emoji = "☀️",
         periodTag = "MIDDAY ENERGY",
         dotMatrixGreeting = "G O O D   A F T E R N O O N",
         subtitles = listOf(
             "Power through your afternoon with focus beats & favorite grooves",
-            "Midday energy boost — upbeat rhythms to keep momentum alive",
+            "Midday energy boost - upbeat rhythms to keep momentum alive",
             "Stay locked in the zone with your daily focus soundtrack",
         ),
-        moodPills = listOf("⚡ Midday Focus", "🔥 Upbeat Hits", "🎧 Deep Flow", "☕ Lofi Chill"),
+        moodPills = listOf("Midday Focus", "Upbeat Hits", "Deep Flow", "Lofi Chill"),
         gradientColors = listOf(
             Color(0xFF0C243B).copy(alpha = 0.55f),
             Color(0xFF0C1B2E).copy(alpha = 0.65f),
@@ -158,15 +165,14 @@ enum class TimeOfDay(
     ),
     EVENING(
         greeting = "Good evening",
-        emoji = "🌆",
         periodTag = "GOLDEN HOUR",
         dotMatrixGreeting = "G O O D   E V E N I N G",
         subtitles = listOf(
             "Unwind and recharge with chill vibes & golden hour melodies",
-            "Dusk is here — slow down and let the soul rhythms play",
+            "Dusk is here - slow down and let the soul rhythms play",
             "Sunset melodies crafted for a relaxed, serene evening",
         ),
-        moodPills = listOf("🌆 Golden Hour", "✨ Sunset Melodies", "🍷 Chill R&B", "🎷 Smooth Soul"),
+        moodPills = listOf("Golden Hour", "Sunset Melodies", "Chill R&B", "Smooth Soul"),
         gradientColors = listOf(
             Color(0xFF35122F).copy(alpha = 0.55f),
             Color(0xFF1E112E).copy(alpha = 0.65f),
@@ -175,7 +181,6 @@ enum class TimeOfDay(
     ),
     NIGHT(
         greeting = "Good night",
-        emoji = "🌙",
         periodTag = "MIDNIGHT AURA",
         dotMatrixGreeting = "G O O D   N I G H T",
         subtitles = listOf(
@@ -183,7 +188,7 @@ enum class TimeOfDay(
             "Dim the room lights and immerse in deep midnight audio",
             "Gentle midnight melodies designed for peaceful dreams",
         ),
-        moodPills = listOf("🌙 Late Night Lo-Fi", "🌌 Deep Ambient", "💤 Sleep Soundscapes", "🎹 Piano Dreams"),
+        moodPills = listOf("Late Night Lo-Fi", "Deep Ambient", "Sleep Soundscapes", "Piano Dreams"),
         gradientColors = listOf(
             Color(0xFF131038).copy(alpha = 0.55f),
             Color(0xFF0C1026).copy(alpha = 0.65f),
@@ -210,6 +215,7 @@ enum class TimeOfDay(
  * High-end dynamic greeting header rendered at the top of the AuraMusic Home feed.
  * Features an atmospheric celestial card, live digital clock pill, animated equalizer indicator,
  * dynamic contextual mood chips, and dual-mode theme support (Classic Aura vs Nothing OS).
+ * Strictly zero unicode emojis - clean vector glyphs and typography only.
  */
 @Composable
 fun AuraGreetingHeader(
@@ -307,14 +313,11 @@ fun AuraGreetingHeader(
                             .padding(horizontal = 7.dp, vertical = 3.5.dp),
                     ) {
                         if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                            Text(
-                                text = if (isPlaying) "⏸" else "▶",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                                color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Resume",
+                                tint = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
+                                modifier = Modifier.size(11.dp),
                             )
                             Spacer(Modifier.width(2.dp))
                             Text(
@@ -343,7 +346,7 @@ fun AuraGreetingHeader(
 
                 Spacer(Modifier.height(6.dp))
 
-                // Main headline greeting
+                // Main headline greeting (clean typography, no emojis)
                 val headlineText = if (!firstName.isNullOrBlank()) {
                     "${timeOfDay.greeting}, $firstName"
                 } else {
@@ -366,8 +369,8 @@ fun AuraGreetingHeader(
 
                 // Single-line compact subtitle (shows current/paused song if available)
                 val effectiveSubtitle = when {
-                    !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing • $currentSongTitle"
-                    !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused • $currentSongTitle"
+                    !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
+                    !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
                     else -> subtitle
                 }
                 Text(
@@ -413,7 +416,7 @@ fun AuraGreetingHeader(
             }
         }
     } else {
-        // Classic Aura: Luxurious Celestial Atmospheric Card with Ambient Radial Gradient (Compact Edition)
+        // Classic Aura: Luxurious Celestial Atmospheric Card with Ambient Gradient
         Surface(
             shape = RoundedCornerShape(18.dp),
             color = Color(0xFF10121C),
@@ -459,11 +462,13 @@ fun AuraGreetingHeader(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
-                                Text(
-                                    text = timeOfDay.emoji,
-                                    fontSize = 11.sp,
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF00D2FF)),
                                 )
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(5.dp))
                                 Text(
                                     text = timeOfDay.periodTag,
                                     style = MaterialTheme.typography.labelSmall.copy(
@@ -495,10 +500,11 @@ fun AuraGreetingHeader(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
                             ) {
                                 if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                    Text(
-                                        text = if (isPlaying) "⏸" else "▶",
-                                        fontSize = 10.sp,
-                                        color = Color.White,
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = if (isPlaying) "Pause" else "Resume",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(11.dp),
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
@@ -533,11 +539,11 @@ fun AuraGreetingHeader(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Dynamic Personalized Greeting
+                    // Dynamic Personalized Greeting (Zero emojis)
                     val greetingHeadline = if (!firstName.isNullOrBlank()) {
-                        "${timeOfDay.greeting}, $firstName ${timeOfDay.emoji}"
+                        "${timeOfDay.greeting}, $firstName"
                     } else {
-                        "${timeOfDay.greeting}, listener ${timeOfDay.emoji}"
+                        timeOfDay.greeting
                     }
 
                     Text(
@@ -555,8 +561,8 @@ fun AuraGreetingHeader(
                     Spacer(Modifier.height(2.dp))
 
                     val effectiveClassicSubtitle = when {
-                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing • $currentSongTitle"
-                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused • $currentSongTitle"
+                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
+                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
                         else -> subtitle
                     }
                     Text(
@@ -607,7 +613,7 @@ fun AuraGreetingHeader(
 
 /**
  * Feature Highlights carousel showcasing AuraMusic's flagship features
- * with uniform compact card dimensions, space-saving layout, and one-tap interaction.
+ * with uniform compact card dimensions, space-saving layout, and vector iconography.
  */
 @Composable
 fun FeatureHighlightsStrip(
@@ -660,7 +666,7 @@ fun FeatureHighlightsStrip(
                             .padding(horizontal = 11.dp, vertical = 9.dp),
                         verticalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        // Top Row: Compact Category Badge + Feature Icon
+                        // Top Row: Compact Category Badge + Feature Icon (Vector)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -684,7 +690,23 @@ fun FeatureHighlightsStrip(
                                 )
                             }
 
-                            Text(feature.icon, fontSize = 16.sp)
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (nothingOsMode) NothingThemeTokens.SurfaceElevated
+                                        else feature.gradientColors.first().copy(alpha = 0.16f)
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = feature.icon,
+                                    contentDescription = null,
+                                    tint = if (nothingOsMode) NothingThemeTokens.White else feature.gradientColors.first(),
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
                         }
 
                         // Bottom Section: Title, Subtitle, and subtle arrow
@@ -720,12 +742,13 @@ fun FeatureHighlightsStrip(
                                     modifier = Modifier.weight(1f),
                                 )
 
-                                Text(
-                                    text = "→",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first().copy(alpha = 0.90f),
-                                    modifier = Modifier.padding(start = 4.dp),
+                                Icon(
+                                    imageVector = BitChordIcons.ChevronRight,
+                                    contentDescription = null,
+                                    tint = if (nothingOsMode) NothingThemeTokens.Red else feature.gradientColors.first().copy(alpha = 0.90f),
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .size(12.dp),
                                 )
                             }
                         }
