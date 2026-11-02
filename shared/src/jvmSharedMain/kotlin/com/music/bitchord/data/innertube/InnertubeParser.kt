@@ -1359,7 +1359,7 @@ object InnertubeParser {
             albumName = credits.albumName,
             // A catalogue track is credited "Artist • Album • Year"; the
             // matching music video is "Artist • 417M views • 2.4M likes".
-            isVideo = byline.any { it.contains("views", ignoreCase = true) },
+            isVideo = renderer.musicVideoType()?.let { it != MUSIC_VIDEO_TYPE_ATV } ?: byline.any { it.contains("views", ignoreCase = true) },
             isExplicit = renderer.hasExplicitBadge(),
         )
     }

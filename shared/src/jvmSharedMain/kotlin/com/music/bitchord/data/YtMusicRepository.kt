@@ -1189,7 +1189,7 @@ object YtMusicRepository {
     suspend fun watchQueue(target: WatchTarget): Result<List<Song>> = call("watch:${target.playlistId}") {
         InnertubeParser.parseWatchQueue(
             Innertube.nextPlaylist(target.playlistId, target.videoId, target.params),
-        ).filterNot { it.isVideo }
+        )
     }
 
     /**
