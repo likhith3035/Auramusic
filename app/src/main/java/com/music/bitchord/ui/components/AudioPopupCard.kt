@@ -1,5 +1,8 @@
 package com.music.bitchord.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,12 +20,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -65,11 +71,19 @@ internal fun AudioPopupCard(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val animProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        animProgress.animateTo(
+            1f,
+            animationSpec = tween(durationMillis = 220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+        )
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .containSheetGestures()
+            .graphicsLayer { alpha = animProgress.value }
             .background(POPUP_SCRIM_COLOR)
             .clickable(
                 indication = null,
@@ -81,6 +95,13 @@ internal fun AudioPopupCard(
         Column(
             modifier = Modifier
                 .width(POPUP_WIDTH)
+                .graphicsLayer {
+                    val p = animProgress.value
+                    alpha = p
+                    val scale = lerp(0.92f, 1.0f, p)
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .clip(POPUP_CARD_SHAPE)
                 .then(
                     if (reduceDynamicBlur) {
