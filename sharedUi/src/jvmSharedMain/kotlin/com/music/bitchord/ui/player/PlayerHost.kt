@@ -65,6 +65,9 @@ interface PlayerHost {
     /** Holds the picture at [height] from now on, or lets it choose with null. Remembered. */
     fun setMusicVideoQuality(height: Int?) = Unit
 
+    /** Active stall notice when network slows down during video playback. */
+    val musicVideoStallNotice: StateFlow<String?> get() = MutableStateFlow(null)
+
     /**
      * Artwork for [song], resolving covers that live inside a remote file
      * (WebDAV, SMB) where the platform can. Returns [Song.thumbnailUrl] otherwise.
@@ -152,6 +155,13 @@ interface PlayerHost {
      */
     fun restorePlaybackSpeed() {}
 
+    /** Screen brightness level 0.01f..1.0f for video playback overlay. */
+    val screenBrightness: StateFlow<Float> get() = MutableStateFlow(0.5f)
+    fun setScreenBrightness(brightness: Float) {}
+
+    /** Records saved bytes in data economy telemetry. */
+    fun recordDataSaved(bytes: Long) {}
+
     /** Returns local playback and personal listening statistics for [videoId], if recorded. */
     suspend fun getSongPlayStats(videoId: String): com.music.bitchord.data.model.SongPlayStats? = null
 }
@@ -227,7 +237,7 @@ interface PlayerSettingsSource {
     val hideSongStatus: StateFlow<Boolean>
     val hideVolumeBar: StateFlow<Boolean>
     /** Hide the device status bar while the player is up. Always false where there is none. */
-    val hideStatusBar: StateFlow<Boolean>
+    val hideStatusBar: StateFlow<Boolean> get() = MutableStateFlow(false)
     val showQueueHistory: StateFlow<Boolean> get() = MutableStateFlow(true)
     val showListenTogetherButton: StateFlow<Boolean> get() = MutableStateFlow(true)
     val automixDetail: StateFlow<String?> get() = MutableStateFlow(null)
@@ -259,8 +269,14 @@ interface PlayerSettingsSource {
     val playbackSpeed: StateFlow<Float>
     val fastForwardHoldSpeed: StateFlow<Float>
     val rewindHoldSpeed: StateFlow<Float>
+    val userPrefersVideoMode: StateFlow<Boolean> get() = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val fullscreenVideoFill: StateFlow<Boolean> get() = kotlinx.coroutines.flow.MutableStateFlow(true)
+    val hiResAudioOverVideo: StateFlow<Boolean> get() = kotlinx.coroutines.flow.MutableStateFlow(true)
 
     fun setLastPlayerScreen(value: LastPlayerScreen)
+    fun setUserPrefersVideoMode(value: Boolean) {}
+    fun setFullscreenVideoFill(value: Boolean) {}
+    fun setHiResAudioOverVideo(value: Boolean) {}
     fun setLyricsOffsetMs(value: Int)
     fun setNothingOsMode(value: Boolean)
     fun setPlaybackSpeed(value: Float) {}

@@ -183,9 +183,13 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         override val fastForwardHoldSpeed get() = AppSettings.fastForwardHoldSpeed
 
         override val rewindHoldSpeed get() = AppSettings.rewindHoldSpeed
+        override val userPrefersVideoMode get() = AppSettings.userPrefersVideoMode
+        override val fullscreenVideoFill get() = AppSettings.fullscreenVideoFill
+        override val hiResAudioOverVideo get() = AppSettings.hiResAudioOverVideo
 
-
-
+        override fun setUserPrefersVideoMode(value: Boolean) = AppSettings.setUserPrefersVideoMode(value)
+        override fun setFullscreenVideoFill(value: Boolean) = AppSettings.setFullscreenVideoFill(value)
+        override fun setHiResAudioOverVideo(value: Boolean) = AppSettings.setHiResAudioOverVideo(value)
         override fun setLastPlayerScreen(value: LastPlayerScreen) = AppSettings.setLastPlayerScreen(value)
 
         override fun setLyricsOffsetMs(value: Int) = AppSettings.setLyricsOffsetMs(value)
@@ -241,6 +245,21 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
     override val musicVideoQuality: StateFlow<MusicVideoQualityUi> get() = MusicVideoEngine.quality
 
     override fun setMusicVideoQuality(height: Int?) = MusicVideoEngine.setQuality(height)
+
+    override val musicVideoStallNotice: StateFlow<String?> get() = MusicVideoEngine.stallNotice
+
+    private val _screenBrightness = MutableStateFlow(0.5f)
+    override val screenBrightness: StateFlow<Float> = _screenBrightness.asStateFlow()
+
+    override fun setScreenBrightness(brightness: Float) {
+        val clamped = brightness.coerceIn(0.01f, 1.0f)
+        _screenBrightness.value = clamped
+        com.music.bitchord.MainActivity.setScreenBrightness(clamped)
+    }
+
+    override fun recordDataSaved(bytes: Long) {
+        com.music.bitchord.data.network.AuraDataUsageTracker.recordSaved(bytes)
+    }
 
 
 

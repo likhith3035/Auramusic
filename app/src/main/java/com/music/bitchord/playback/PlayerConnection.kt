@@ -82,10 +82,15 @@ fun rememberMediaController(): MediaController? {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener(
-            { controller = runCatching { future.get() }.getOrNull() },
+            {
+                val c = runCatching { future.get() }.getOrNull()
+                controller = c
+                com.music.bitchord.ui.player.MusicVideoEngine.attach(c)
+            },
             ContextCompat.getMainExecutor(context),
         )
         onDispose {
+            com.music.bitchord.ui.player.MusicVideoEngine.attach(null)
             MediaController.releaseFuture(future)
             controller = null
         }
