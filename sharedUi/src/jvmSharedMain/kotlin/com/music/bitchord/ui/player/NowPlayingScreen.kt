@@ -23,6 +23,11 @@ import androidx.compose.ui.unit.Constraints
 import com.music.bitchord.ui.graphics.FADE_CURVE_STOPS
 import com.music.bitchord.ui.graphics.smootherStep
 import com.music.bitchord.playback.PlaybackPosition
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.CircleShape
+import com.music.bitchord.data.network.AuraNetworkMonitor
 import com.music.bitchord.sharedui.resources.*
 
 import androidx.compose.ui.graphics.ImageBitmap
@@ -845,6 +850,9 @@ fun NowPlayingScreen(
     var showCast by remember { mutableStateOf(false) }
     var showAudioOutput by remember { mutableStateOf(false) }
     var showVideoQuality by remember { mutableStateOf(false) }
+    var showBandwidthDialog by remember { mutableStateOf(false) }
+    val networkQuality by AuraNetworkMonitor.quality.collectAsStateWithLifecycle()
+    val videoStallNotice by PlayerPlatform.host.musicVideoStallNotice.collectAsStateWithLifecycle()
     var showLyricsProviders by remember { mutableStateOf(false) }
     var showAddSongs by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
@@ -889,7 +897,28 @@ fun NowPlayingScreen(
     val mixing by PlayerSettings.smartMixInProgress.collectAsStateWithLifecycle()
     // A music video plays its own picture where the sleeve is — see
     // [MusicVideoSurface] — and takes the place of any animated cover.
-    val videoMode = showsMusicVideo(song)
+    val canShowVideo = showsMusicVideo(song)
+    val userPrefersVideo by PlayerSettings.userPrefersVideoMode.collectAsStateWithLifecycle()
+    val videoMode = canShowVideo && userPrefersVideo
+    var showCellularVideoSwitchBanner by remember { mutableStateOf(false) }
+    var previousWasWifi by remember { mutableStateOf(networkQuality.isWifi) }
+
+    LaunchedEffect(networkQuality.isWifi, networkQuality.isMetered) {
+        val nowCellular = !networkQuality.isWifi || networkQuality.isMetered
+        if (previousWasWifi && nowCellular && videoMode) {
+            PlayerSettings.setUserPrefersVideoMode(false)
+            showCellularVideoSwitchBanner = true
+            PlayerPlatform.host.recordDataSaved(40 * 1024 * 1024L)
+        }
+        previousWasWifi = networkQuality.isWifi
+    }
+
+    LaunchedEffect(showCellularVideoSwitchBanner) {
+        if (showCellularVideoSwitchBanner) {
+            delay(6000L)
+            showCellularVideoSwitchBanner = false
+        }
+    }
     val canvas = rememberCanvasArtwork(song)?.takeUnless { videoMode }?.let {
         // Apple's 3:4 rendition runs under the whole phone screen, the way its
         // own player shows it; the square one stays the fallback.
@@ -1629,6 +1658,100 @@ fun NowPlayingScreen(
     // whichever layout is on screen, by [FrostedPlayerFrame] — they are
     // overlays over the player, not part of any shape of it.
     val playerOverlays: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = showCellularVideoSwitchBanner,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(240)) { -it },
+            exit = fadeOut(tween(200)) + slideOutVertically(tween(200)) { -it },
+            modifier = Modifier
+                .windowInsetsPadding(stableStatusBarInsets())
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF0F111A).copy(alpha = 0.94f))
+                    .border(1.dp, Color(0xFF6366F1).copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF6366F1)),
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "CELLULAR DETECTED",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFA78BFA),
+                                letterSpacing = 0.5.sp,
+                            ),
+                        )
+                        Text(
+                            text = "Switched to Studio Audio (Saved ~40 MB)",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                            ),
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .clickable {
+                                showCellularVideoSwitchBanner = false
+                                PlayerSettings.setUserPrefersVideoMode(true)
+                                PlayerPlatform.host.setMusicVideoQuality(480)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "WATCH ANYWAY",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            ),
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { showCellularVideoSwitchBanner = false },
+                    )
+                }
+            }
+        }
+        if (showBandwidthDialog) {
+            AuraBandwidthDialog(
+                quality = networkQuality,
+                nothingOsMode = nothingOsMode,
+                onConfirmQuality = { height ->
+                    PlayerPlatform.host.setMusicVideoQuality(height)
+                    PlayerSettings.setUserPrefersVideoMode(true)
+                    showBandwidthDialog = false
+                },
+                onStayOnAudio = {
+                    PlayerSettings.setUserPrefersVideoMode(false)
+                    showBandwidthDialog = false
+                },
+                onDismiss = {
+                    showBandwidthDialog = false
+                },
+            )
+        }
         if (showVideoQuality) {
             VideoQualitySheet(
                 hazeState = playerHaze,
@@ -1941,6 +2064,9 @@ fun NowPlayingScreen(
                     onRenderedChanged = { videoRendered = it },
                     onExitFullscreen = screenOrientation::portrait,
                     onOpenQuality = { showVideoQuality = true },
+                    position = position,
+                    durationMs = durationMs,
+                    onSeek = onSeek,
                     scrubber = {
                         PlayerScrubber(
                             shown = shown,
@@ -3496,6 +3622,67 @@ fun NowPlayingScreen(
                                             .align(Alignment.TopEnd)
                                             .padding(8.dp),
                                     )
+                                }
+                            }
+                        }
+
+                        if (canShowVideo && !docking() && !collapsePastHalf) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .offset {
+                                        val topY = (artTop() + VERSION_PILL_ART_INSET).roundToPx()
+                                        IntOffset(0, topY)
+                                    }
+                                    .graphicsLayer {
+                                        alpha = (1f - p() * 2.5f).coerceIn(0f, 1f)
+                                    },
+                                contentAlignment = Alignment.TopCenter,
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    SongVideoModePill(
+                                        isVideo = videoMode,
+                                        onSelectMode = { prefersVideo -> PlayerSettings.setUserPrefersVideoMode(prefersVideo) },
+                                        onRequestBandwidthCheck = { showBandwidthDialog = true },
+                                        nothingOsMode = nothingOsMode,
+                                    )
+
+                                    AnimatedVisibility(
+                                        visible = videoStallNotice != null && videoMode,
+                                        enter = fadeIn() + slideInVertically { it / 2 },
+                                        exit = fadeOut() + slideOutVertically { it / 2 },
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(top = 6.dp)
+                                                .clip(RoundedCornerShape(percent = 50))
+                                                .background(Color.Black.copy(alpha = 0.85f))
+                                                .border(BorderStroke(1.dp, Color(0xFFFFB74D).copy(alpha = 0.6f)), RoundedCornerShape(percent = 50))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(5.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFFFFB74D)),
+                                                )
+                                                Text(
+                                                    text = videoStallNotice.orEmpty(),
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 10.sp,
+                                                        color = Color.White,
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
