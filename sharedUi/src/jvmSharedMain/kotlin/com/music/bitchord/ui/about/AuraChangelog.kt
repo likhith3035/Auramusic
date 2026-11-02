@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
@@ -78,12 +80,12 @@ import androidx.compose.ui.window.DialogProperties
  * Filter categories for engineering and feature milestones.
  */
 enum class ChangelogCategory(val label: String, val emoji: String, val color: Color) {
-    All("All Updates", "⚡", Color(0xFF818CF8)),
-    Audio("Audio & Sleep", "🎵", Color(0xFF10B981)),
-    Lyrics("Lyrics & Caching", "📝", Color(0xFF38BDF8)),
-    QueueUI("Queue & Haptics", "✨", Color(0xFFA855F7)),
-    CloudParty("Cloud Party", "☁️", Color(0xFF8B5CF6)),
-    BuildEngineering("Build & CI Lab", "🛠️", Color(0xFFF59E0B)),
+    All("All Updates", "*", Color(0xFF818CF8)),
+    Audio("Audio & Sleep", "~", Color(0xFF10B981)),
+    Lyrics("Lyrics & Caching", "=", Color(0xFF38BDF8)),
+    QueueUI("Queue & Haptics", "#", Color(0xFFA855F7)),
+    CloudParty("Cloud Party", "^", Color(0xFF8B5CF6)),
+    BuildEngineering("Build & CI Lab", "+", Color(0xFFF59E0B)),
 }
 
 /**
@@ -340,7 +342,7 @@ val AURA_CHANGELOG_ENTRIES: List<ChangelogEntry> = listOf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DeveloperProfileCard(
-    developerName: String = "kami likhith",
+    developerName: String = "Kami Likhith",
     onOpenChangelog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -348,35 +350,36 @@ fun DeveloperProfileCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF13131A),
-        border = BorderStroke(1.dp, Color(0xFF272738)),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFF0F0F14),
+        border = BorderStroke(1.dp, Color(0xFF262636)),
         tonalElevation = 2.dp,
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(20.dp),
         ) {
-            // Header: Avatar, Name, and Role
+            // Header: Avatar, Name, Handle, and Role
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // Gradient Avatar with Initials
+                // Avatar with KL initials and Nothing Red hairline ring
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(54.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(Color(0xFF6366F1), Color(0xFFA855F7), Color(0xFFEC4899))
+                                colors = listOf(Color(0xFFD71921), Color(0xFF8B5CF6), Color(0xFF3B82F6))
                             )
-                        ),
+                        )
+                        .border(1.5.dp, Color.White.copy(alpha = 0.25f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "KL",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 19.sp,
                         color = Color.White,
                     )
                 }
@@ -386,46 +389,84 @@ fun DeveloperProfileCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             text = developerName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            fontSize = 17.sp,
+                            fontSize = 18.sp,
                         )
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF6366F1).copy(alpha = 0.20f))
+                                .background(Color(0xFFD71921).copy(alpha = 0.18f))
+                                .border(1.dp, Color(0xFFD71921).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                         ) {
                             Text(
-                                text = "Lead Dev",
-                                color = Color(0xFFA5B4FC),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                text = "LEAD ARCHITECT",
+                                color = Color(0xFFFF5252),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp,
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(3.dp))
 
                     Text(
-                        text = "Lead Developer & Maintainer · AuraMusic",
+                        text = "@likhith3035 · Sole Creator & Engineer",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9CA3AF),
+                        color = Color(0xFFA1A1AA),
                         fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
 
             Spacer(Modifier.height(14.dp))
 
-            // Bio / Description
+            // Tech Stack Badges Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val techStack = listOf(
+                    "Kotlin Multiplatform",
+                    "Compose Multiplatform",
+                    "Media3 ExoPlayer",
+                    "InnerTubeX Engine",
+                    "Render Cloud Sync",
+                    "Nothing OS AMOLED",
+                )
+                techStack.forEach { tech ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = tech,
+                            fontSize = 10.sp,
+                            color = Color(0xFFD4D4D8),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Bio / Engineering Manifesto
             Text(
-                text = "Building high-performance, beautiful multiplatform audio experiences with real-time sync, zero lag, and modern aesthetics.",
+                text = "Architected and crafted AuraMusic from the ground up. Dedicated to delivering high-fidelity lossless streaming, zero-stutter playback, cloud listen-together sync, and unapologetic AMOLED aesthetics.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFD1D5DB),
                 lineHeight = 18.sp,
@@ -433,17 +474,17 @@ fun DeveloperProfileCard(
 
             Spacer(Modifier.height(16.dp))
 
-            // Action Buttons
+            // Action & Connect Buttons Matrix
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // What's New Trigger
+                // Engineering Log
                 Button(
                     onClick = onOpenChangelog,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6366F1),
+                        containerColor = Color(0xFFD71921),
                         contentColor = Color.White,
                     ),
                     shape = RoundedCornerShape(12.dp),
@@ -457,7 +498,7 @@ fun DeveloperProfileCard(
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Engineering Log (${AURA_CHANGELOG_ENTRIES.size})",
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                     )
                 }
@@ -466,24 +507,27 @@ fun DeveloperProfileCard(
                 OutlinedButton(
                     onClick = { uriHandler.openUri("https://devlikhith.vercel.app/") },
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF374151)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE5E7EB)),
+                    border = BorderStroke(1.dp, Color(0xFF3F3F46)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF18181B),
+                        contentColor = Color(0xFFF4F4F5),
+                    ),
                     modifier = Modifier.height(38.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Person,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = Color(0xFF9CA3AF),
+                        tint = Color(0xFFA1A1AA),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(text = "Portfolio", fontSize = 12.sp)
+                    Text(text = "Portfolio", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
-                        tint = Color(0xFF6B7280),
+                        tint = Color(0xFF71717A),
                     )
                 }
 
@@ -491,34 +535,93 @@ fun DeveloperProfileCard(
                 OutlinedButton(
                     onClick = { uriHandler.openUri("https://github.com/likhith3035") },
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF374151)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE5E7EB)),
+                    border = BorderStroke(1.dp, Color(0xFF3F3F46)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF18181B),
+                        contentColor = Color(0xFFF4F4F5),
+                    ),
                     modifier = Modifier.height(38.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Code,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = Color(0xFF9CA3AF),
+                        tint = Color(0xFFA1A1AA),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(text = "GitHub", fontSize = 12.sp)
+                    Text(text = "GitHub @likhith3035", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
-                        tint = Color(0xFF6B7280),
+                        tint = Color(0xFF71717A),
                     )
                 }
 
-                // Live Telemetry / Pulse Link
+                // LinkedIn Link
+                OutlinedButton(
+                    onClick = { uriHandler.openUri("https://linkedin.com/in/likhith-kami") },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF0077B5).copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF0077B5).copy(alpha = 0.10f),
+                        contentColor = Color(0xFF38BDF8),
+                    ),
+                    modifier = Modifier.height(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = Color(0xFF38BDF8),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "LinkedIn", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = Color(0xFF38BDF8).copy(alpha = 0.7f),
+                    )
+                }
+
+                // Instagram Link
+                OutlinedButton(
+                    onClick = { uriHandler.openUri("https://www.instagram.com/lucky__likhith") },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE1306C).copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFFE1306C).copy(alpha = 0.10f),
+                        contentColor = Color(0xFFF472B6),
+                    ),
+                    modifier = Modifier.height(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Language,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = Color(0xFFF472B6),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "Instagram", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = Color(0xFFF472B6).copy(alpha = 0.7f),
+                    )
+                }
+
+                // Live Cloud Engine Link
                 OutlinedButton(
                     onClick = { uriHandler.openUri("https://auramusic-kjov.onrender.com/stats") },
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color(0xFF10B981).copy(alpha = 0.08f),
+                        containerColor = Color(0xFF10B981).copy(alpha = 0.10f),
                         contentColor = Color(0xFF34D399),
                     ),
                     modifier = Modifier.height(38.dp),
@@ -530,7 +633,7 @@ fun DeveloperProfileCard(
                             .background(Color(0xFF10B981))
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(text = "Live Pulse", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Cloud Status", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
@@ -1056,7 +1159,7 @@ private fun ChangelogTimelineItem(
                                         .padding(8.dp),
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = "⚠️", fontSize = 11.sp)
+                                        Text(text = "[!]", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.width(5.dp))
                                         Text(
                                             text = "What was happening / Challenge faced:",
@@ -1087,7 +1190,7 @@ private fun ChangelogTimelineItem(
                                         .padding(8.dp),
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = "✅", fontSize = 11.sp)
+                                        Text(text = "[OK]", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.width(5.dp))
                                         Text(
                                             text = "How we conquered it in code:",

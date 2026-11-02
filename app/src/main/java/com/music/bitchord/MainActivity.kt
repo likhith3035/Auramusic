@@ -1,5 +1,9 @@
 package com.music.bitchord
 
+import android.app.PictureInPictureParams
+import android.util.Rational
+import com.music.bitchord.ui.player.AndroidMusicVideo
+
 import android.view.KeyEvent
 import com.music.bitchord.ui.components.DacVolumeHud
 import com.music.bitchord.ui.components.DacVolumeKeys
@@ -354,6 +358,10 @@ import com.music.bitchord.ui.screens.AuraOfflineScreen
 import com.music.bitchord.ui.about.AuraV3WhatsNewDialog
 
 import com.music.bitchord.ui.splash.AuraSplashScreen
+import com.music.bitchord.ui.onboarding.AuraOnboardingScreen
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.CubicBezierEasing
 
 import com.music.bitchord.data.sources.TrackMatcher
 
@@ -435,6 +443,8 @@ import com.music.bitchord.ui.components.BrowseTarget
 
 import com.music.bitchord.ui.components.ConfirmationAlert
 
+import com.music.bitchord.ui.components.AuraActionSheet
+
 import com.music.bitchord.ui.components.DownloadManagerSheet
 
 import com.music.bitchord.ui.components.IosMenuPopover
@@ -452,6 +462,7 @@ import com.music.bitchord.ui.components.LongPressOrigin
 import com.music.bitchord.ui.components.SongActionsMenu
 
 import com.music.bitchord.ui.player.SongShareSheet
+import com.music.bitchord.ui.player.MusicVideoEngine
 
 import com.music.bitchord.ui.components.HeldContextMenu
 
@@ -717,11 +728,94 @@ internal fun shouldSkipAfterDislike(
 
 
 
+
+
+object AuraPipState {
+    val isInPip = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
+
+object AuraSignInLauncher {
+    val requestedSession = kotlinx.coroutines.flow.MutableStateFlow<WebSessionMode?>(null)
+}
+
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private var instance: java.lang.ref.WeakReference<MainActivity>? = null
+
+        fun setScreenBrightness(brightness: Float) {
+            val act = instance?.get() ?: return
+            act.runOnUiThread {
+                val lp = act.window.attributes
+                lp.screenBrightness = if (brightness < 0f) -1f else brightness.coerceIn(0.01f, 1.0f)
+                act.window.attributes = lp
+            }
+        }
+
+        fun getScreenBrightness(): Float {
+            val act = instance?.get() ?: return 0.5f
+            val b = act.window.attributes.screenBrightness
+            return if (b < 0f) {
+                try {
+                    val sys = android.provider.Settings.System.getInt(
+                        act.contentResolver,
+                        android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                    )
+                    (sys / 255f).coerceIn(0.01f, 1.0f)
+                } catch (_: Exception) {
+                    0.5f
+                }
+            } else {
+                b.coerceIn(0.01f, 1.0f)
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        if (instance?.get() === this) instance = null
+        super.onDestroy()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (AppSettings.enablePipPopup.value) {
+            enterPictureInPictureIfApplicable()
+        }
+    }
+
+    private fun enterPictureInPictureIfApplicable(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        if (!AppSettings.enablePipPopup.value) return false
+        val isVideoPlaying = MusicVideoEngine.playing.value && MusicVideoEngine.shownVideoId.value != null
+        if (!isVideoPlaying) return false
+
+        val aspect = MusicVideoEngine.aspect.value.coerceIn(0.5f, 2.39f)
+        val numerator = (aspect * 1000).toInt()
+        val denominator = 1000
+        val rational = Rational(numerator, denominator)
+
+        val params = PictureInPictureParams.Builder()
+            .setAspectRatio(rational)
+            .build()
+        return try {
+            enterPictureInPictureMode(params)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        AuraPipState.isInPip.value = isInPictureInPictureMode
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
+        instance = java.lang.ref.WeakReference(this)
 
         enableEdgeToEdge()
 
@@ -846,10 +940,33 @@ class MainActivity : AppCompatActivity() {
                 // the split is about to be laid out in.
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val inPip by AuraPipState.isInPip.collectAsStateWithLifecycle()
+                    if (inPip) {
+                        val pipVideoId by MusicVideoEngine.shownVideoId.collectAsStateWithLifecycle()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (pipVideoId != null) {
+                                AndroidMusicVideo(
+                                    videoId = pipVideoId!!,
+                                    fit = true,
+                                    onRenderedChanged = {},
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    } else {
 
                     var showWhatsNew by rememberSaveable { mutableStateOf(false) }
 
                     var showSplash by rememberSaveable { mutableStateOf(true) }
+
+                    val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
+
+                    var showOnboarding by rememberSaveable { mutableStateOf(!onboardingCompleted) }
 
                     var mountApp by remember { mutableStateOf(false) }
 
@@ -879,7 +996,7 @@ class MainActivity : AppCompatActivity() {
 
                             appBackdrop = appBackdrop,
 
-                        )
+                            )
 
                     }
 
@@ -893,7 +1010,11 @@ class MainActivity : AppCompatActivity() {
 
                                 showSplash = false
 
-                                if (lastSeenWhatsNewVersion < 4) {
+                                if (!onboardingCompleted) {
+
+                                    showOnboarding = true
+
+                                } else if (lastSeenWhatsNewVersion < 4) {
 
                                     showWhatsNew = true
 
@@ -932,6 +1053,39 @@ class MainActivity : AppCompatActivity() {
                         )
 
                     }
+
+                    AnimatedVisibility(
+
+                        visible = !showSplash && showOnboarding && !onboardingCompleted,
+
+                        enter = fadeIn(tween(350)),
+
+                        exit = slideOutVertically(
+
+                            animationSpec = tween(520, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))
+
+                        ) { it } + fadeOut(tween(380)),
+
+                    ) {
+
+                        AuraOnboardingScreen(
+
+                            onSignInGoogle = {
+                                showOnboarding = false
+                                AuraSignInLauncher.requestedSession.value = WebSessionMode.SIGN_IN
+                            },
+
+                            onSkipSignIn = {
+
+                                showOnboarding = false
+
+                            },
+
+                        )
+
+                    }
+
+                    } // close else for inPip
 
                 }
 
@@ -1213,6 +1367,8 @@ private fun BitChordApp(
      */
 
     var webSession by remember { mutableStateOf<WebSessionMode?>(null) }
+
+    
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
@@ -1933,6 +2089,8 @@ private fun BitChordApp(
     }
 
     val controller = rememberMediaController()
+
+
 
     val player = rememberPlayerState(controller)
 
@@ -8597,6 +8755,8 @@ private fun BitChordApp(
 
                 likeStatus = likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
 
+                onDismiss = { songActions = null },
+
                 onPlayNext = { playNext(song); songActions = null },
 
                 onAddToQueue = { addToQueue(song); songActions = null },
@@ -9203,7 +9363,7 @@ private fun BitChordApp(
                             nowPlaying(playerSong)
                         }
                     }
-                    IosMenuPopover(
+                    AuraActionSheet(
                         item = songActions?.takeIf { songMenuOrigin == null && menuFromPlayer },
                         anchor = songMenuAnchor,
                         onDismiss = { songActions = null },
@@ -9311,7 +9471,7 @@ private fun BitChordApp(
         LaunchedEffect(playerRaised) {
             if (!playerRaised && menuFromPlayer) songActions = null
         }
-        IosMenuPopover(
+        AuraActionSheet(
             item = songActions?.takeIf { songMenuOrigin == null && !(menuFromPlayer && playerRaised) },
             anchor = songMenuAnchor,
             onDismiss = { songActions = null },
@@ -9679,6 +9839,8 @@ private fun BitChordApp(
 
                 target = target.copy(playlist = playlist),
 
+                onDismiss = { browseActions = null },
+
                 onRenameInSheet = {
 
                     browseRenameInSheet = true
@@ -9933,7 +10095,7 @@ private fun BitChordApp(
 
         }
 
-        IosMenuPopover(
+        AuraActionSheet(
             item = browseActions?.takeIf { browseMenuOrigin == null },
             anchor = browseMenuAnchor,
             onDismiss = { browseActions = null },
@@ -10087,181 +10249,29 @@ private fun BitChordApp(
 
         // ---- Google sign-in (full screen WebView) ----
 
-        webSession?.let { mode ->
-
-            BackHandler { webSession = null }
-
-            // Raised by "Use this channel", read by the browser as "take the
-
-            // session from the page as it now stands". A counter rather than a
-
-            // flag so a second tap, after a failed first one, is still a new
-
-            // request rather than a value that was already true.
-
-            var captureRequest by remember(mode) { mutableIntStateOf(0) }
-
-            var captureFailed by remember(mode) { mutableStateOf(false) }
-
-            var pageReady by remember(mode) { mutableStateOf(false) }
-
-            var confirmingProfile by remember(mode) { mutableStateOf(false) }
-
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-
-                Column(Modifier.fillMaxSize()) {
-
-                    Row(
-
-                        Modifier
-
-                            .fillMaxWidth()
-
-                            .statusBarsPadding()
-
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-
-                        verticalAlignment = Alignment.CenterVertically,
-
-                    ) {
-
-                        IconButton(onClick = { webSession = null }) {
-
-                            Icon(
-
-                                Icons.Rounded.Close,
-
-                                contentDescription = stringResource(R.string.close),
-
-                                tint = MaterialTheme.colorScheme.onBackground,
-
-                            )
-
-                        }
-
-                        Column(Modifier.weight(1f)) {
-
-                            Text(
-
-                                text = when (mode) {
-
-                                    WebSessionMode.SIGN_IN -> stringResource(R.string.sign_in_youtube_music)
-
-                                    WebSessionMode.SWITCH_CHANNEL -> stringResource(R.string.choose_profile)
-
-                                },
-
-                                style = MaterialTheme.typography.titleMedium,
-
-                                color = MaterialTheme.colorScheme.onBackground,
-
-                            )
-
-                            if (pageReady) {
-
-                                Text(
-
-                                    text = if (captureFailed) {
-
-                                         stringResource(R.string.profile_unavailable)
-
-                                     } else {
-
-                                         stringResource(R.string.switch_profile_hint)
-
-                                    },
-
-                                    style = MaterialTheme.typography.bodySmall,
-
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-
-                                    maxLines = 2,
-
-                                )
-
-                            }
-
-                        }
-
-                        if (pageReady) {
-
-                            TextButton(onClick = {
-
-                                captureFailed = false
-
-                                confirmingProfile = true
-
-                                captureRequest++
-
-                            }, enabled = !confirmingProfile) {
-
-                                Text(
-
-                                    if (confirmingProfile) stringResource(R.string.checking)
-
-                                    else stringResource(R.string.use_this_profile),
-
-                                )
-
-                            }
-
-                        }
-
-                    }
-
-                    YtMusicLoginScreen(
-
-                        mode = mode,
-
-                        initialCookie = if (mode == WebSessionMode.SWITCH_CHANNEL) {
-
-                            googleAccounts.firstOrNull { it.accountId == activeAccountId }?.cookie
-
-                        } else null,
-
-                        captureRequest = captureRequest,
-
-                        onPageReady = { pageReady = it },
-
-                        onCaptureUnavailable = {
-
-                            confirmingProfile = false
-
-                            captureFailed = true
-
-                        },
-
-                        onCaptured = { session ->
-
-                            viewModel.onWebSession(session, mode) { accepted ->
-
-                                confirmingProfile = false
-
-                                if (accepted) {
-
-                                    webSession = null
-
-                                    if (mode == WebSessionMode.SIGN_IN) selectedTab = 2
-
-                                } else {
-
-                                    captureFailed = true
-
-                                }
-
-                            }
-
-                        },
-
-                    )
-
-                }
-
-            }
-
+        val externalWebSession by AuraSignInLauncher.requestedSession.collectAsStateWithLifecycle()
+        val activeWebSession = webSession ?: externalWebSession
+
+        activeWebSession?.let { mode ->
+            WebSessionOverlay(
+                mode = mode,
+                initialCookie = if (mode == WebSessionMode.SWITCH_CHANNEL) {
+                    googleAccounts.firstOrNull { it.accountId == activeAccountId }?.cookie
+                } else null,
+                onClose = {
+                    webSession = null
+                    AuraSignInLauncher.requestedSession.value = null
+                },
+                onCaptured = { session, callback ->
+                    viewModel.onWebSession(session, mode, callback)
+                },
+                onSuccess = {
+                    webSession = null
+                    AuraSignInLauncher.requestedSession.value = null
+                    if (mode == WebSessionMode.SIGN_IN) selectedTab = 2
+                },
+            )
         }
-
-
 
         // ---- Update available (once per launch) ----
 
@@ -11645,3 +11655,95 @@ private const val TAB_SEARCH = 3
 
 private const val TAB_KEY = "tab:"
 
+@Composable
+private fun WebSessionOverlay(
+    mode: WebSessionMode,
+    initialCookie: String?,
+    onClose: () -> Unit,
+    onCaptured: (com.music.bitchord.auth.CapturedSession, (Boolean) -> Unit) -> Unit,
+    onSuccess: () -> Unit,
+) {
+    BackHandler { onClose() }
+
+    var captureRequest by remember(mode) { mutableIntStateOf(0) }
+    var captureFailed by remember(mode) { mutableStateOf(false) }
+    var pageReady by remember(mode) { mutableStateOf(false) }
+    var confirmingProfile by remember(mode) { mutableStateOf(false) }
+
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.close),
+                        tint = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = when (mode) {
+                            WebSessionMode.SIGN_IN -> stringResource(R.string.sign_in_youtube_music)
+                            WebSessionMode.SWITCH_CHANNEL -> stringResource(R.string.choose_profile)
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    if (pageReady) {
+                        Text(
+                            text = if (captureFailed) {
+                                stringResource(R.string.profile_unavailable)
+                            } else {
+                                stringResource(R.string.switch_profile_hint)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                        )
+                    }
+                }
+                if (pageReady) {
+                    TextButton(
+                        onClick = {
+                            captureFailed = false
+                            confirmingProfile = true
+                            captureRequest++
+                        },
+                        enabled = !confirmingProfile,
+                    ) {
+                        Text(
+                            if (confirmingProfile) stringResource(R.string.checking)
+                            else stringResource(R.string.use_this_profile),
+                        )
+                    }
+                }
+            }
+            YtMusicLoginScreen(
+                mode = mode,
+                initialCookie = initialCookie,
+                captureRequest = captureRequest,
+                onPageReady = { pageReady = it },
+                onCaptureUnavailable = {
+                    confirmingProfile = false
+                    captureFailed = true
+                },
+                onCaptured = { session ->
+                    onCaptured(session) { accepted ->
+                        confirmingProfile = false
+                        if (accepted) {
+                            onSuccess()
+                        } else {
+                            captureFailed = true
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
