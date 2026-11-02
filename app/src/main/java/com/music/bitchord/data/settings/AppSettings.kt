@@ -453,7 +453,21 @@ object AppSettings {
      * video. The video itself is still handed to the player first so its
      * metadata appears immediately while the catalogue match is resolved.
      */
-    val preferMusicOnly = MutableStateFlow(false)
+    val preferMusicOnly = MutableStateFlow(true)
+    val userPrefersVideoMode = MutableStateFlow(false)
+    val enablePipPopup = MutableStateFlow(false)
+    val fullscreenVideoFill = MutableStateFlow(true)
+    val hiResAudioOverVideo = MutableStateFlow(true)
+    val smartCellularAutoSwitch = MutableStateFlow(true)
+    val cellularDataBytes = MutableStateFlow(0L)
+    val wifiDataBytes = MutableStateFlow(0L)
+    val videoDataBytes = MutableStateFlow(0L)
+    val audioDataBytes = MutableStateFlow(0L)
+    val otherDataBytes = MutableStateFlow(0L)
+    val savedDataBytes = MutableStateFlow(0L)
+    val dataUsageResetTimeMs = MutableStateFlow(0L)
+    val cellularDataSaver = MutableStateFlow(false)
+    val cellularBudgetMb = MutableStateFlow(0)
 
     /** Analyzes audio waveform/envelope to align matching playback moment between versions. */
     val smartVersionAlignment = MutableStateFlow(true)
@@ -836,6 +850,7 @@ object AppSettings {
         com.music.bitchord.data.spotify.LocalPlaylistStore.init(context)
         readAll()
         watchConnection(context)
+        com.music.bitchord.data.network.AuraDataUsageTracker.start()
     }
 
     /**
@@ -946,7 +961,21 @@ object AppSettings {
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
-        preferMusicOnly.value = prefs.getBoolean(KEY_PREFER_MUSIC_ONLY, false)
+        userPrefersVideoMode.value = prefs.getBoolean(KEY_USER_PREFERS_VIDEO_MODE, false)
+        enablePipPopup.value = prefs.getBoolean(KEY_ENABLE_PIP_POPUP, false)
+        fullscreenVideoFill.value = prefs.getBoolean(KEY_FULLSCREEN_VIDEO_FILL, true)
+        hiResAudioOverVideo.value = prefs.getBoolean(KEY_HI_RES_AUDIO_OVER_VIDEO, true)
+        smartCellularAutoSwitch.value = prefs.getBoolean(KEY_SMART_CELLULAR_AUTO_SWITCH, true)
+        preferMusicOnly.value = prefs.getBoolean(KEY_PREFER_MUSIC_ONLY, !userPrefersVideoMode.value)
+        cellularDataBytes.value = prefs.getLong(KEY_DATA_CELLULAR_BYTES, 0L)
+        wifiDataBytes.value = prefs.getLong(KEY_DATA_WIFI_BYTES, 0L)
+        videoDataBytes.value = prefs.getLong(KEY_DATA_VIDEO_BYTES, 0L)
+        audioDataBytes.value = prefs.getLong(KEY_DATA_AUDIO_BYTES, 0L)
+        otherDataBytes.value = prefs.getLong(KEY_DATA_OTHER_BYTES, 0L)
+        savedDataBytes.value = prefs.getLong(KEY_DATA_SAVED_BYTES, 0L)
+        dataUsageResetTimeMs.value = prefs.getLong(KEY_DATA_RESET_TIME, System.currentTimeMillis())
+        cellularDataSaver.value = prefs.getBoolean(KEY_CELLULAR_DATA_SAVER, false)
+        cellularBudgetMb.value = prefs.getInt(KEY_CELLULAR_BUDGET_MB, 0)
         smartVersionAlignment.value = prefs.getBoolean(KEY_SMART_VERSION_ALIGNMENT, true)
         reduceDynamicBlur.value = prefs.getBoolean(KEY_REDUCE_BLUR, false)
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
@@ -1129,10 +1158,23 @@ object AppSettings {
     private fun watchConnection(context: Context) {
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
         val refresh = {
-            meteredConnection.value = runCatching {
+            val metered = runCatching {
                 if (manager.activeNetwork == null) null else manager.isActiveNetworkMetered
             }.getOrNull()
-            isOnline.value = evaluateIsOnline(manager)
+            meteredConnection.value = metered
+            val online = evaluateIsOnline(manager)
+            isOnline.value = online
+
+            val active = manager.activeNetwork
+            val caps = active?.let { manager.getNetworkCapabilities(it) }
+            val bandwidth = caps?.linkDownstreamBandwidthKbps ?: 20_000
+            val isWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            com.music.bitchord.data.network.AuraNetworkMonitor.update(
+                isOnline = online,
+                isMetered = metered == true,
+                bandwidthKbps = bandwidth,
+                isWifi = isWifi,
+            )
         }
         refresh()
         runCatching {
@@ -1431,9 +1473,100 @@ object AppSettings {
         prefs.edit().putString(KEY_AURA_AI_PERSONA, value.name).apply()
     }
 
+    fun setEnablePipPopup(value: Boolean) {
+        enablePipPopup.value = value
+        prefs.edit().putBoolean(KEY_ENABLE_PIP_POPUP, value).apply()
+    }
+
+    fun setUserPrefersVideoMode(value: Boolean) {
+        userPrefersVideoMode.value = value
+        preferMusicOnly.value = !value
+        prefs.edit()
+            .putBoolean(KEY_USER_PREFERS_VIDEO_MODE, value)
+            .putBoolean(KEY_PREFER_MUSIC_ONLY, !value)
+            .apply()
+    }
+
     fun setPreferMusicOnly(value: Boolean) {
         preferMusicOnly.value = value
-        prefs.edit().putBoolean(KEY_PREFER_MUSIC_ONLY, value).apply()
+        userPrefersVideoMode.value = !value
+        prefs.edit()
+            .putBoolean(KEY_PREFER_MUSIC_ONLY, value)
+            .putBoolean(KEY_USER_PREFERS_VIDEO_MODE, !value)
+            .apply()
+    }
+
+    fun setFullscreenVideoFill(value: Boolean) {
+        fullscreenVideoFill.value = value
+    }
+
+    fun setHiResAudioOverVideo(value: Boolean) {
+        hiResAudioOverVideo.value = value
+        prefs.edit().putBoolean(KEY_HI_RES_AUDIO_OVER_VIDEO, value).apply()
+    }
+
+    fun setSmartCellularAutoSwitch(value: Boolean) {
+        smartCellularAutoSwitch.value = value
+        prefs.edit().putBoolean(KEY_SMART_CELLULAR_AUTO_SWITCH, value).apply()
+        prefs.edit().putBoolean(KEY_FULLSCREEN_VIDEO_FILL, value).apply()
+    }
+
+    fun addDataUsage(cellularDelta: Long, wifiDelta: Long, videoDelta: Long, audioDelta: Long, otherDelta: Long) {
+        if (cellularDelta <= 0 && wifiDelta <= 0 && videoDelta <= 0 && audioDelta <= 0 && otherDelta <= 0) return
+        val newCell = cellularDataBytes.value + cellularDelta
+        val newWifi = wifiDataBytes.value + wifiDelta
+        val newVid = videoDataBytes.value + videoDelta
+        val newAud = audioDataBytes.value + audioDelta
+        val newOth = otherDataBytes.value + otherDelta
+        cellularDataBytes.value = newCell
+        wifiDataBytes.value = newWifi
+        videoDataBytes.value = newVid
+        audioDataBytes.value = newAud
+        otherDataBytes.value = newOth
+        prefs.edit()
+            .putLong(KEY_DATA_CELLULAR_BYTES, newCell)
+            .putLong(KEY_DATA_WIFI_BYTES, newWifi)
+            .putLong(KEY_DATA_VIDEO_BYTES, newVid)
+            .putLong(KEY_DATA_AUDIO_BYTES, newAud)
+            .putLong(KEY_DATA_OTHER_BYTES, newOth)
+            .apply()
+    }
+
+    fun addSavedBytes(delta: Long) {
+        if (delta <= 0) return
+        val newSaved = savedDataBytes.value + delta
+        savedDataBytes.value = newSaved
+        prefs.edit().putLong(KEY_DATA_SAVED_BYTES, newSaved).apply()
+    }
+
+    fun resetDataUsageStats() {
+        cellularDataBytes.value = 0L
+        wifiDataBytes.value = 0L
+        videoDataBytes.value = 0L
+        audioDataBytes.value = 0L
+        otherDataBytes.value = 0L
+        savedDataBytes.value = 0L
+        val now = System.currentTimeMillis()
+        dataUsageResetTimeMs.value = now
+        prefs.edit()
+            .putLong(KEY_DATA_CELLULAR_BYTES, 0L)
+            .putLong(KEY_DATA_WIFI_BYTES, 0L)
+            .putLong(KEY_DATA_VIDEO_BYTES, 0L)
+            .putLong(KEY_DATA_AUDIO_BYTES, 0L)
+            .putLong(KEY_DATA_OTHER_BYTES, 0L)
+            .putLong(KEY_DATA_SAVED_BYTES, 0L)
+            .putLong(KEY_DATA_RESET_TIME, now)
+            .apply()
+    }
+
+    fun setCellularDataSaver(value: Boolean) {
+        cellularDataSaver.value = value
+        prefs.edit().putBoolean(KEY_CELLULAR_DATA_SAVER, value).apply()
+    }
+
+    fun setCellularBudgetMb(value: Int) {
+        cellularBudgetMb.value = value
+        prefs.edit().putInt(KEY_CELLULAR_BUDGET_MB, value).apply()
     }
 
     fun setSmartVersionAlignment(value: Boolean) {
@@ -2220,7 +2353,21 @@ object AppSettings {
     private const val KEY_HIDE_SONG_STATUS = "hide_song_status"
     private const val KEY_SWIPE_TO_PLAY_NEXT = "swipe_to_play_next"
     private const val KEY_DONT_REPEAT_SUGGESTIONS = "dont_repeat_suggestions"
-    private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
+private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
+    private const val KEY_USER_PREFERS_VIDEO_MODE = "user_prefers_video_mode"
+    private const val KEY_ENABLE_PIP_POPUP = "enable_pip_popup"
+    private const val KEY_FULLSCREEN_VIDEO_FILL = "fullscreen_video_fill"
+    private const val KEY_HI_RES_AUDIO_OVER_VIDEO = "hi_res_audio_over_video"
+    private const val KEY_SMART_CELLULAR_AUTO_SWITCH = "smart_cellular_auto_switch"
+    private const val KEY_DATA_CELLULAR_BYTES = "data_cellular_bytes"
+    private const val KEY_DATA_WIFI_BYTES = "data_wifi_bytes"
+    private const val KEY_DATA_VIDEO_BYTES = "data_video_bytes"
+    private const val KEY_DATA_AUDIO_BYTES = "data_audio_bytes"
+    private const val KEY_DATA_OTHER_BYTES = "data_other_bytes"
+    private const val KEY_DATA_SAVED_BYTES = "data_saved_bytes"
+    private const val KEY_DATA_RESET_TIME = "data_reset_time"
+    private const val KEY_CELLULAR_DATA_SAVER = "cellular_data_saver"
+    private const val KEY_CELLULAR_BUDGET_MB = "cellular_budget_mb"
     private const val KEY_SMART_VERSION_ALIGNMENT = "smart_version_alignment"
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"

@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.screens
 
+import com.music.bitchord.ui.components.AuraDataUsageCard
 import android.content.Context
 import android.content.Intent
 import android.media.AudioFormat
@@ -252,6 +253,8 @@ fun SettingsScreen(
     val fastForwardHoldSpeed by AppSettings.fastForwardHoldSpeed.collectAsStateWithLifecycle()
     val rewindHoldSpeed by AppSettings.rewindHoldSpeed.collectAsStateWithLifecycle()
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
+    val userPrefersVideoMode by AppSettings.userPrefersVideoMode.collectAsStateWithLifecycle()
+    val cellularDataSaver by AppSettings.cellularDataSaver.collectAsStateWithLifecycle()
     val smartVersionAlignment by AppSettings.smartVersionAlignment.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val localMusicFolderUri by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
@@ -579,24 +582,73 @@ fun SettingsScreen(
             }
         }
 
-        SearchableSettingsGroup(search, header = stringResource(R.string.playback)) {
-            val preferMusicOnlyTitle = stringResource(R.string.prefer_music_only)
-            row(preferMusicOnlyTitle, "video", "audio", "music video") {
+        // Data Usage & Network Economy section
+        SearchableSettingsGroup(search, header = "Data Usage & Network Economy") {
+            val usageCardTitle = "Data Usage Telemetry"
+            row(usageCardTitle, "data", "usage", "network", "consumption", "cellular", "wifi", divided = false) {
+                AuraDataUsageCard(nothingOsMode = nothingOsMode)
+            }
+
+            val dataSaverTitle = "Cellular Data Saver"
+            row(dataSaverTitle, "data saver", "cellular", "bandwidth", "economy") {
                 SettingsRow(
-                    icon = Icons.Rounded.SmartDisplay,
-                    title = preferMusicOnlyTitle,
-                    subtitle = stringResource(R.string.prefer_music_only_subtitle),
+                    icon = Icons.Rounded.SignalCellularAlt,
+                    title = dataSaverTitle,
+                    subtitle = "Automatically steps down to 360p video and studio audio when connected to mobile data",
                     trailing = {
                         Switch(
-                            checked = preferMusicOnly,
-                            onCheckedChange = AppSettings::setPreferMusicOnly,
+                            checked = cellularDataSaver,
+                            onCheckedChange = AppSettings::setCellularDataSaver,
                             colors = SwitchDefaults.colors(
                                 checkedTrackColor = MaterialTheme.colorScheme.primary,
                                 checkedBorderColor = MaterialTheme.colorScheme.primary,
                             ),
                         )
                     },
-                    onClick = { AppSettings.setPreferMusicOnly(!preferMusicOnly) },
+                    onClick = { AppSettings.setCellularDataSaver(!cellularDataSaver) },
+                )
+            }
+        }
+
+        SearchableSettingsGroup(search, header = stringResource(R.string.playback)) {
+            val preferMusicOnlyTitle = "Default playback mode"
+            row(preferMusicOnlyTitle, "video", "audio", "music video", "playback") {
+                SettingsRow(
+                    icon = Icons.Rounded.SmartDisplay,
+                    title = preferMusicOnlyTitle,
+                    subtitle = if (!userPrefersVideoMode) "Studio Audio (Album art & canvas)" else "Video (Synchronized picture)",
+                    value = if (!userPrefersVideoMode) "Audio" else "Video",
+                    trailing = {
+                        Switch(
+                            checked = userPrefersVideoMode,
+                            onCheckedChange = AppSettings::setUserPrefersVideoMode,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setUserPrefersVideoMode(!userPrefersVideoMode) },
+                )
+            }
+            val pipPopupTitle = "Picture-in-Picture (PiP) popup"
+            val enablePipPopup by AppSettings.enablePipPopup.collectAsStateWithLifecycle()
+            row(pipPopupTitle, "pip", "picture in picture", "popup", "floating", "video") {
+                SettingsRow(
+                    icon = Icons.Rounded.SmartDisplay,
+                    title = pipPopupTitle,
+                    subtitle = if (enablePipPopup) "Shows a floating video window when leaving app" else "Disabled: Pure background audio with no floating popup",
+                    trailing = {
+                        Switch(
+                            checked = enablePipPopup,
+                            onCheckedChange = AppSettings::setEnablePipPopup,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setEnablePipPopup(!enablePipPopup) },
                 )
             }
             val outputPrecisionTitle = stringResource(R.string.output_precision)
@@ -1826,7 +1878,7 @@ fun SettingsScreen(
         // the whole list, so it goes when the list is narrowed to a few rows.
         if (searchQuery.isBlank()) {
             DeveloperProfileCard(
-                developerName = "kami likhith",
+                developerName = "Kami Likhith",
                 onOpenChangelog = { showChangelog = true },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2146,7 +2198,7 @@ fun SettingsScreen(
             onDismissRequest = { showAuraUnlockCelebration = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("✨ Aura AI Companion Unlocked!", style = MaterialTheme.typography.titleLarge)
+                    Text("Aura AI Companion Unlocked!", style = MaterialTheme.typography.titleLarge)
                 }
             },
             text = {
@@ -2160,7 +2212,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = "You've unlocked Aura AI — the acoustic intelligence companion built directly into AuraMusic.\n\n" +
-                                "🌟 Core Superpowers:\n" +
+                                "[+] Core Superpowers:\n" +
                                 "• Acoustic Psychology & Chronotype Analysis\n" +
                                 "• Musical Taste Roasting & Listening Stats\n" +
                                 "• 3-Word Lyric Search (Telugu cinema, Hindi & Global)\n" +
@@ -2193,7 +2245,7 @@ fun SettingsScreen(
                     showAuraUnlockCelebration = false
                     onAuraAiChat?.invoke()
                 }) {
-                    Text("Launch Aura AI ✨")
+                    Text("Launch Aura AI")
                 }
             },
             dismissButton = {
