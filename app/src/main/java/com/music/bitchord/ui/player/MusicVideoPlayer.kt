@@ -161,6 +161,10 @@ object MusicVideoEngine {
     /** The heights the loaded video offers, the held one, and the one on screen. */
     val quality: StateFlow<MusicVideoQualityUi> = _quality.asStateFlow()
 
+    private var stallJob: Job? = null
+    private val _stallNotice = MutableStateFlow<String?>(null)
+    val stallNotice: StateFlow<String?> = _stallNotice.asStateFlow()
+
     private var prefs: android.content.SharedPreferences? = null
 
     /** What the loaded stream was asked for, so a failed high one can step down once. */
@@ -212,10 +216,27 @@ object MusicVideoEngine {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_READY && seekStartedAt > 0L) {
-                val took = System.currentTimeMillis() - seekStartedAt
-                seekLeadMs = ((seekLeadMs + took) / 2).coerceIn(0L, 1_500L)
-                seekStartedAt = 0L
+            if (playbackState == Player.STATE_READY) {
+                stallJob?.cancel()
+                _stallNotice.value = null
+                if (seekStartedAt > 0L) {
+                    val took = System.currentTimeMillis() - seekStartedAt
+                    seekLeadMs = ((seekLeadMs + took) / 2).coerceIn(0L, 1_500L)
+                    seekStartedAt = 0L
+                }
+            } else if (playbackState == Player.STATE_BUFFERING && controller?.isPlaying == true) {
+                stallJob?.cancel()
+                stallJob = scope.launch {
+                    delay(3000L)
+                    if (player?.playbackState == Player.STATE_BUFFERING && controller?.isPlaying == true) {
+                        val currentHeight = _quality.value.activeHeight ?: 720
+                        if (currentHeight > 360) {
+                            _stallNotice.value = "Slow network: stepped down to 360p Data Saver"
+                            setQuality(360)
+                            com.music.bitchord.data.network.AuraDataUsageTracker.recordSaved(35 * 1024 * 1024L)
+                        }
+                    }
+                }
             }
         }
 
@@ -290,6 +311,7 @@ object MusicVideoEngine {
                 repaint()
             } else {
                 exo.clearVideoTextureView(view)
+                exo.playWhenReady = false
                 releaseJob = scope.launch {
                     delay(RELEASE_GRACE_MS)
                     if (surfaces.isEmpty()) unload()
@@ -453,6 +475,8 @@ object MusicVideoEngine {
     }
 
     private fun unload() {
+        stallJob?.cancel()
+        _stallNotice.value = null
         loadJob?.cancel()
         loadJob = null
         syncJob?.cancel()
