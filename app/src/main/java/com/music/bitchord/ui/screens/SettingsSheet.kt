@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
@@ -38,6 +39,8 @@ import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOff
 import androidx.compose.material.icons.rounded.BlurOn
@@ -103,6 +106,17 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.coroutines.cancellation.CancellationException
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.fillMaxSize
+import com.music.bitchord.ui.screens.settings.SettingsRoute
+import com.music.bitchord.ui.screens.settings.SettingsTransitions
+import com.music.bitchord.ui.screens.settings.SettingsHubScreen
+import com.music.bitchord.ui.screens.settings.SettingsSubPageHeader
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -198,6 +212,7 @@ fun SettingsScreen(
     onAppLanguage: () -> Unit,
     onShowUpdateDialog: (() -> Unit)? = null,
     onAuraAiChat: (() -> Unit)? = null,
+    initialRoute: SettingsRoute = SettingsRoute.HUB,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -253,6 +268,13 @@ fun SettingsScreen(
     val fastForwardHoldSpeed by AppSettings.fastForwardHoldSpeed.collectAsStateWithLifecycle()
     val rewindHoldSpeed by AppSettings.rewindHoldSpeed.collectAsStateWithLifecycle()
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
+    val hideRecents by AppSettings.hideRecents.collectAsStateWithLifecycle()
+    val hideHomeVideos by AppSettings.hideHomeVideos.collectAsStateWithLifecycle()
+    val hideTopPicks by AppSettings.hideTopPicks.collectAsStateWithLifecycle()
+    val hideHomeMoods by AppSettings.hideHomeMoods.collectAsStateWithLifecycle()
+    val squareVideoThumbnails by AppSettings.squareVideoThumbnails.collectAsStateWithLifecycle()
+    val glassPerformance by AppSettings.glassPerformance.collectAsStateWithLifecycle()
+    val fullBleedDetailArtwork by AppSettings.fullBleedDetailArtwork.collectAsStateWithLifecycle()
     val userPrefersVideoMode by AppSettings.userPrefersVideoMode.collectAsStateWithLifecycle()
     val cellularDataSaver by AppSettings.cellularDataSaver.collectAsStateWithLifecycle()
     val smartVersionAlignment by AppSettings.smartVersionAlignment.collectAsStateWithLifecycle()
@@ -402,39 +424,7 @@ fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(contentPadding),
-    ) {
-        Text(
-            text = stringResource(R.string.settings),
-            style = MaterialTheme.typography.displayLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
-        )
-        SearchField(
-            query = searchQuery,
-            onQueryChange = { query ->
-                searchQuery = query
-                if (AuraAccessGate.isAuraAiUnlockCode(query)) {
-                    AppSettings.setAuraAiUnlocked(true)
-                    showAuraUnlockCelebration = true
-                    searchQuery = ""
-                }
-            },
-            onSubmit = {
-                if (AuraAccessGate.isAuraAiUnlockCode(searchQuery)) {
-                    AppSettings.setAuraAiUnlocked(true)
-                    showAuraUnlockCelebration = true
-                    searchQuery = ""
-                }
-            },
-            placeholder = stringResource(R.string.settings_search_hint),
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
-        )
-
+    val accountGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search) {
             val accountTitle = stringResource(R.string.account_integrations)
             // What the row opens is the scrobbling screen, so the services it
@@ -466,13 +456,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
-        // The row that used to sit at the top of this group was called
-        // "Lossless / HQ Audio" and toggled `SourceRegistry.setModuleEnabled` —
-        // it switched the *module source* on and off, not lossless. Sources
-        // above lists that as the module's own row now. Lossless itself is no
-        // longer a setting at all — see
-        // [SourceResolver.requestForNow][com.music.bitchord.data.sources.SourceResolver.requestForNow].
+    val audioQualityGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.audio_quality)) {
             val sourceTitle = stringResource(R.string.source)
             val sourceSubtitle = stringResource(R.string.sources_subtitle)
@@ -542,12 +528,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
-        // Its own group rather than rows bolted onto the two above, because a
-        // download is not a third kind of connection. The ceilings answer "what
-        // does this minute cost"; these answer "what am I keeping, and when may
-        // it be fetched" — and those two questions only make sense read
-        // together, which is what puts them side by side here.
+    val downloadsGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.downloads)) {
             val downloadQualityTitle = stringResource(R.string.download_quality)
             row(downloadQualityTitle, "offline", "lossless") {
@@ -581,8 +564,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
-        // Data Usage & Network Economy section
+    val networkEconomyGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = "Data Usage & Network Economy") {
             val usageCardTitle = "Data Usage Telemetry"
             row(usageCardTitle, "data", "usage", "network", "consumption", "cellular", "wifi", divided = false) {
@@ -609,13 +593,15 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val playbackGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.playback)) {
-            val preferMusicOnlyTitle = "Default playback mode"
-            row(preferMusicOnlyTitle, "video", "audio", "music video", "playback") {
+            val defaultPlaybackModeTitle = "Default playback mode"
+            row(defaultPlaybackModeTitle, "video", "audio", "music video", "playback") {
                 SettingsRow(
                     icon = Icons.Rounded.SmartDisplay,
-                    title = preferMusicOnlyTitle,
+                    title = defaultPlaybackModeTitle,
                     subtitle = if (!userPrefersVideoMode) "Studio Audio (Album art & canvas)" else "Video (Synchronized picture)",
                     value = if (!userPrefersVideoMode) "Audio" else "Video",
                     trailing = {
@@ -871,7 +857,125 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val contentPreferencesGroup: @Composable () -> Unit = {
+        SearchableSettingsGroup(search, header = stringResource(R.string.content_preferences)) {
+            val preferMusicOnlyTitle = stringResource(R.string.prefer_music_only)
+            row(preferMusicOnlyTitle, "video", "audio", "music video", "convert", "song") {
+                SettingsRow(
+                    icon = Icons.Rounded.MusicOff,
+                    title = preferMusicOnlyTitle,
+                    subtitle = stringResource(R.string.prefer_music_only_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = preferMusicOnly,
+                            onCheckedChange = AppSettings::setPreferMusicOnly,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setPreferMusicOnly(!preferMusicOnly) },
+                )
+            }
+            val hideRecentsTitle = stringResource(R.string.hide_recents)
+            row(hideRecentsTitle, "recents", "recent", "history", "feed", "home") {
+                SettingsRow(
+                    icon = Icons.Rounded.MotionPhotosOff,
+                    title = hideRecentsTitle,
+                    trailing = {
+                        Switch(
+                            checked = hideRecents,
+                            onCheckedChange = AppSettings::setHideRecents,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setHideRecents(!hideRecents) },
+                )
+            }
+            val hideHomeVideosTitle = stringResource(R.string.hide_home_videos)
+            row(hideHomeVideosTitle, "video", "music video", "feed", "home") {
+                SettingsRow(
+                    icon = Icons.Rounded.MotionPhotosOff,
+                    title = hideHomeVideosTitle,
+                    subtitle = stringResource(R.string.hide_home_videos_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = hideHomeVideos,
+                            onCheckedChange = AppSettings::setHideHomeVideos,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setHideHomeVideos(!hideHomeVideos) },
+                )
+            }
+            val hideTopPicksTitle = stringResource(R.string.hide_top_picks)
+            row(hideTopPicksTitle, "top picks", "recommendations", "feed", "home") {
+                SettingsRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = hideTopPicksTitle,
+                    trailing = {
+                        Switch(
+                            checked = hideTopPicks,
+                            onCheckedChange = AppSettings::setHideTopPicks,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setHideTopPicks(!hideTopPicks) },
+                )
+            }
+            val hideHomeMoodsTitle = stringResource(R.string.hide_home_moods)
+            row(hideHomeMoodsTitle, "mood", "moods", "find your mood", "feed", "home") {
+                SettingsRow(
+                    icon = Icons.Rounded.Star,
+                    title = hideHomeMoodsTitle,
+                    trailing = {
+                        Switch(
+                            checked = hideHomeMoods,
+                            onCheckedChange = AppSettings::setHideHomeMoods,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setHideHomeMoods(!hideHomeMoods) },
+                )
+            }
+            val squareVideoThumbnailsTitle = stringResource(R.string.square_video_thumbnails)
+            row(squareVideoThumbnailsTitle, "video", "thumbnail", "cover", "artwork", "player") {
+                SettingsRow(
+                    icon = Icons.Rounded.Apps,
+                    title = squareVideoThumbnailsTitle,
+                    subtitle = stringResource(R.string.square_video_thumbnails_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = squareVideoThumbnails,
+                            onCheckedChange = AppSettings::setSquareVideoThumbnails,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setSquareVideoThumbnails(!squareVideoThumbnails) },
+                )
+            }
+        }
+    }
+
+    val appearanceGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.appearance)) {
             val themeTitle = stringResource(R.string.theme)
             row(themeTitle, "dark mode", "light mode") {
@@ -1063,6 +1167,16 @@ fun SettingsScreen(
                     onClick = { AppSettings.setLiquidGlass(!liquidGlass) },
                 )
             }
+            if (liquidGlass && liquidGlassSupported) {
+                val glassPerformanceTitle = stringResource(R.string.glass_performance)
+                row(glassPerformanceTitle, "glass", "performance", "refraction", "frosted", "lag", divided = false) {
+                    SettingsSubRow(
+                        title = glassPerformanceTitle,
+                        checked = glassPerformance,
+                        onCheckedChange = AppSettings::setGlassPerformance,
+                    )
+                }
+            }
             // Left out where the player won't honour it: a window too wide for
             // the player to fill and too narrow to stand a page beside it keeps
             // the sleeve either way. A docked pane is a phone's width, so it does
@@ -1087,6 +1201,25 @@ fun SettingsScreen(
                         onClick = { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
                     )
                 }
+            }
+            val fullScreenDetailCoverTitle = stringResource(R.string.full_screen_detail_cover)
+            row(fullScreenDetailCoverTitle, "artwork", "album", "playlist", "cover") {
+                SettingsRow(
+                    icon = Icons.Rounded.Fullscreen,
+                    title = fullScreenDetailCoverTitle,
+                    subtitle = stringResource(R.string.full_screen_detail_cover_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = fullBleedDetailArtwork,
+                            onCheckedChange = AppSettings::setFullBleedDetailArtwork,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setFullBleedDetailArtwork(!fullBleedDetailArtwork) },
+                )
             }
             val legacyMeshGradientTitle = stringResource(R.string.legacy_mesh_gradient)
             row(legacyMeshGradientTitle, "background", "player") {
@@ -1240,7 +1373,9 @@ fun SettingsScreen(
                 }
             }
         }
+    }
 
+    val performanceGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.performance)) {
             val highPerformanceModeTitle = stringResource(R.string.high_performance_mode)
             row(highPerformanceModeTitle, "frame rate", "refresh rate", "hz", "battery", "smooth") {
@@ -1299,7 +1434,9 @@ fun SettingsScreen(
                 }
             }
         }
+    }
 
+    val localMusicGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.local_music)) {
             val localMusicFolderTitle = stringResource(R.string.local_music_folder)
             row(localMusicFolderTitle, "folder", "offline", "files") {
@@ -1342,7 +1479,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val storageGroup: @Composable () -> Unit = {
         val cacheUnlimited = cacheLimitBytes == AppSettings.UNLIMITED_CACHE_LIMIT_BYTES
         // The slider's last stop, one step past the largest fixed size, is
         // "Unlimited" — see [AppSettings.setAudioCacheLimitBytes].
@@ -1414,7 +1553,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val yourDataGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.your_data)) {
             val replayTitle = stringResource(R.string.replay)
             row(replayTitle, "stats", "history", "wrapped") {
@@ -1467,9 +1608,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
-        // No footer: it only restated the stop-on-close row's own subtitle,
-        // which sits four rows above it and says the same thing in fewer words.
+    val miscGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.miscellaneous)) {
             val newReleaseAlertsTitle = stringResource(R.string.settings_new_releases_title)
             row(newReleaseAlertsTitle, "notification", "releases", "artists", "new") {
@@ -1613,7 +1754,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val languageGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.language)) {
             val appLanguageTitle = stringResource(R.string.app_language)
             row(appLanguageTitle, "locale", "translate") {
@@ -1627,7 +1770,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val advancedOptionsGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.advanced_options)) {
             val smartAlignmentTitle = stringResource(R.string.smart_version_alignment)
             row(smartAlignmentTitle, "alignment", "sync", "waveform", "video", "audio", "skit", "intro") {
@@ -1781,7 +1926,9 @@ fun SettingsScreen(
                 )
             }
         }
+    }
 
+    val auraAiGroup: @Composable () -> Unit = {
         if (auraAiUnlocked) {
             SearchableSettingsGroup(search, header = "Aura AI & Developer") {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -1867,53 +2014,228 @@ fun SettingsScreen(
                 }
             }
         }
-
-        // Read after every group above has had its turn at the query, which is
-        // what makes this an accurate "nothing here" rather than a guess.
-        if (!search.anyMatch) {
-            MessageState(stringResource(R.string.settings_search_empty, searchQuery))
         }
 
-        // The version line is the page's colophon, not a setting: it belongs to
-        // the whole list, so it goes when the list is narrowed to a few rows.
-        if (searchQuery.isBlank()) {
-            DeveloperProfileCard(
-                developerName = "Kami Likhith",
-                onOpenChangelog = { showChangelog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 28.dp, bottom = 12.dp),
-            )
+    var currentRoute by rememberSaveable { mutableStateOf(initialRoute) }
 
-            Text(
-                text = buildAnnotatedString {
-                    append("AuraMusic $version by Kami Likhith  ")
-                    val linkStyles = TextLinkStyles(
-                        style = SpanStyle(
-                            color = MaterialTheme.colorScheme.primary,
-                            textDecoration = TextDecoration.Underline,
-                        ),
+    LaunchedEffect(initialRoute) {
+        if (initialRoute != SettingsRoute.HUB) {
+            currentRoute = initialRoute
+        }
+    }
+
+    val pendingDeepLink by com.music.bitchord.ui.screens.settings.SettingsNavigation.pendingRoute.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingDeepLink) {
+        pendingDeepLink?.let { target ->
+            currentRoute = target
+            com.music.bitchord.ui.screens.settings.SettingsNavigation.clear()
+        }
+    }
+
+    var backProgress by remember { mutableFloatStateOf(0f) }
+
+    PredictiveBackHandler(enabled = currentRoute != SettingsRoute.HUB) { progress ->
+        try {
+            progress.collect { backEvent ->
+                backProgress = backEvent.progress
+            }
+            currentRoute = SettingsRoute.HUB
+        } catch (e: CancellationException) {
+            // User aborted gesture
+        } finally {
+            backProgress = 0f
+        }
+    }
+
+    AnimatedContent(
+        targetState = currentRoute,
+        transitionSpec = { SettingsTransitions.transitionSpec(initialState, targetState) },
+        label = "SettingsScreenNavigation",
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                if (currentRoute != SettingsRoute.HUB && backProgress > 0f) {
+                    val scale = 1f - backProgress * 0.08f
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 1f - backProgress * 0.2f
+                }
+            },
+    ) { route ->
+        when (route) {
+            SettingsRoute.HUB -> {
+                if (searchQuery.isNotBlank()) {
+                    Column(
+                        modifier = modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(contentPadding),
+                    ) {
+                        SettingsPageTitle(stringResource(R.string.settings))
+                        SearchField(
+                            query = searchQuery,
+                            onQueryChange = { query ->
+                                searchQuery = query
+                                if (AuraAccessGate.isAuraAiUnlockCode(query)) {
+                                    AppSettings.setAuraAiUnlocked(true)
+                                    showAuraUnlockCelebration = true
+                                    searchQuery = ""
+                                }
+                            },
+                            onSubmit = {
+                                if (AuraAccessGate.isAuraAiUnlockCode(searchQuery)) {
+                                    AppSettings.setAuraAiUnlocked(true)
+                                    showAuraUnlockCelebration = true
+                                    searchQuery = ""
+                                }
+                            },
+                            placeholder = stringResource(R.string.settings_search_hint),
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+                        )
+                        audioQualityGroup()
+                        playbackGroup()
+                        appearanceGroup()
+                        performanceGroup()
+                        contentPreferencesGroup()
+                        downloadsGroup()
+                        storageGroup()
+                        localMusicGroup()
+                        networkEconomyGroup()
+                        accountGroup()
+                        auraAiGroup()
+                        advancedOptionsGroup()
+                        yourDataGroup()
+                        miscGroup()
+                        languageGroup()
+                        Spacer(Modifier.height(32.dp))
+                    }
+                } else {
+                    SettingsHubScreen(
+                        windowWidth = windowWidth,
+                        signedIn = signedIn,
+                        account = account,
+                        onSignIn = onSignIn,
+                        onSignOut = onSignOut,
+                        onAccountScrobbling = onAccountScrobbling,
+                        onNavigate = { currentRoute = it },
+                        onSources = onSources,
+                        onEqualizer = onEqualizer,
+                        onOpenReplay = onOpenReplay,
+                        onAppLanguage = onAppLanguage,
+                        onShowUpdateDialog = onShowUpdateDialog,
+                        contentPadding = contentPadding,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { query ->
+                            searchQuery = query
+                            if (AuraAccessGate.isAuraAiUnlockCode(query)) {
+                                AppSettings.setAuraAiUnlocked(true)
+                                showAuraUnlockCelebration = true
+                                searchQuery = ""
+                            }
+                        },
+                        modifier = modifier,
                     )
-                    withLink(LinkAnnotation.Url("https://github.com/likhith3035", linkStyles)) {
-                        append("GitHub")
-                    }
-                    append(" • ")
-                    withLink(LinkAnnotation.Url("https://linkedin.com/in/likhith-kami", linkStyles)) {
-                        append("LinkedIn")
-                    }
-                    append(" • ")
-                    withLink(LinkAnnotation.Url("https://www.instagram.com/lucky__likhith", linkStyles)) {
-                        append("Instagram")
-                    }
-                    append("\n~YouTube Music & Listen Together Backend")
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 8.dp),
-            )
+                }
+            }
+            SettingsRoute.AUDIO -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_audio_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    audioQualityGroup()
+                    playbackGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.APPEARANCE -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_appearance_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    appearanceGroup()
+                    performanceGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.CONTENT -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_content_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    contentPreferencesGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.STORAGE -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_storage_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    downloadsGroup()
+                    storageGroup()
+                    localMusicGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.NETWORK -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_network_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    networkEconomyGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.ADVANCED -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = stringResource(R.string.settings_hub_advanced_title),
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    accountGroup()
+                    auraAiGroup()
+                    advancedOptionsGroup()
+                    yourDataGroup()
+                    miscGroup()
+                    languageGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
         }
     }
 
@@ -2926,6 +3248,7 @@ internal fun SettingsRow(
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (badge != null) {
                     Spacer(Modifier.width(8.dp))
@@ -2953,6 +3276,8 @@ internal fun SettingsRow(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 140.dp),
                 )
                 Spacer(Modifier.width(4.dp))
             }
@@ -2989,6 +3314,7 @@ internal fun SettingsSubRow(
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (badge != null) {
                     Spacer(Modifier.width(8.dp))
@@ -3183,7 +3509,7 @@ internal fun SegmentedControl(
                             onSelect(index)
                         }
                     }
-                    .padding(vertical = 9.dp),
+                    .padding(horizontal = 4.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -3191,8 +3517,19 @@ internal fun SegmentedControl(
                     style = MaterialTheme.typography.labelMedium,
                     color = labelColor,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
+}
+
+@Composable
+internal fun SettingsPageTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.displayLarge,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
+    )
 }
