@@ -349,12 +349,22 @@ internal object BitPerfectOutput {
     fun publish(status: Status) {
         _status.value = status
         recomputeReady()
+        com.music.bitchord.data.NerdStats.bitPerfect.value = if (status.active) {
+            com.music.bitchord.data.NerdStats.BitPerfectTelemetry(
+                active = true,
+                sampleRateHz = status.sampleRateHz,
+                bitDepth = if (status.outputBits > 0) status.outputBits else status.sourceBits,
+                deviceName = status.deviceName,
+                isDacLimited = status.dacLimited,
+            )
+        } else null
     }
 
     /** Clears an active status, leaving a fallback reason in place for the settings row. */
     fun publishIdle() {
         if (_status.value.active) _status.value = Status()
         recomputeReady()
+        com.music.bitchord.data.NerdStats.bitPerfect.value = null
     }
 
     private fun currentFailures(mode: BitPerfectMode, deviceId: Int): MutableSet<String> {
