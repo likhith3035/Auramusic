@@ -227,6 +227,7 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
@@ -2885,53 +2886,90 @@ fun BitChordDesktopApp() {
                         transparentBase = transparentBase,
                     )
                 },
-                modifier = Modifier.onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyUp) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.MediaPlayPause -> {
-                            if (selectedSong != null) togglePlayPauseFromUser()
-                            true
-                        }
-                        Key.MediaNext -> {
-                            playNext()
-                            true
-                        }
-                        Key.MediaPrevious -> {
-                            playPrevious()
-                            true
-                        }
-                        Key.DirectionLeft -> if (event.isAltPressed && !overlays.nowPlaying) {
-                            goBack()
-                            true
-                        } else {
-                            false
-                        }
-                        // One layer at a time, innermost first: the player's own side panel, then
-                        // the player.
-                        Key.Escape -> when {
-                            // The player's own layers first — the lyrics, the queue, a
-                            // drawer — in the order Android's back reaches them.
-                            overlays.nowPlaying && PlayerBack.dispatch() -> true
-                            overlays.nowPlaying -> {
-                                overlays.nowPlaying = false
+                modifier = Modifier
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyUp) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.MediaPlayPause -> {
+                                if (selectedSong != null) togglePlayPauseFromUser()
                                 true
                             }
-                            overlays.sidePanel != null -> {
-                                overlays.sidePanel = null
+                            Key.MediaNext -> {
+                                playNext()
                                 true
                             }
-                            // A page of Settings steps back the way the back button does, unless
-                            // one of its prompts is up over it.
-                            overlays.settingsPage != null &&
-                                !overlays.lastfmLogin && !overlays.listenBrainzToken && !overlays.discordToken -> {
+                            Key.MediaPrevious -> {
+                                playPrevious()
+                                true
+                            }
+                            Key.DirectionLeft -> if (event.isAltPressed && !overlays.nowPlaying) {
                                 goBack()
                                 true
+                            } else {
+                                false
+                            }
+                            // One layer at a time, innermost first: the player's own side panel, then
+                            // the player.
+                            Key.Escape -> when {
+                                // The player's own layers first — the lyrics, the queue, a
+                                // drawer — in the order Android's back reaches them.
+                                overlays.nowPlaying && PlayerBack.dispatch() -> true
+                                overlays.nowPlaying -> {
+                                    overlays.nowPlaying = false
+                                    true
+                                }
+                                overlays.sidePanel != null -> {
+                                    overlays.sidePanel = null
+                                    true
+                                }
+                                // A page of Settings steps back the way the back button does, unless
+                                // one of its prompts is up over it.
+                                overlays.settingsPage != null &&
+                                    !overlays.lastfmLogin && !overlays.listenBrainzToken && !overlays.discordToken -> {
+                                    if (navHistory.isNotEmpty()) {
+                                        goBack()
+                                    } else {
+                                        overlays.settingsPage = null
+                                    }
+                                    true
+                                }
+                                else -> false
                             }
                             else -> false
                         }
-                        else -> false
                     }
-                },
+                    .onKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyUp) return@onKeyEvent false
+                        if (event.key == Key.Backspace) {
+                            when {
+                                overlays.nowPlaying && PlayerBack.dispatch() -> true
+                                overlays.nowPlaying -> {
+                                    overlays.nowPlaying = false
+                                    true
+                                }
+                                overlays.sidePanel != null -> {
+                                    overlays.sidePanel = null
+                                    true
+                                }
+                                overlays.settingsPage != null &&
+                                    !overlays.lastfmLogin && !overlays.listenBrainzToken && !overlays.discordToken -> {
+                                    if (navHistory.isNotEmpty()) {
+                                        goBack()
+                                    } else {
+                                        overlays.settingsPage = null
+                                    }
+                                    true
+                                }
+                                !overlays.nowPlaying && navHistory.isNotEmpty() -> {
+                                    goBack()
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else {
+                            false
+                        }
+                    },
                 topBar = { compact ->
                     DesktopTopBar(
                         compact = compact,
