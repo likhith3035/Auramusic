@@ -223,6 +223,29 @@ object NerdStats {
         }
     }
 
+    /**
+     * Real-time hardware telemetry when Bit-Perfect DAC mode is active.
+     */
+    data class BitPerfectTelemetry(
+        val active: Boolean = false,
+        val sampleRateHz: Int = 0,
+        val bitDepth: Int = 0,
+        val deviceName: String? = null,
+        val isDacLimited: Boolean = false,
+    ) {
+        val displayLabel: String
+            get() = when {
+                sampleRateHz > 0 && bitDepth > 0 ->
+                    "Bit-Perfect ${sampleRateHz / 1000}kHz · ${bitDepth}-bit"
+                sampleRateHz > 0 ->
+                    "Bit-Perfect ${sampleRateHz / 1000}kHz"
+                else ->
+                    "Bit-Perfect"
+            }
+    }
+
+    val bitPerfect = MutableStateFlow<BitPerfectTelemetry?>(null)
+
     val current = MutableStateFlow<Snapshot?>(null)
 
     /**

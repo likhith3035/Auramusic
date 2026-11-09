@@ -58,6 +58,11 @@ object YtMusicRepository {
     fun cachedAudioVersion(videoId: String): Song? = audioVersionCache[videoId]
     fun cachedVideoVersion(videoId: String): Song? = videoVersionCache[videoId]
 
+    /** Switching [audioId] back to video returns to [video], the row it was converted from. */
+    fun rememberVideoVersion(audioId: String, video: Song) {
+        videoVersionCache[audioId] = video
+    }
+
     /**
      * How a position in [fromId] maps into [toId], when YouTube Music paired
      * the two itself and said how they line up. Null for a pair found by

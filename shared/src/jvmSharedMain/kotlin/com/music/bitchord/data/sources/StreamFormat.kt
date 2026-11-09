@@ -20,6 +20,7 @@ data class StreamFormat(
     val kbps: Int? = null,
     val sampleRateHz: Int? = null,
     val bitDepth: Int? = null,
+    val kbpsInferred: Boolean = false,
 ) {
     /**
      * Whether this is a bit-exact copy of the master the source holds.
