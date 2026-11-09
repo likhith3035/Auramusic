@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -181,7 +182,7 @@ fun AuraDataUsageCard(
                         if (cellRatio > 0f) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(cellRatio)
+                                    .weight(cellRatio.coerceAtLeast(0.001f))
                                     .height(8.dp)
                                     .background(Color(0xFFFF5252)),
                             )
@@ -189,7 +190,7 @@ fun AuraDataUsageCard(
                         if (wifiRatio > 0f) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(1f)
+                                    .weight(wifiRatio.coerceAtLeast(0.001f))
                                     .height(8.dp)
                                     .background(Color(0xFF00E676)),
                             )
@@ -361,6 +362,7 @@ private fun UsageBreakdownRow(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
@@ -372,11 +374,14 @@ private fun UsageBreakdownRow(
             )
             Text(
                 text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.85f),
                 ),
+                modifier = Modifier.weight(1f, fill = false),
             )
             if (badge != null) {
                 Surface(
@@ -398,8 +403,11 @@ private fun UsageBreakdownRow(
             }
         }
 
+        Spacer(Modifier.width(8.dp))
+
         Text(
             text = value,
+            maxLines = 1,
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,

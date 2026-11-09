@@ -77,6 +77,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.CircularProgressIndicator
@@ -330,6 +331,7 @@ internal fun PlaybackQualityLabel(
     val cellularQuality by PlayerSettings.audioQualityCellular.collectAsStateWithLifecycle()
     val metered by PlayerSettings.meteredConnection.collectAsStateWithLifecycle()
     val nerdStats by NerdStats.current.collectAsStateWithLifecycle()
+    val bitPerfect by NerdStats.bitPerfect.collectAsStateWithLifecycle()
     // Whether this playback session is even asking for a lossless stream — the
     // same computation SourceResolver.requestForNow() makes, mirrored here so
     // "Loading lossless" only appears when a lossless fetch is actually in
@@ -347,6 +349,7 @@ internal fun PlaybackQualityLabel(
         losslessRequested = effectiveQuality == AudioQuality.LOSSLESS,
         effectiveQuality = effectiveQuality,
         nerdStats = nerdStats,
+        bitPerfect = bitPerfect,
         modifier = modifier,
     )
 }
@@ -634,7 +637,7 @@ internal fun TransportRow(
                     isNextHeld = true
                     haptics.play(Haptic.ToggleOn)
                     val formatted = if (fastForwardHoldSpeed % 1f == 0f) "${fastForwardHoldSpeed.toInt()}×" else "${fastForwardHoldSpeed}×"
-                    activeHoldLabel = "⚡ $formatted Fast Forward"
+                    activeHoldLabel = "$formatted Fast Forward"
                     PlayerPlatform.host.setTemporaryPlaybackSpeed(fastForwardHoldSpeed)
                 },
                 onHoldEnd = {
@@ -1779,9 +1782,16 @@ private fun LosslessOrStats(
     losslessRequested: Boolean,
     effectiveQuality: AudioQuality,
     nerdStats: NerdStats.Snapshot?,
+    bitPerfect: NerdStats.BitPerfectTelemetry? = null,
     modifier: Modifier = Modifier,
 ) {
     when {
+        bitPerfect?.active == true -> LosslessLabel(
+            text = bitPerfect.displayLabel,
+            animated = true,
+            icon = Icons.Rounded.GraphicEq,
+            modifier = modifier,
+        )
         // Still resolving — either the player itself is buffering, or a
         // module is still racing YouTube for this track in the background
         // (see [NerdStats.racingLossless]) even though YouTube already won

@@ -134,7 +134,13 @@ internal fun AudioOutputSheet(
 private fun AudioPipelineRow(onClick: () -> Unit) {
     val haptics = rememberHaptics()
     val outputFormat by PlayerPlatform.host.outputFormat.collectAsStateWithLifecycle()
-    val subtitle = outputFormat.summary
+    val bitPerfect by com.music.bitchord.data.NerdStats.bitPerfect.collectAsStateWithLifecycle()
+    val subtitle = if (bitPerfect?.active == true) {
+        val deviceSuffix = bitPerfect?.deviceName?.let { " · $it" } ?: ""
+        "${bitPerfect?.displayLabel ?: "Bit-Perfect"}$deviceSuffix"
+    } else {
+        outputFormat.summary
+    }
 
     Row(
         modifier = Modifier
@@ -179,7 +185,7 @@ private fun AudioPipelineRow(onClick: () -> Unit) {
                 text = subtitle,
                 style = MaterialTheme.typography.labelMedium,
                 color = Color.White.copy(alpha = 0.55f),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

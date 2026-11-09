@@ -2084,7 +2084,7 @@ fun NowPlayingScreen(
                                 isLoading = isLoading,
                                 modifier = Modifier
                                     .align(Alignment.Center)
-                                    .padding(horizontal = 8.dp),
+                                    .padding(horizontal = 56.dp),
                             )
                         }
                     },
@@ -2306,7 +2306,7 @@ fun NowPlayingScreen(
                                         isLoading = isLoading,
                                         modifier = Modifier
                                             .align(Alignment.Center)
-                                            .padding(horizontal = 8.dp),
+                                            .padding(horizontal = 56.dp),
                                     )
                                 }
                             },
