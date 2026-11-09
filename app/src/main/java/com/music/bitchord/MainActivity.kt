@@ -1371,6 +1371,7 @@ private fun BitChordApp(
     
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var settingsInitialRoute by rememberSaveable { mutableStateOf(com.music.bitchord.ui.screens.settings.SettingsRoute.HUB) }
 
     // Replay: the page, the stories over it, and the share sheet over those.
 
@@ -6106,6 +6107,8 @@ private fun BitChordApp(
 
                             account = account,
 
+                            initialRoute = settingsInitialRoute,
+
                             onSignIn = {
 
                                 showSettings = false
@@ -7646,7 +7649,10 @@ private fun BitChordApp(
 
                         settingsSubScreen != null -> ({ settingsSubScreen = null })
 
-                        showSettings -> ({ showSettings = false })
+                        showSettings -> ({
+                            showSettings = false
+                            settingsInitialRoute = com.music.bitchord.ui.screens.settings.SettingsRoute.HUB
+                        })
 
                         showReplay -> ({ showReplay = false })
 

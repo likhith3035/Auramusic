@@ -469,6 +469,16 @@ object AppSettings {
     val cellularDataSaver = MutableStateFlow(false)
     val cellularBudgetMb = MutableStateFlow(0)
 
+    val directSourceStream = MutableStateFlow(false)
+    val hideRecents = MutableStateFlow(false)
+    val hideHomeVideos = MutableStateFlow(false)
+    val hideTopPicks = MutableStateFlow(false)
+    val hideHomeMoods = MutableStateFlow(false)
+    val squareVideoThumbnails = MutableStateFlow(false)
+    val glassPerformance = MutableStateFlow(false)
+    val disableBlendEffects = MutableStateFlow(false)
+    val fullBleedDetailArtwork = MutableStateFlow(false)
+
     /** Analyzes audio waveform/envelope to align matching playback moment between versions. */
     val smartVersionAlignment = MutableStateFlow(true)
 
@@ -976,6 +986,15 @@ object AppSettings {
         dataUsageResetTimeMs.value = prefs.getLong(KEY_DATA_RESET_TIME, System.currentTimeMillis())
         cellularDataSaver.value = prefs.getBoolean(KEY_CELLULAR_DATA_SAVER, false)
         cellularBudgetMb.value = prefs.getInt(KEY_CELLULAR_BUDGET_MB, 0)
+        directSourceStream.value = prefs.getBoolean(KEY_DIRECT_SOURCE_STREAM, false)
+        hideRecents.value = prefs.getBoolean(KEY_HIDE_RECENTS, false)
+        hideHomeVideos.value = prefs.getBoolean(KEY_HIDE_HOME_VIDEOS, false)
+        hideTopPicks.value = prefs.getBoolean(KEY_HIDE_TOP_PICKS, false)
+        hideHomeMoods.value = prefs.getBoolean(KEY_HIDE_HOME_MOODS, false)
+        squareVideoThumbnails.value = prefs.getBoolean(KEY_SQUARE_VIDEO_THUMBNAILS, false)
+        glassPerformance.value = prefs.getBoolean(KEY_GLASS_PERFORMANCE, false)
+        disableBlendEffects.value = prefs.getBoolean(KEY_DISABLE_BLEND_EFFECTS, false)
+        fullBleedDetailArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_DETAIL_ARTWORK, false)
         smartVersionAlignment.value = prefs.getBoolean(KEY_SMART_VERSION_ALIGNMENT, true)
         reduceDynamicBlur.value = prefs.getBoolean(KEY_REDUCE_BLUR, false)
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
@@ -1567,6 +1586,51 @@ object AppSettings {
     fun setCellularBudgetMb(value: Int) {
         cellularBudgetMb.value = value
         prefs.edit().putInt(KEY_CELLULAR_BUDGET_MB, value).apply()
+    }
+
+    fun setDirectSourceStream(value: Boolean) {
+        directSourceStream.value = value
+        prefs.edit().putBoolean(KEY_DIRECT_SOURCE_STREAM, value).apply()
+    }
+
+    fun setHideRecents(value: Boolean) {
+        hideRecents.value = value
+        prefs.edit().putBoolean(KEY_HIDE_RECENTS, value).apply()
+    }
+
+    fun setHideHomeVideos(value: Boolean) {
+        hideHomeVideos.value = value
+        prefs.edit().putBoolean(KEY_HIDE_HOME_VIDEOS, value).apply()
+    }
+
+    fun setHideTopPicks(value: Boolean) {
+        hideTopPicks.value = value
+        prefs.edit().putBoolean(KEY_HIDE_TOP_PICKS, value).apply()
+    }
+
+    fun setHideHomeMoods(value: Boolean) {
+        hideHomeMoods.value = value
+        prefs.edit().putBoolean(KEY_HIDE_HOME_MOODS, value).apply()
+    }
+
+    fun setSquareVideoThumbnails(value: Boolean) {
+        squareVideoThumbnails.value = value
+        prefs.edit().putBoolean(KEY_SQUARE_VIDEO_THUMBNAILS, value).apply()
+    }
+
+    fun setGlassPerformance(value: Boolean) {
+        glassPerformance.value = value
+        prefs.edit().putBoolean(KEY_GLASS_PERFORMANCE, value).apply()
+    }
+
+    fun setDisableBlendEffects(value: Boolean) {
+        disableBlendEffects.value = value
+        prefs.edit().putBoolean(KEY_DISABLE_BLEND_EFFECTS, value).apply()
+    }
+
+    fun setFullBleedDetailArtwork(value: Boolean) {
+        fullBleedDetailArtwork.value = value
+        prefs.edit().putBoolean(KEY_FULL_BLEED_DETAIL_ARTWORK, value).apply()
     }
 
     fun setSmartVersionAlignment(value: Boolean) {
@@ -2368,6 +2432,15 @@ private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
     private const val KEY_DATA_RESET_TIME = "data_reset_time"
     private const val KEY_CELLULAR_DATA_SAVER = "cellular_data_saver"
     private const val KEY_CELLULAR_BUDGET_MB = "cellular_budget_mb"
+    private const val KEY_DIRECT_SOURCE_STREAM = "direct_source_stream"
+    private const val KEY_HIDE_RECENTS = "hide_recents"
+    private const val KEY_HIDE_HOME_VIDEOS = "hide_home_videos"
+    private const val KEY_HIDE_TOP_PICKS = "hide_top_picks"
+    private const val KEY_HIDE_HOME_MOODS = "hide_home_moods"
+    private const val KEY_SQUARE_VIDEO_THUMBNAILS = "square_video_thumbnails"
+    private const val KEY_GLASS_PERFORMANCE = "glass_performance"
+    private const val KEY_DISABLE_BLEND_EFFECTS = "disable_blend_effects"
+    private const val KEY_FULL_BLEED_DETAIL_ARTWORK = "full_bleed_detail_artwork"
     private const val KEY_SMART_VERSION_ALIGNMENT = "smart_version_alignment"
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
