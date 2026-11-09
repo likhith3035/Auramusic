@@ -26,6 +26,7 @@ import com.music.bitchord.data.sources.DeviceCodecs
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
+import com.music.bitchord.data.sources.SourceStream
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.download.Downloads
 import kotlinx.coroutines.CoroutineScope
@@ -276,18 +277,28 @@ object AudioCache {
      * about to re-open the track can be sure the old bytes are gone first.
      * Call it off the main thread.
      */
-    fun discard(uri: Uri) {
+    fun discard(uri: Uri, keepComplete: Boolean = false) {
         val exact = keyFactory.buildCacheKey(DataSpec(uri))
         val about = mediaIdIn(uri)
         val family = uri.getQueryParameter("v")?.let { videoId ->
             cache.keys.filter { it == videoId || it.startsWith("$videoId#") }
         } ?: emptyList()
         (family + exact).distinct().forEach { key ->
+            if (keepComplete && isComplete(key)) {
+                TrackLog.d(TAG, "kept complete cache entry $key through a network failure", about = about)
+                return@forEach
+            }
             runCatching { cache.removeResource(key) }
                 .onSuccess { TrackLog.d(TAG, "discarded cache entry $key", about = about) }
                 .onFailure { TrackLog.d(TAG, "cache entry $key still in use: ${it.message}", about = about) }
         }
     }
+
+    /** Whether every byte of the entry [key] is on disk. */
+    private fun isComplete(key: String): Boolean = runCatching {
+        val length = ContentMetadata.getContentLength(cache.getContentMetadata(key))
+        length > 0 && cache.isCached(key, 0, length)
+    }.getOrDefault(false)
 
     /**
      * Throws away only the rendition [uri] names, leaving the track's other
@@ -1007,6 +1018,47 @@ object AudioCache {
         pendingQueue = emptyList()
         job?.cancel()
         job = null
+    }
+
+    private var directJob: kotlinx.coroutines.Job? = null
+
+    fun prefetchDirect(upcoming: Upcoming) {
+        directJob?.cancel()
+        val id = upcoming.mediaId
+        // A source-backed row resolves through its own source when opened, and
+        // a downloaded or reverted track never reads this entry at all.
+        if (SourceRegistry.parseTrackKey(id) != null || id in Downloads.saved.value || OriginalVersion.isPinned(id)) {
+            directJob = null
+            return
+        }
+        directJob = scope.launch(TrackLog.about(id)) {
+            if (StreamChoice.of(id) == null) {
+                val addon = runCatching { DirectSourceGate.lookup(id, upcoming.target) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                    .getOrNull()
+                val stream = addon ?: runCatching {
+                    val url = StreamResolver.resolve(id)
+                    SourceStream(url, headers = StreamResolver.mediaHeadersFor(url))
+                }
+                    .onFailure {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        TrackLog.d(TAG, "direct read-ahead could not resolve $id: ${it.message}", about = id)
+                    }
+                    .getOrNull()
+                    ?: return@launch
+                if (StreamChoice.of(id) == null) {
+                    StreamChoice.remember(id, stream, substituted = addon != null)
+                    if (addon == null) DirectSourceGate.startedOnYouTube(id, upcoming.target)
+                }
+            }
+            fetch(id, 0, PRELOAD_BYTES)
+        }
+    }
+
+    /** Drops [prefetchDirect]'s work for a track the queue has moved away from. */
+    fun cancelDirect() {
+        directJob?.cancel()
+        directJob = null
     }
 
     /**

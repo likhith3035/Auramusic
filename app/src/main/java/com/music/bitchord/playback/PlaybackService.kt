@@ -922,6 +922,7 @@ class PlaybackService : MediaLibraryService() {
         ) {
             val exoPlayer = player ?: return
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                lastSeekAt = SystemClock.elapsedRealtime()
                 SmartSleepTimer.recordUserActivity()
                 if (exoPlayer.isPlaying) pushDiscordPresence(exoPlayer)
                 updateLyricSubtitle()
@@ -1075,6 +1076,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            convertVideosAround(exoPlayer)
             if (exoPlayer.isPlaying) prefetchAround(exoPlayer)
             // A queue edit can change what follows gaplessly, and the loudness
             // stage switches to that track on its own at the boundary.
@@ -1293,6 +1295,7 @@ class PlaybackService : MediaLibraryService() {
             // because these carry no `v` parameter and would otherwise fall
             // straight through unresolved.
             if (dataSpec.uri.authority == "source") {
+                mediaIdIn(dataSpec.uri)?.let { id -> runBlocking(about) { DirectSourceGate.awaitOpen(id) } }
                 val directYouTube =
                     dataSpec.uri.getQueryParameter(DIRECT_YOUTUBE_PARAMETER) == "1"
                 val stream = runBlocking(about) {
@@ -1358,6 +1361,10 @@ class PlaybackService : MediaLibraryService() {
                     .setHttpRequestHeaders(headers)
                     .build()
             }
+            val analysisRead = AutomixAnalysisSource.requestsYouTubeOpus(
+                dataSpec.uri.getQueryParameter(AutomixAnalysisSource.OPUS_QUERY_PARAMETER),
+            )
+            if (!analysisRead) runBlocking(about) { DirectSourceGate.awaitOpen(videoId) }
             // Automix owns a base-cache Opus rendition. It must bypass the
             // playback race winner (JioSaavn, a module, or a lossless upgrade)
             // and resolve directly to YouTube for this analysis-only request.
@@ -1462,7 +1469,8 @@ class PlaybackService : MediaLibraryService() {
                 // Only substituted, non-lossless choices need this. A pinned
                 // YouTube URL has no source result to promote, and a lossless
                 // module result already satisfies the request.
-                if (StreamChoice.isSubstitute(videoId) &&
+                if (!DirectSourceGate.isActive() &&
+                    StreamChoice.isSubstitute(videoId) &&
                     serving.format.isLossless != true &&
                     QualityUpgrade.couldStillUpgrade(videoId, dataSpec.uri)
                 ) {
@@ -1586,7 +1594,7 @@ class PlaybackService : MediaLibraryService() {
         // DsdExtractorsFactory: the stock extractors plus DSF/DFF, which Media3
         // cannot open at all. A DSD file leaves the extractor as float PCM.
         mediaSourceFactory = DefaultMediaSourceFactory(
-            AudioCache.playbackFactory(defaultDataSourceFactory),
+            MusicOnlyPlayback.holdingFactory(AudioCache.playbackFactory(defaultDataSourceFactory)),
             DsdExtractorsFactory(),
         )
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
@@ -1716,7 +1724,7 @@ class PlaybackService : MediaLibraryService() {
     private suspend fun resolveForCast(item: MediaItem): CastStream? = withContext(Dispatchers.IO) {
         val uri = item.localConfiguration?.uri ?: return@withContext null
         val resolver = streamResolver ?: return@withContext null
-        val resolved = resolver.resolveDataSpec(DataSpec(uri)).uri
+        val resolved = DirectSourceGate.ungated { resolver.resolveDataSpec(DataSpec(uri)) }.uri
         if (resolved.scheme != "http" && resolved.scheme != "https") {
             null
         } else {
@@ -3034,6 +3042,7 @@ class PlaybackService : MediaLibraryService() {
         }
         if (exoPlayer.isPlaying) registerCurrentPlay()
         savePlaybackState(exoPlayer)
+        convertVideosAround(exoPlayer)
         prefetchAround(exoPlayer)
         // The second look belongs to the track it was started for; the
         // queue moving on ends it — unless it is already proving what it
@@ -3376,15 +3385,14 @@ class PlaybackService : MediaLibraryService() {
      * Replaces a failed addon/JioSaavn/quality-upgrade rendition with YouTube
      * audio and never offers the failed source again during this playback.
      */
-    private fun fallbackFailedAlternativeToYouTube(
+    private fun replaceWithYouTube(
         item: MediaItem,
-        uri: Uri?,
+        playbackUri: Uri,
         position: Long,
+        keepComplete: Boolean = false,
+        why: String,
     ): Boolean {
-        val playbackUri = uri ?: return false
         val videoId = playbackUri.getQueryParameter("v")
-        val substituted = videoId?.let(StreamChoice::isSubstitute) == true
-        if (!PlaybackFallback.isAlternative(playbackUri.toString(), substituted)) return false
         val fallback = item.toYouTubeFallbackMediaItem() ?: return false
         val mediaId = item.mediaId
 
@@ -3398,13 +3406,13 @@ class PlaybackService : MediaLibraryService() {
         recoveries.remove(mediaId)
         TrackLog.w(
             "BitChord",
-            "$mediaId failed on a higher-quality source; falling back to YouTube audio",
+            "$mediaId $why; falling back to YouTube audio",
             about = mediaId,
         )
 
         scope.launch(TrackLog.about(mediaId)) {
             delay(RECOVERY_DELAY_MS)
-            withContext(Dispatchers.IO) { AudioCache.discard(playbackUri) }
+            withContext(Dispatchers.IO) { AudioCache.discard(playbackUri, keepComplete = keepComplete) }
             withContext(Dispatchers.Main) {
                 val live = this@PlaybackService.player ?: return@withContext
                 if (live.currentMediaItem?.mediaId != mediaId) return@withContext
@@ -3415,6 +3423,24 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         return true
+    }
+
+    private fun fallbackFailedAlternativeToYouTube(
+        item: MediaItem,
+        uri: Uri?,
+        position: Long,
+    ): Boolean {
+        val playbackUri = uri ?: return false
+        val videoId = playbackUri.getQueryParameter("v")
+        val substituted = videoId?.let(StreamChoice::isSubstitute) == true
+        if (!PlaybackFallback.isAlternative(playbackUri.toString(), substituted)) return false
+        return replaceWithYouTube(
+            item = item,
+            playbackUri = playbackUri,
+            position = position,
+            keepComplete = false,
+            why = "failed on a higher-quality source",
+        )
     }
 
     /**
@@ -4670,6 +4696,7 @@ class PlaybackService : MediaLibraryService() {
         // that loses is handed to [QualityUpgrade] rather than dropped, and
         // handing over the search that just cost three attempts would only
         // schedule a fourth.
+        if (DirectSourceGate.isActive()) return resolveDirect(videoId, target)
         if (StreamChoice.substitutesRefused(videoId)) {
             return Resolved.YouTube(StreamResolver.resolve(videoId))
         }
@@ -5313,61 +5340,29 @@ class PlaybackService : MediaLibraryService() {
      * tracks is more than it does anything with, but it decides that, not this.
      */
     private fun prefetchAround(player: ExoPlayer) {
+        if (DirectSourceGate.isActive()) {
+            driveDirectWindow()
+            if (preferredPrefetchRequest != null) cancelPrefetch()
+            return
+        }
         val nextIndex = player.nextMediaItemIndex
         val upcomingSongs = if (nextIndex != C.INDEX_UNSET) {
             val end = (nextIndex + AudioCache.QUEUE_DEPTH - 1).coerceAtMost(player.mediaItemCount - 1)
-            (nextIndex..end).map { index -> player.getMediaItemAt(index).toSong() }
+            (nextIndex..end).map(player::getMediaItemAt)
+                .filterNot(MusicOnlyPlayback::wants)
+                .map { it.toSong() }
         } else {
             emptyList()
         }
-        // So whatever read-ahead writes for these can be named in the Cached
-        // songs folder; its own requests carry nothing but an id.
         AudioCache.noteSongs(upcomingSongs)
-        val preferAudio = AppSettings.preferMusicOnly.value
-        val request = preferAudio to upcomingSongs.map { it.videoId }
-        if (request == preferredPrefetchRequest) return
-        preferredPrefetchRequest = request
-        preferredPrefetchJob?.cancel()
-
-        fun warm(songs: List<Song>) {
-            AudioCache.prefetchQueue(
-                songs.map { song ->
-                    // The title, artist and runtime the item was built with —
-                    // see [Song.toMediaItem]. Read from the queued item because
-                    // read-ahead has no other way to reach this metadata.
-                    AudioCache.Upcoming(
-                        mediaId = song.videoId,
-                        target = TrackMatcher.targetOf(song),
-                    )
-                },
-            )
-        }
-
-        val next = upcomingSongs.firstOrNull()
-        if (!preferAudio || next?.isVideo != true) {
-            preferredPrefetchJob = null
-            warm(upcomingSongs)
-            return
-        }
-
-        // Do not warm the video's bytes while its catalogue lookup is in
-        // flight: if that lookup succeeds, playback will ask for a different
-        // media id and every byte spent on the video would be wasted. An
-        // unchanged result is the fallback and is warmed on the same path.
-        AudioCache.cancel()
-        preferredPrefetchJob = scope.launch {
-            val preferred = runCatching { YtMusicRepository.resolveAudio(next) }
-                .onFailure {
-                    TrackLog.d(
-                        "BitChord",
-                        "music-only queue warm-up fell back to video: ${it.message}",
-                        about = next.videoId,
-                    )
-                }
-                .getOrDefault(next)
-            if (preferredPrefetchRequest != request) return@launch
-            warm(listOf(preferred) + upcomingSongs.drop(1))
-        }
+        AudioCache.prefetchQueue(
+            upcomingSongs.map { song ->
+                AudioCache.Upcoming(
+                    mediaId = song.videoId,
+                    target = TrackMatcher.targetOf(song),
+                )
+            },
+        )
     }
 
     /** Stops both rendition selection and byte read-ahead, and makes resume retry. */
@@ -6005,10 +6000,15 @@ class PlaybackService : MediaLibraryService() {
             // Re-evaluate the already queued next track immediately when this
             // preference changes, instead of waiting for another timeline event.
             AppSettings.preferMusicOnly.drop(1).collect {
+                MusicOnlyPlayback.reset()
                 cancelPrefetch()
-                player?.takeIf { it.isPlaying }?.let(::prefetchAround)
+                player?.let { live ->
+                    convertVideosAround(live)
+                    if (live.isPlaying) prefetchAround(live)
+                }
             }
         }
+        watchDirectWindow()
         scope.launch {
             AppSettings.preferUsbDac.drop(1).collect { requestOutputReconfiguration() }
         }
@@ -8279,7 +8279,180 @@ class PlaybackService : MediaLibraryService() {
             )
             .build()
 
+    private suspend fun resolveDirect(videoId: String, target: TrackMatcher.Target): Resolved {
+        val direct = runCatching { DirectSourceGate.lookup(videoId, target) }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrNull()
+        if (direct != null) return Resolved.Module(direct)
+        val running = DirectSourceGate.stillLooking(videoId)
+        TrackLog.d(
+            "BitChord",
+            if (running != null) {
+                "no addon answered for '${target.title}' within " +
+                    "${DirectSourceGate.LOOKUP_TIMEOUT_MS / 1000}s; starting it on YouTube and still looking"
+            } else {
+                "no addon served '${target.title}' directly; playing it from YouTube"
+            },
+            about = videoId,
+        )
+        val url = try {
+            StreamResolver.resolve(videoId)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            return Resolved.Module(running?.await() ?: throw e)
+        }
+        DirectSourceGate.startedOnYouTube(videoId, target)
+        return Resolved.YouTube(url)
+    }
+
+    private var lengthCheckedUri: String? = null
+
+    private fun checkSubstituteLength(exoPlayer: ExoPlayer) {
+        val item = exoPlayer.currentMediaItem ?: return
+        val uri = item.localConfiguration?.uri ?: return
+        if (uri.scheme != "bitchord" || uri.authority == "source") return
+        if (QualityUpgrade.cacheTag(uri) != null) return
+        val key = uri.toString()
+        if (key == lengthCheckedUri) return
+        if (exoPlayer.playbackState != Player.STATE_READY) return
+        val decodedMs = exoPlayer.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: return
+        lengthCheckedUri = key
+        val videoId = uri.getQueryParameter("v") ?: return
+        val expectedSec = SourceResolver.targetIn(uri).durationSec
+            ?: DirectSourceGate.knownLength(videoId)
+            ?: return
+        val expectedMs = expectedSec * 1_000L
+        val substituted = StreamChoice.isSubstitute(videoId)
+        val unattributed = StreamChoice.of(videoId) == null && SourceResolver.canSubstituteForYouTube()
+        val wrong = when {
+            substituted -> kotlin.math.abs(decodedMs - expectedMs) > upgradeLengthSlackMs + 1_000L
+            unattributed -> decodedMs < expectedMs / 2
+            else -> false
+        }
+        if (!wrong) return
+        TrackLog.w(
+            "BitChord",
+            "'${item.mediaMetadata.title}' decodes to ${decodedMs}ms against ${expectedSec}s listed " +
+                "(tolerance ±${AppSettings.upgradeLengthSlackSeconds.value}s) on " +
+                if (substituted) "an addon copy" else "a cached copy of unknown origin",
+            about = item.mediaId,
+        )
+        replaceWithYouTube(
+            item = item,
+            playbackUri = uri,
+            position = 0L,
+            keepComplete = false,
+            why = "is the wrong length on the copy it started on",
+        )
+    }
+
+    private var lastSeekAt = 0L
+
+    private fun watchDirectWindow() {
+        scope.launch {
+            while (isActive) {
+                driveDirectWindow()
+                delay(DIRECT_WINDOW_STEP_MS)
+            }
+        }
+    }
+
+    private fun driveDirectWindow() {
+        val exoPlayer = player ?: return
+        checkSubstituteLength(exoPlayer)
+        val audible = buildSet {
+            exoPlayer.currentMediaItem?.mediaId?.let(::add)
+            if (crossfade?.isTransitioning() == true) spare?.currentMediaItem?.mediaId?.let(::add)
+        }
+        if (DirectSourceGate.onPlaying(audible)) AudioCache.cancelDirect()
+        if (!DirectSourceGate.isActive() || !exoPlayer.isPlaying) return
+        if (SystemClock.elapsedRealtime() - lastSeekAt < SEEK_SETTLE_MS) return
+        val current = exoPlayer.currentMediaItem ?: return
+        val nextIndex = exoPlayer.nextMediaItemIndex
+        if (nextIndex == C.INDEX_UNSET) return
+        val next = exoPlayer.getMediaItemAt(nextIndex)
+        if (MusicOnlyPlayback.wants(next)) return
+        val duration = exoPlayer.duration
+        if (duration == C.TIME_UNSET || duration <= 0L) return
+        val boundary = duration
+        val speed = exoPlayer.playbackParameters.speed.coerceAtLeast(MIN_WINDOW_SPEED)
+        val remaining = ((boundary - exoPlayer.currentPosition) / speed).toLong()
+        if (remaining > DirectSourceGate.WINDOW_MS) return
+        if (!DirectSourceGate.openNext(next.mediaId)) return
+        TrackLog.d(
+            "BitChord",
+            "direct window open: ${next.mediaId} with ${remaining}ms to the transition",
+            about = next.mediaId,
+        )
+        val song = next.toSong()
+        AudioCache.noteSongs(listOf(song))
+        AudioCache.prefetchDirect(AudioCache.Upcoming(song.videoId, TrackMatcher.targetOf(song)))
+    }
+
+    private val musicOnlyLookups = HashMap<String, Job>()
+
+    private fun convertVideosAround(exoPlayer: ExoPlayer) {
+        if (!MusicOnlyPlayback.isActive()) return
+        if (crossfade?.isTransitioning() == true || versionSwapJob?.isActive == true) return
+        val rows = listOf(exoPlayer.currentMediaItemIndex, exoPlayer.nextMediaItemIndex)
+            .filter { it in 0 until exoPlayer.mediaItemCount }
+            .distinct()
+        MusicOnlyPlayback.forgetExcept(rows.map { exoPlayer.getMediaItemAt(it).mediaId }.toSet())
+        for (index in rows) {
+            val item = exoPlayer.getMediaItemAt(index)
+            if (!MusicOnlyPlayback.wants(item)) continue
+            val video = item.toSong()
+            val audio = YtMusicRepository.cachedAudioVersion(video.videoId)
+            when {
+                audio == null -> lookUpMusicOnly(video)
+                audio.videoId == video.videoId || audio.isVideo -> MusicOnlyPlayback.settle(video.videoId)
+                else -> {
+                    applyMusicOnly(exoPlayer, index, item, video, audio)
+                    convertVideosAround(exoPlayer)
+                    return
+                }
+            }
+        }
+    }
+
+    private fun lookUpMusicOnly(video: Song) {
+        if (musicOnlyLookups[video.videoId]?.isActive == true) return
+        musicOnlyLookups[video.videoId] = scope.launch {
+            val audio = withTimeoutOrNull(MusicOnlyPlayback.ANSWER_TIMEOUT_MS) {
+                runCatching { YtMusicRepository.resolveAudio(video) }.getOrNull()
+            }
+            musicOnlyLookups.remove(video.videoId)
+            if (audio == null || audio.videoId == video.videoId) {
+                TrackLog.d("BitChord", "music-only: no audio version, playing the video's own audio", about = video.videoId)
+                MusicOnlyPlayback.settle(video.videoId)
+            }
+            val live = player ?: return@launch
+            convertVideosAround(live)
+            if (live.isPlaying) prefetchAround(live)
+        }
+    }
+
+    private fun applyMusicOnly(exoPlayer: ExoPlayer, index: Int, item: MediaItem, video: Song, audio: Song) {
+        TrackLog.d("BitChord", "music-only: playing '${audio.title}' (${audio.videoId})", about = video.videoId)
+        YtMusicRepository.rememberVideoVersion(audio.videoId, video)
+        val replacement = audio.asMusicOnlyOf(video).toMediaItem()
+        val isCurrent = index == exoPlayer.currentMediaItemIndex
+        if (isCurrent && exoPlayer.isPlaying) {
+            smoothSwapCurrentTrackVersion(replacement)
+            return
+        }
+        val position = if (isCurrent) exoPlayer.currentPosition else 0L
+        exoPlayer.replaceMediaItem(index, replacement)
+        if (position > 0L) {
+            val mapped = YtMusicRepository.versionTimeMap(video.videoId, audio.videoId)?.map(position) ?: position
+            exoPlayer.seekTo(exoPlayer.currentMediaItemIndex, mapped.coerceAtLeast(0L))
+        }
+    }
+
     private companion object {
+        const val DIRECT_WINDOW_STEP_MS = 500L
+        const val SEEK_SETTLE_MS = 2_000L
+        const val MIN_WINDOW_SPEED = 0.25f
         const val MEDIA_ROOT_ID = "root"
         const val MEDIA_RECENTS_ID = "recents"
         const val MEDIA_QUICK_PICKS_ID = "quick_picks"
