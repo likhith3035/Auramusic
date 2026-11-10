@@ -147,6 +147,14 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         initLastfm()
         // The public "apps open right now" count; see Presence.
         com.music.bitchord.data.presence.AndroidPresence.install(this)
+
+        // Anonymous daily heartbeat telemetry for active users counter
+        com.music.bitchord.data.telemetry.AuraTelemetryClient.init(filesDir)
+        com.music.bitchord.data.telemetry.AuraTelemetryClient.ping(
+            version = BuildConfig.VERSION_NAME,
+            platform = "Android",
+            osVersion = android.os.Build.VERSION.RELEASE ?: "Unknown",
+        )
     }
 
     /**

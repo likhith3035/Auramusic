@@ -62,6 +62,16 @@ fun main(args: Array<String> = emptyArray()) {
     )
     // The public "apps open right now" count; see Presence.
     DesktopPresence.install()
+
+    // Anonymous daily heartbeat telemetry for active users counter
+    val desktopConfigDir = java.io.File(System.getProperty("user.home"), ".bitchord").apply { mkdirs() }
+    com.music.bitchord.data.telemetry.AuraTelemetryClient.init(desktopConfigDir)
+    com.music.bitchord.data.telemetry.AuraTelemetryClient.ping(
+        version = "3.2.1",
+        platform = "Desktop",
+        osVersion = System.getProperty("os.name") ?: "Desktop",
+    )
+
     desktopMain()
 }
 
