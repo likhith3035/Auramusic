@@ -2064,78 +2064,51 @@ fun SettingsScreen(
     ) { route ->
         when (route) {
             SettingsRoute.HUB -> {
-                if (searchQuery.isNotBlank()) {
-                    Column(
-                        modifier = modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(contentPadding),
-                    ) {
-                        SettingsPageTitle(stringResource(R.string.settings))
-                        SearchField(
-                            query = searchQuery,
-                            onQueryChange = { query ->
-                                searchQuery = query
-                                if (AuraAccessGate.isAuraAiUnlockCode(query)) {
-                                    AppSettings.setAuraAiUnlocked(true)
-                                    showAuraUnlockCelebration = true
-                                    searchQuery = ""
-                                }
-                            },
-                            onSubmit = {
-                                if (AuraAccessGate.isAuraAiUnlockCode(searchQuery)) {
-                                    AppSettings.setAuraAiUnlocked(true)
-                                    showAuraUnlockCelebration = true
-                                    searchQuery = ""
-                                }
-                            },
-                            placeholder = stringResource(R.string.settings_search_hint),
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
-                        )
-                        audioQualityGroup()
-                        playbackGroup()
-                        appearanceGroup()
-                        performanceGroup()
-                        contentPreferencesGroup()
-                        downloadsGroup()
-                        storageGroup()
-                        localMusicGroup()
-                        networkEconomyGroup()
-                        accountGroup()
-                        auraAiGroup()
-                        advancedOptionsGroup()
-                        yourDataGroup()
-                        miscGroup()
-                        languageGroup()
-                        Spacer(Modifier.height(32.dp))
-                    }
-                } else {
-                    SettingsHubScreen(
-                        windowWidth = windowWidth,
-                        signedIn = signedIn,
-                        account = account,
-                        onSignIn = onSignIn,
-                        onSignOut = onSignOut,
-                        onAccountScrobbling = onAccountScrobbling,
-                        onNavigate = { currentRoute = it },
-                        onSources = onSources,
-                        onEqualizer = onEqualizer,
-                        onOpenReplay = onOpenReplay,
-                        onAppLanguage = onAppLanguage,
-                        onShowUpdateDialog = onShowUpdateDialog,
-                        contentPadding = contentPadding,
-                        searchQuery = searchQuery,
-                        onSearchQueryChange = { query ->
-                            searchQuery = query
-                            if (AuraAccessGate.isAuraAiUnlockCode(query)) {
-                                AppSettings.setAuraAiUnlocked(true)
-                                showAuraUnlockCelebration = true
-                                searchQuery = ""
-                            }
-                        },
-                        modifier = modifier,
-                    )
-                }
+                SettingsHubScreen(
+                    windowWidth = windowWidth,
+                    signedIn = signedIn,
+                    account = account,
+                    onSignIn = onSignIn,
+                    onSignOut = onSignOut,
+                    onAccountScrobbling = onAccountScrobbling,
+                    onNavigate = { currentRoute = it },
+                    onSources = onSources,
+                    onEqualizer = onEqualizer,
+                    onOpenReplay = onOpenReplay,
+                    onAppLanguage = onAppLanguage,
+                    onShowUpdateDialog = onShowUpdateDialog,
+                    contentPadding = contentPadding,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { query ->
+                        searchQuery = query
+                        if (AuraAccessGate.isAuraAiUnlockCode(query)) {
+                            AppSettings.setAuraAiUnlocked(true)
+                            showAuraUnlockCelebration = true
+                            searchQuery = ""
+                        }
+                    },
+                    modifier = modifier,
+                    searchResultsContent = if (searchQuery.isNotBlank()) {
+                        {
+                            audioQualityGroup()
+                            playbackGroup()
+                            appearanceGroup()
+                            performanceGroup()
+                            contentPreferencesGroup()
+                            downloadsGroup()
+                            storageGroup()
+                            localMusicGroup()
+                            networkEconomyGroup()
+                            accountGroup()
+                            auraAiGroup()
+                            advancedOptionsGroup()
+                            yourDataGroup()
+                            miscGroup()
+                            languageGroup()
+                            Spacer(Modifier.height(32.dp))
+                        }
+                    } else null,
+                )
             }
             SettingsRoute.AUDIO -> {
                 Column(

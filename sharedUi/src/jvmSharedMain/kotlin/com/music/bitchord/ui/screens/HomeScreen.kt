@@ -46,8 +46,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
+import com.music.bitchord.data.weather.AuraWeatherRepository
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,7 +96,6 @@ import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.trackColumnWidth
 import com.music.bitchord.ui.home.AuraFeature
 import com.music.bitchord.ui.home.AuraGreetingHeader
-import com.music.bitchord.ui.home.FeatureHighlightsStrip
 import com.music.bitchord.ui.player.MeshGradientBackground
 import com.music.bitchord.ui.player.MeshPalette
 
@@ -153,9 +155,16 @@ fun HomeScreen(
     val recentsViewType by AppUi.host.homeRecentsViewType.collectAsStateWithLifecycle()
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
 
+    val homeScope = rememberCoroutineScope()
+
     PullToRefresh(
         refreshing = refreshing,
-        onRefresh = onRefresh,
+        onRefresh = {
+            homeScope.launch {
+                AuraWeatherRepository.refresh(force = true)
+            }
+            onRefresh()
+        },
         state = pullState,
         modifier = modifier.then(if (nothingOsMode) Modifier.background(NothingThemeTokens.Black) else Modifier),
     ) {
@@ -178,14 +187,6 @@ fun HomeScreen(
                     onResumeClick = onPlayPause,
                     onMoodClick = onMoodClick,
                 )
-            }
-            if (onFeatureClick != null) {
-                item {
-                    FeatureHighlightsStrip(
-                        onFeatureClick = onFeatureClick,
-                        nothingOsMode = nothingOsMode,
-                    )
-                }
             }
             if (!signedIn && onSignIn != null) {
                 item {

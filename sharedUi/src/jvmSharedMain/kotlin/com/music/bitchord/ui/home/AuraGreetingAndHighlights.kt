@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,8 +42,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.data.weather.AuraWeatherRepository
+import com.music.bitchord.ui.player.PlayerSettings
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -232,7 +239,20 @@ fun AuraGreetingHeader(
         accountName?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
-    val subtitle = remember(timeOfDay) { timeOfDay.pickSubtitle() }
+    val weather by AuraWeatherRepository.currentWeather.collectAsStateWithLifecycle()
+    val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
+    var showWeatherSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        AuraWeatherRepository.refresh()
+    }
+
+    if (showWeatherSheet) {
+        AuraWeatherLocationSheet(
+            nothingOsMode = nothingOsMode,
+            onDismiss = { showWeatherSheet = false },
+        )
+    }
 
     // Animated soundwave equalizer bars in the greeting card
     val infiniteTransition = rememberInfiniteTransition(label = "greeting_pulse")
@@ -253,7 +273,7 @@ fun AuraGreetingHeader(
     )
 
     if (nothingOsMode) {
-        // Nothing OS Mode: AMOLED Pitch Black + NDot Matrix + Red Glyph (Compact Edition)
+        // Nothing OS Mode: AMOLED Pitch Black + NDot Matrix + Living Weather Canvas + Red Glyph
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = NothingThemeTokens.Surface,
@@ -262,153 +282,169 @@ fun AuraGreetingHeader(
                 .padding(horizontal = PAGE_GUTTER, vertical = 3.dp)
                 .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(16.dp)),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                // Top Row: Pulsing LED glyph, Matrix Tag, and Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(NothingThemeTokens.Red),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = timeOfDay.dotMatrixGreeting,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.4.sp,
-                                fontSize = 10.sp,
-                            ),
-                            color = NothingThemeTokens.White,
-                        )
-                    }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Full-bleed living ambient weather canvas
+                LivingWeatherCanvas(
+                    visualType = weather.visualType,
+                    blendColor = NothingThemeTokens.Surface,
+                    reduceAnimation = reduceAnimation,
+                    modifier = Modifier.matchParentSize(),
+                )
 
-                    // Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    // Top Row: Pulsing LED glyph, Matrix Tag + Weather Info, and Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(NothingThemeTokens.SurfaceElevated)
-                            .border(
-                                1.dp,
-                                if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.Border,
-                                RoundedCornerShape(percent = 50),
-                            )
-                            .then(
-                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                    Modifier.clickable { onResumeClick() }
-                                } else Modifier
-                            )
-                            .padding(horizontal = 7.dp, vertical = 3.5.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Resume",
-                                tint = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
-                                modifier = Modifier.size(11.dp),
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Text(
-                                text = if (isPlaying) "PAUSE" else "RESUME",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.8.sp,
-                                ),
-                                color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
-                            )
-                            Spacer(Modifier.width(3.dp))
-                        }
-                        listOf(bar1, bar2, bar3).forEach { barHeight ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(percent = 50))
+                                .clickable { showWeatherSheet = true },
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .width(2.dp)
-                                    .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
-                                    .clip(RoundedCornerShape(percent = 50))
+                                    .size(6.dp)
+                                    .clip(CircleShape)
                                     .background(NothingThemeTokens.Red),
                             )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "${timeOfDay.dotMatrixGreeting}  ·  ${weather.displayTemperature}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.2.sp,
+                                    fontSize = 10.sp,
+                                ),
+                                color = NothingThemeTokens.White,
+                            )
                         }
-                    }
-                }
 
-                Spacer(Modifier.height(6.dp))
-
-                // Main headline greeting (clean typography, no emojis)
-                val headlineText = if (!firstName.isNullOrBlank()) {
-                    "${timeOfDay.greeting}, $firstName"
-                } else {
-                    "${timeOfDay.greeting}, listener"
-                }
-
-                Text(
-                    text = headlineText,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        letterSpacing = (-0.3).sp,
-                    ),
-                    color = NothingThemeTokens.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                // Single-line compact subtitle (shows current/paused song if available)
-                val effectiveSubtitle = when {
-                    !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
-                    !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
-                    else -> subtitle
-                }
-                Text(
-                    text = effectiveSubtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                    ),
-                    color = NothingThemeTokens.MutedText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                // Contextual Mood Chips (tight, compact micro-pills)
-                if (onMoodClick != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        timeOfDay.moodPills.forEach { mood ->
-                            Surface(
-                                shape = RoundedCornerShape(percent = 50),
-                                color = NothingThemeTokens.SurfaceElevated,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border),
-                                modifier = Modifier.clickable { onMoodClick(mood) },
-                            ) {
+                        // Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(NothingThemeTokens.SurfaceElevated)
+                                .border(
+                                    1.dp,
+                                    if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.Border,
+                                    RoundedCornerShape(percent = 50),
+                                )
+                                .then(
+                                    if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                        Modifier.clickable { onResumeClick() }
+                                    } else Modifier
+                                )
+                                .padding(horizontal = 7.dp, vertical = 3.5.dp),
+                        ) {
+                            if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause" else "Resume",
+                                    tint = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
+                                    modifier = Modifier.size(11.dp),
+                                )
+                                Spacer(Modifier.width(2.dp))
                                 Text(
-                                    text = mood,
+                                    text = if (isPlaying) "PAUSE" else "RESUME",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
                                     ),
-                                    color = NothingThemeTokens.White,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
+                                    color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
                                 )
+                                Spacer(Modifier.width(3.dp))
+                            }
+                            listOf(bar1, bar2, bar3).forEach { barHeight ->
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
+                                    .clip(RoundedCornerShape(percent = 50))
+                                    .background(NothingThemeTokens.Red),
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Main headline greeting (clean typography, no emojis)
+                    val headlineText = if (!firstName.isNullOrBlank()) {
+                        "${timeOfDay.greeting}, $firstName"
+                    } else {
+                        "${timeOfDay.greeting}, listener"
+                    }
+
+                    Text(
+                        text = headlineText,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            letterSpacing = (-0.3).sp,
+                        ),
+                        color = NothingThemeTokens.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    // Single-line compact subtitle: live weather condition or current playing song
+                    val effectiveSubtitle = when {
+                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
+                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
+                        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
+                    }
+                    Text(
+                        text = effectiveSubtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                        ),
+                        color = NothingThemeTokens.MutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { showWeatherSheet = true },
+                    )
+
+                    // Contextual Weather Mood Chips (tight, compact micro-pills matching real outdoor weather)
+                    if (onMoodClick != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            weather.moodPills.forEach { mood ->
+                                Surface(
+                                    shape = RoundedCornerShape(percent = 50),
+                                    color = NothingThemeTokens.SurfaceElevated,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border),
+                                    modifier = Modifier.clickable { onMoodClick(mood) },
+                                ) {
+                                    Text(
+                                        text = mood,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                        ),
+                                        color = NothingThemeTokens.White,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -416,7 +452,7 @@ fun AuraGreetingHeader(
             }
         }
     } else {
-        // Classic Aura: Luxurious Celestial Atmospheric Card with Ambient Gradient
+        // Classic Aura: Luxurious Celestial Atmospheric Card with Living Weather Canvas
         Surface(
             shape = RoundedCornerShape(18.dp),
             color = Color(0xFF10121C),
@@ -443,12 +479,20 @@ fun AuraGreetingHeader(
                         ),
                     ),
             ) {
+                // Full-bleed living ambient weather canvas
+                LivingWeatherCanvas(
+                    visualType = weather.visualType,
+                    blendColor = Color(0xFF10121C),
+                    reduceAnimation = reduceAnimation,
+                    modifier = Modifier.matchParentSize(),
+                )
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    // Top Row: Time Period Tag + Mini Equalizer / 1-Tap Quick Resume
+                    // Top Row: Time Period Tag + Weather Temp + Quick Resume
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -457,6 +501,7 @@ fun AuraGreetingHeader(
                         Surface(
                             shape = RoundedCornerShape(percent = 50),
                             color = Color.White.copy(alpha = 0.12f),
+                            modifier = Modifier.clickable { showWeatherSheet = true },
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -470,7 +515,7 @@ fun AuraGreetingHeader(
                                 )
                                 Spacer(Modifier.width(5.dp))
                                 Text(
-                                    text = timeOfDay.periodTag,
+                                    text = "${timeOfDay.periodTag} · ${weather.displayTemperature}",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 1.sp,
@@ -563,7 +608,7 @@ fun AuraGreetingHeader(
                     val effectiveClassicSubtitle = when {
                         !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
                         !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
-                        else -> subtitle
+                        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
                     }
                     Text(
                         text = effectiveClassicSubtitle,
@@ -574,9 +619,10 @@ fun AuraGreetingHeader(
                         color = Color.White.copy(alpha = 0.75f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { showWeatherSheet = true },
                     )
 
-                    // Contextual Mood Chips
+                    // Contextual Weather Mood Chips (matching outdoor weather)
                     if (onMoodClick != null) {
                         Spacer(Modifier.height(8.dp))
                         Row(
@@ -585,7 +631,7 @@ fun AuraGreetingHeader(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            timeOfDay.moodPills.forEach { mood ->
+                            weather.moodPills.forEach { mood ->
                                 Surface(
                                     shape = RoundedCornerShape(percent = 50),
                                     color = Color.White.copy(alpha = 0.12f),
