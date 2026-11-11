@@ -26,4 +26,23 @@ class AuraAccessGateTest {
         assertFalse(AuraAccessGate.isAuraAiUnlockCode("likhith"))
         assertFalse(AuraAccessGate.isAuraAiUnlockCode(""))
     }
+
+    @Test
+    fun testAdminTelemetryUnlockPhrase() {
+        assertTrue(AuraAccessGate.isAdminTelemetryUnlockCode("adminofauramusic"))
+        assertTrue(AuraAccessGate.isAdminTelemetryUnlockCode("admin of aura music"))
+        assertTrue(AuraAccessGate.isAdminTelemetryUnlockCode("Admin Of Aura Music"))
+        assertTrue(AuraAccessGate.isAdminTelemetryUnlockCode("  admin  of  auramusic  "))
+        assertFalse(AuraAccessGate.isAdminTelemetryUnlockCode("admin"))
+        assertFalse(AuraAccessGate.isAdminTelemetryUnlockCode("auramusic"))
+        assertFalse(AuraAccessGate.isAdminTelemetryUnlockCode(""))
+    }
+
+    @Test
+    fun testVerifyAdminRollNumber() {
+        assertTrue(AuraAccessGate.verifyAdminRollNumber("3035"))
+        assertTrue(AuraAccessGate.verifyAdminRollNumber(" 3035 "))
+        assertFalse(AuraAccessGate.verifyAdminRollNumber("1234"))
+        assertFalse(AuraAccessGate.verifyAdminRollNumber(""))
+    }
 }

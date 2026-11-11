@@ -96,7 +96,7 @@ object AuraTelemetryClient {
         }
     }
 
-    private fun getOrCreateInstallId(): String {
+    fun getOrCreateInstallId(): String {
         cachedInstallId?.let { return it }
         val id = UUID.randomUUID().toString()
         cachedInstallId = id
@@ -110,6 +110,8 @@ object AuraTelemetryClient {
         }
         return id
     }
+
+    fun getLastPingDate(): String? = lastPingDate
 
     private fun saveStoredState(today: String) {
         val dir = storageDir ?: return

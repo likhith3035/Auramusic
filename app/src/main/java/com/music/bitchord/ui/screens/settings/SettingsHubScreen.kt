@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Code
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
@@ -47,6 +49,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.data.listentogether.ListenTogether
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,9 +91,11 @@ fun SettingsHubScreen(
     onSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     searchResultsContent: (@Composable () -> Unit)? = null,
+    onListenTogether: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val party by ListenTogether.state.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -209,6 +216,16 @@ fun SettingsHubScreen(
                 )
             }
         }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Flagship Listen Together Hero Card
+        ListenTogetherHeroCard(
+            party = party,
+            onClick = onListenTogether,
+        )
+
+        Spacer(Modifier.height(4.dp))
 
         // Primary 7 Category Domain Cards
         SettingsGroup(header = stringResource(R.string.settings_hub_audio_title)) {
@@ -462,6 +479,152 @@ fun SettingsHubScreen(
         }
 
         Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun ListenTogetherHeroCard(
+    party: ListenTogether.State,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val inParty = party.inParty
+    val connectedCount = party.members.count { it.connected }.takeIf { it > 0 } ?: party.members.size
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (inParty) {
+                Color(0xFF10B981).copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (inParty) {
+                            Color(0xFF10B981).copy(alpha = 0.18f)
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Groups,
+                    contentDescription = null,
+                    tint = if (inParty) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.listen_together),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    if (inParty) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.20f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981)),
+                                )
+                                Text(
+                                    text = "LIVE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF10B981),
+                                    fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                val subtitleText = if (inParty && party.code != null) {
+                    stringResource(R.string.listen_together_in_party, party.code) +
+                        if (connectedCount > 1) " · $connectedCount listeners" else ""
+                } else {
+                    stringResource(R.string.listen_together_subtitle)
+                }
+
+                Text(
+                    text = subtitleText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (inParty) {
+                    Color(0xFF10B981).copy(alpha = 0.15f)
+                } else {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = if (inParty) "Active" else "Join / Host",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (inParty) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                    )
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = if (inParty) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
     }
 }

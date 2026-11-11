@@ -188,22 +188,22 @@ fun LivingWeatherCanvas(
 
         when (visualType) {
             WeatherVisualType.RAIN -> {
-                drawRainScene(raindrops, rainPhase, width, height)
+                drawRainScene(raindrops, clouds, rainPhase, slowPhase, width, height)
             }
             WeatherVisualType.CLEAR_DAY -> {
-                drawSunnyScene(pulsePhase, slowPhase, width, height)
+                drawSunnyScene(clouds, pulsePhase, slowPhase, width, height)
             }
             WeatherVisualType.CLEAR_NIGHT -> {
-                drawClearNightScene(stars, pulsePhase, slowPhase, width, height)
+                drawClearNightScene(stars, clouds, pulsePhase, slowPhase, width, height)
             }
             WeatherVisualType.CLOUDY -> {
                 drawCloudyScene(clouds, slowPhase, width, height)
             }
             WeatherVisualType.THUNDERSTORM -> {
-                drawThunderstormScene(raindrops, rainPhase, lightningPhase, width, height)
+                drawThunderstormScene(raindrops, clouds, rainPhase, slowPhase, lightningPhase, width, height)
             }
             WeatherVisualType.SNOW -> {
-                drawSnowScene(snowflakes, rainPhase, width, height)
+                drawSnowScene(snowflakes, clouds, rainPhase, slowPhase, width, height)
             }
         }
 
@@ -224,19 +224,78 @@ fun LivingWeatherCanvas(
     }
 }
 
+private fun DrawScope.drawAtmosphericClouds(
+    clouds: List<CloudCluster>,
+    slowPhase: Float,
+    width: Float,
+    height: Float,
+    cloudTint: Color,
+    baseAlphaMultiplier: Float = 1.0f,
+) {
+    for (cloud in clouds) {
+        val effectiveAlpha = cloud.alpha * baseAlphaMultiplier
+        if (effectiveAlpha <= 0.01f) continue
+
+        val driftProgress = (slowPhase * cloud.speed) % 1f
+        val driftOffset = (driftProgress - 0.5f) * (width * 0.35f)
+        val centerX = (cloud.relX * width + driftOffset).coerceIn(0f, width * 1.15f)
+        val centerY = cloud.relY * height
+        val baseR = height * 0.18f * cloud.scale
+
+        // Volumetric overlapping soft Gaussian cloud lobes
+        val lobes = listOf(
+            Triple(Offset(centerX - baseR * 0.75f, centerY + baseR * 0.15f), baseR * 0.72f, baseR * 0.42f),
+            Triple(Offset(centerX - baseR * 0.20f, centerY - baseR * 0.25f), baseR * 0.98f, baseR * 0.55f),
+            Triple(Offset(centerX + baseR * 0.42f, centerY - baseR * 0.10f), baseR * 0.82f, baseR * 0.48f),
+            Triple(Offset(centerX + baseR * 0.85f, centerY + baseR * 0.20f), baseR * 0.62f, baseR * 0.38f),
+        )
+
+        for ((pos, rX, rY) in lobes) {
+            drawOval(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        cloudTint.copy(alpha = effectiveAlpha),
+                        cloudTint.copy(alpha = effectiveAlpha * 0.55f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(pos.x, pos.y - rY * 0.25f),
+                    radius = rX * 1.25f,
+                ),
+                topLeft = Offset(pos.x - rX, pos.y - rY),
+                size = Size(rX * 2f, rY * 2f),
+            )
+        }
+
+        // Base atmospheric mist shelf
+        drawOval(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    cloudTint.copy(alpha = effectiveAlpha * 0.45f),
+                    cloudTint.copy(alpha = effectiveAlpha * 0.15f),
+                    Color.Transparent,
+                ),
+            ),
+            topLeft = Offset(centerX - baseR * 1.1f, centerY + baseR * 0.05f),
+            size = Size(baseR * 2.2f, baseR * 0.50f),
+        )
+    }
+}
+
 private fun DrawScope.drawRainScene(
     raindrops: List<Raindrop>,
-    phase: Float,
+    clouds: List<CloudCluster>,
+    rainPhase: Float,
+    slowPhase: Float,
     width: Float,
     height: Float,
 ) {
     val focalX = (width - 72.dp.toPx()).coerceAtLeast(width * 0.76f)
-    // Subtle cool overcast ambient glow in upper-right area
+    // Cool overcast ambient glow
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF38BDF8).copy(alpha = 0.14f),
-                Color(0xFF0284C7).copy(alpha = 0.05f),
+                Color(0xFF38BDF8).copy(alpha = 0.16f),
+                Color(0xFF0284C7).copy(alpha = 0.06f),
                 Color.Transparent,
             ),
             center = Offset(focalX, height * 0.30f),
@@ -244,16 +303,25 @@ private fun DrawScope.drawRainScene(
         ),
     )
 
-    // Draw falling slanted raindrops across the full width
+    // Soft overcast rain clouds
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFF64748B),
+        baseAlphaMultiplier = 0.75f,
+    )
+
+    // Draw falling slanted raindrops across full width
     for (drop in raindrops) {
-        val progress = (phase * drop.speed + drop.relYOffset) % 1f
+        val progress = (rainPhase * drop.speed + drop.relYOffset) % 1f
         val startX = drop.relX * (width + 40.dp.toPx()) - progress * (width * 0.12f)
         val startY = progress * (height + drop.lengthPx * 2f) - drop.lengthPx
 
         val endX = startX - (drop.lengthPx * 0.32f)
         val endY = startY + drop.lengthPx
 
-        // Only draw if on canvas
         if (startY < height && endY > 0f) {
             drawLine(
                 brush = Brush.verticalGradient(
@@ -288,6 +356,7 @@ private fun DrawScope.drawRainScene(
 }
 
 private fun DrawScope.drawSunnyScene(
+    clouds: List<CloudCluster>,
     pulsePhase: Float,
     slowPhase: Float,
     width: Float,
@@ -299,73 +368,97 @@ private fun DrawScope.drawSunnyScene(
 
     val pulseScale = 0.94f + 0.12f * pulsePhase
 
-    // Outer coronal bloom
+    // 1. Broad atmospheric daylight warmth filling upper-right hemisphere
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
+                Color(0xFFFFA500).copy(alpha = 0.22f * pulseScale),
+                Color(0xFFFFB703).copy(alpha = 0.12f * pulseScale),
+                Color(0xFFFB8500).copy(alpha = 0.04f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = (width * 0.58f).coerceAtLeast(sunRadius * 4.2f),
+        ),
+    )
+
+    // 2. Volumetric golden-amber solar corona
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFE082).copy(alpha = 0.45f * pulseScale),
                 Color(0xFFFFB703).copy(alpha = 0.28f * pulseScale),
-                Color(0xFFFB8500).copy(alpha = 0.12f * pulseScale),
-                Color(0xFFFF5400).copy(alpha = 0.04f),
+                Color(0xFFFB8500).copy(alpha = 0.10f),
                 Color.Transparent,
             ),
             center = Offset(sunCenterX, sunCenterY),
-            radius = sunRadius * 2.8f * pulseScale,
+            radius = sunRadius * 2.3f * pulseScale,
         ),
     )
 
-    // Solar ray bursts
-    val rayCount = 10
-    val angleOffset = slowPhase * 360f
-    for (i in 0 until rayCount) {
-        val baseAngle = (i * (360f / rayCount) + angleOffset) * (PI / 180.0)
-        val rayInner = sunRadius * 1.15f
-        val rayOuter = sunRadius * (1.55f + 0.25f * sin((pulsePhase * 2f * PI + i).toFloat()))
-
-        val startX = (sunCenterX + cos(baseAngle) * rayInner).toFloat()
-        val startY = (sunCenterY + sin(baseAngle) * rayInner).toFloat()
-        val endX = (sunCenterX + cos(baseAngle) * rayOuter).toFloat()
-        val endY = (sunCenterY + sin(baseAngle) * rayOuter).toFloat()
-
-        drawLine(
-            color = Color(0xFFFFE082).copy(alpha = 0.32f + 0.15f * pulsePhase),
-            start = Offset(startX, startY),
-            end = Offset(endX, endY),
-            strokeWidth = 2.0f,
-            cap = StrokeCap.Round,
-        )
-    }
-
-    // Secondary warm halo
-    drawCircle(
+    // 3. Cinematic anamorphic lens flare horizontal streak
+    val flareHalfSpan = sunRadius * 3.6f
+    val flareThickness = sunRadius * 0.24f
+    drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFE082).copy(alpha = 0.50f),
-                Color(0xFFFFB703).copy(alpha = 0.35f),
+                Color(0xFFFFFBEB).copy(alpha = 0.55f * pulseScale),
+                Color(0xFFFEF08A).copy(alpha = 0.25f * pulseScale),
                 Color.Transparent,
             ),
             center = Offset(sunCenterX, sunCenterY),
-            radius = sunRadius * 1.45f,
+            radius = flareHalfSpan,
         ),
+        topLeft = Offset(sunCenterX - flareHalfSpan, sunCenterY - flareThickness * 0.5f),
+        size = Size(flareHalfSpan * 2f, flareThickness),
     )
 
-    // Solid brilliant solar core
+    // 4. Photorealistic incandescent Sun body with blinding white-hot core
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFFDF5),
-                Color(0xFFFFEE58),
-                Color(0xFFFFA000),
+                Color(0xFFFFFFFF),
+                Color(0xFFFFFDE7),
+                Color(0xFFFEF08A),
+                Color(0xFFFBBF24),
+                Color(0xFFF59E0B),
             ),
-            center = Offset(sunCenterX - sunRadius * 0.2f, sunCenterY - sunRadius * 0.2f),
+            center = Offset(sunCenterX - sunRadius * 0.18f, sunCenterY - sunRadius * 0.18f),
             radius = sunRadius,
         ),
         radius = sunRadius,
         center = Offset(sunCenterX, sunCenterY),
     )
+
+    // 5. Sun-kissed golden rim highlight
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.85f),
+                Color(0xFFFFF9C4).copy(alpha = 0.35f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX - sunRadius * 0.22f, sunCenterY - sunRadius * 0.22f),
+            radius = sunRadius * 0.65f,
+        ),
+        radius = sunRadius * 0.65f,
+        center = Offset(sunCenterX - sunRadius * 0.22f, sunCenterY - sunRadius * 0.22f),
+    )
+
+    // 6. Drift soft sunlit clouds across the lower perimeter
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFFEF3C7),
+        baseAlphaMultiplier = 0.55f,
+    )
 }
 
 private fun DrawScope.drawClearNightScene(
     stars: List<Star>,
+    clouds: List<CloudCluster>,
     pulsePhase: Float,
     slowPhase: Float,
     width: Float,
@@ -375,20 +468,22 @@ private fun DrawScope.drawClearNightScene(
     val moonCenterY = height * 0.44f
     val moonRadius = (height * 0.24f).coerceIn(25.dp.toPx(), 40.dp.toPx())
 
-    // Ambient celestial night glow
+    val pulseScale = 0.94f + 0.12f * pulsePhase
+
+    // 1. Ambient celestial night glow
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF6366F1).copy(alpha = 0.15f),
-                Color(0xFF312E81).copy(alpha = 0.06f),
+                Color(0xFF6366F1).copy(alpha = 0.18f),
+                Color(0xFF312E81).copy(alpha = 0.08f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = (width * 0.50f).coerceAtLeast(moonRadius * 2.5f),
+            radius = (width * 0.55f).coerceAtLeast(moonRadius * 3.2f),
         ),
     )
 
-    // Twinkling stars across the sky
+    // 2. Twinkling stars across the sky
     for (star in stars) {
         val starX = star.relX * width
         val starY = star.relY * height
@@ -396,7 +491,7 @@ private fun DrawScope.drawClearNightScene(
         val starAlpha = twinkle.coerceIn(0f, 1f)
 
         if (star.isDiamond) {
-            // Delicate 4-point cross star
+            // Delicate 4-point cross diffraction star
             val armLength = star.radius * 2.8f
             drawLine(
                 color = Color(0xFFE0E7FF).copy(alpha = starAlpha),
@@ -426,20 +521,42 @@ private fun DrawScope.drawClearNightScene(
         }
     }
 
-    // Lunar corona halo
+    // 3. Volumetric ethereal lunar corona halo
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFC7D2FE).copy(alpha = 0.22f + 0.08f * pulsePhase),
-                Color(0xFF818CF8).copy(alpha = 0.08f),
+                Color(0xFFE0E7FF).copy(alpha = 0.25f * pulseScale),
+                Color(0xFFA5B4FC).copy(alpha = 0.12f * pulseScale),
+                Color(0xFF6366F1).copy(alpha = 0.04f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = moonRadius * 2.2f,
+            radius = moonRadius * 2.4f * pulseScale,
         ),
     )
 
-    // Stylized Crescent Moon Path
+    // 4. Earthshine 3D sphere: dark side of lunar sphere dimly illuminated by reflected daylight from Earth
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF312E81).copy(alpha = 0.32f),
+                Color(0xFF1E1B4B).copy(alpha = 0.48f),
+                Color(0xFF0F172A).copy(alpha = 0.65f),
+            ),
+            center = Offset(moonCenterX, moonCenterY),
+            radius = moonRadius,
+        ),
+        radius = moonRadius,
+        center = Offset(moonCenterX, moonCenterY),
+    )
+    drawCircle(
+        color = Color(0xFF818CF8).copy(alpha = 0.22f),
+        radius = moonRadius,
+        center = Offset(moonCenterX, moonCenterY),
+        style = Stroke(width = 1.0f),
+    )
+
+    // 5. Photorealistic lunar crescent path
     val crescentPath = Path().apply {
         val topTipX = moonCenterX - moonRadius * 0.10f
         val topTipY = moonCenterY - moonRadius
@@ -447,13 +564,11 @@ private fun DrawScope.drawClearNightScene(
         val bottomTipY = moonCenterY + moonRadius * 0.90f
 
         moveTo(topTipX, topTipY)
-        // Outer curved silhouette (sweeps outward to the left)
         cubicTo(
             moonCenterX - moonRadius * 1.35f, moonCenterY - moonRadius * 0.50f,
             moonCenterX - moonRadius * 1.35f, moonCenterY + moonRadius * 0.50f,
             bottomTipX, bottomTipY,
         )
-        // Inner crescent cutout scoop (curves back up to top tip)
         cubicTo(
             moonCenterX - moonRadius * 0.35f, moonCenterY + moonRadius * 0.45f,
             moonCenterX - moonRadius * 0.35f, moonCenterY - moonRadius * 0.45f,
@@ -467,7 +582,8 @@ private fun DrawScope.drawClearNightScene(
         brush = Brush.linearGradient(
             colors = listOf(
                 Color(0xFFFFFFFF),
-                Color(0xFFF1F5F9),
+                Color(0xFFF8FAFC),
+                Color(0xFFE2E8F0),
                 Color(0xFFCBD5E1),
             ),
             start = Offset(moonCenterX - moonRadius, moonCenterY - moonRadius),
@@ -475,16 +591,40 @@ private fun DrawScope.drawClearNightScene(
         ),
     )
 
-    // Subtle lunar crater shadows
-    drawCircle(
-        color = Color(0xFF94A3B8).copy(alpha = 0.28f),
-        radius = moonRadius * 0.14f,
-        center = Offset(moonCenterX - moonRadius * 0.60f, moonCenterY - moonRadius * 0.15f),
+    // 6. Organic lunar maria (surface features) with soft radial blending
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF64748B).copy(alpha = 0.28f),
+                Color.Transparent,
+            ),
+            center = Offset(moonCenterX - moonRadius * 0.60f, moonCenterY - moonRadius * 0.15f),
+            radius = moonRadius * 0.22f,
+        ),
+        topLeft = Offset(moonCenterX - moonRadius * 0.72f, moonCenterY - moonRadius * 0.26f),
+        size = Size(moonRadius * 0.28f, moonRadius * 0.22f),
     )
-    drawCircle(
-        color = Color(0xFF94A3B8).copy(alpha = 0.24f),
-        radius = moonRadius * 0.10f,
-        center = Offset(moonCenterX - moonRadius * 0.45f, moonCenterY + moonRadius * 0.25f),
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF64748B).copy(alpha = 0.22f),
+                Color.Transparent,
+            ),
+            center = Offset(moonCenterX - moonRadius * 0.45f, moonCenterY + moonRadius * 0.25f),
+            radius = moonRadius * 0.18f,
+        ),
+        topLeft = Offset(moonCenterX - moonRadius * 0.54f, moonCenterY + moonRadius * 0.16f),
+        size = Size(moonRadius * 0.22f, moonRadius * 0.18f),
+    )
+
+    // 7. Soft nocturnal moonlit clouds passing peacefully
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFC7D2FE),
+        baseAlphaMultiplier = 0.42f,
     )
 }
 
@@ -495,69 +635,34 @@ private fun DrawScope.drawCloudyScene(
     height: Float,
 ) {
     val focalX = (width - 72.dp.toPx()).coerceAtLeast(width * 0.76f)
-    // Soft overcast daylight gradient
+    // Soft overcast ambient illumination
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF94A3B8).copy(alpha = 0.18f),
-                Color(0xFF475569).copy(alpha = 0.05f),
+                Color(0xFFCBD5E1).copy(alpha = 0.22f),
+                Color(0xFF64748B).copy(alpha = 0.08f),
                 Color.Transparent,
             ),
             center = Offset(focalX, height * 0.38f),
-            radius = (width * 0.55f).coerceAtLeast(140.dp.toPx()),
+            radius = (width * 0.60f).coerceAtLeast(140.dp.toPx()),
         ),
     )
 
-    // Volumetric cloud puffs drifting slowly across the sky
-    for (cloud in clouds) {
-        val driftProgress = (slowPhase * cloud.speed) % 1f
-        val driftOffset = (driftProgress - 0.5f) * (width * 0.35f)
-        val centerX = (cloud.relX * width + driftOffset).coerceIn(0f, width * 1.1f)
-        val centerY = cloud.relY * height
-        val baseR = height * 0.18f * cloud.scale
-
-        // Draw multiple overlapping cloud lobes
-        val lobePositions = listOf(
-            Offset(centerX - baseR * 0.75f, centerY + baseR * 0.15f) to (baseR * 0.70f),
-            Offset(centerX - baseR * 0.25f, centerY - baseR * 0.35f) to (baseR * 0.95f),
-            Offset(centerX + baseR * 0.40f, centerY - baseR * 0.15f) to (baseR * 0.80f),
-            Offset(centerX + baseR * 0.85f, centerY + baseR * 0.20f) to (baseR * 0.60f),
-        )
-
-        for ((pos, r) in lobePositions) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFE2E8F0).copy(alpha = cloud.alpha),
-                        Color(0xFF94A3B8).copy(alpha = cloud.alpha * 0.65f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(pos.x, pos.y - r * 0.2f),
-                    radius = r * 1.3f,
-                ),
-                radius = r,
-                center = pos,
-            )
-        }
-
-        // Soft cloud base shelf
-        drawOval(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF64748B).copy(alpha = cloud.alpha * 0.55f),
-                    Color(0xFF475569).copy(alpha = cloud.alpha * 0.25f),
-                    Color.Transparent,
-                ),
-            ),
-            topLeft = Offset(centerX - baseR * 1.1f, centerY + baseR * 0.05f),
-            size = Size(baseR * 2.2f, baseR * 0.55f),
-        )
-    }
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFE2E8F0),
+        baseAlphaMultiplier = 1.0f,
+    )
 }
 
 private fun DrawScope.drawThunderstormScene(
     raindrops: List<Raindrop>,
+    clouds: List<CloudCluster>,
     rainPhase: Float,
+    slowPhase: Float,
     lightningPhase: Float,
     width: Float,
     height: Float,
@@ -577,9 +682,9 @@ private fun DrawScope.drawThunderstormScene(
 
     val boltStartX = (width - 72.dp.toPx()).coerceAtLeast(width * 0.76f)
 
-    // Ambient thunderstorm background
+    // Atmospheric ionization sheet flash
     val ambientColor = if (flashIntensity > 0.05f) {
-        Color(0xFF818CF8).copy(alpha = 0.18f + 0.35f * flashIntensity)
+        Color(0xFF93C5FD).copy(alpha = 0.18f + 0.40f * flashIntensity)
     } else {
         Color(0xFF1E1B4B).copy(alpha = 0.25f)
     }
@@ -591,39 +696,62 @@ private fun DrawScope.drawThunderstormScene(
                 Color.Transparent,
             ),
             center = Offset(boltStartX, height * 0.35f),
-            radius = (width * 0.60f).coerceAtLeast(150.dp.toPx()),
+            radius = (width * 0.65f).coerceAtLeast(150.dp.toPx()),
         ),
     )
 
-    // Lightning bolt during peak flash
-    if (flashIntensity > 0.35f) {
-        val boltPath = Path().apply {
-            val startX = boltStartX
-            val startY = height * 0.08f
-            moveTo(startX, startY)
-            lineTo(startX - 10f, startY + height * 0.22f)
-            lineTo(startX + 6f, startY + height * 0.28f)
-            lineTo(startX - 14f, startY + height * 0.55f)
-            lineTo(startX - 4f, startY + height * 0.60f)
-            lineTo(startX - 18f, startY + height * 0.85f)
+    // Storm clouds
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFF334155),
+        baseAlphaMultiplier = 0.85f,
+    )
+
+    // Lightning bolt with branched forks during peak flash
+    if (flashIntensity > 0.30f) {
+        val startY = height * 0.06f
+        val primaryBolt = Path().apply {
+            moveTo(boltStartX, startY)
+            lineTo(boltStartX - 12f, startY + height * 0.20f)
+            lineTo(boltStartX + 8f, startY + height * 0.26f)
+            lineTo(boltStartX - 16f, startY + height * 0.52f)
+            lineTo(boltStartX - 6f, startY + height * 0.58f)
+            lineTo(boltStartX - 22f, startY + height * 0.86f)
         }
 
-        // Bolt outer glow
-        drawPath(
-            path = boltPath,
-            color = Color(0xFFA5B4FC).copy(alpha = flashIntensity * 0.70f),
-            style = Stroke(width = 4.5f, cap = StrokeCap.Round),
-        )
+        val forkBranch1 = Path().apply {
+            moveTo(boltStartX + 8f, startY + height * 0.26f)
+            lineTo(boltStartX + 26f, startY + height * 0.42f)
+            lineTo(boltStartX + 20f, startY + height * 0.48f)
+            lineTo(boltStartX + 34f, startY + height * 0.64f)
+        }
 
-        // Bolt white core
-        drawPath(
-            path = boltPath,
-            color = Color.White.copy(alpha = flashIntensity),
-            style = Stroke(width = 1.8f, cap = StrokeCap.Round),
-        )
+        val forkBranch2 = Path().apply {
+            moveTo(boltStartX - 16f, startY + height * 0.52f)
+            lineTo(boltStartX - 32f, startY + height * 0.68f)
+        }
+
+        for (path in listOf(primaryBolt, forkBranch1, forkBranch2)) {
+            val isFork = path != primaryBolt
+            val glowWidth = if (isFork) 3.0f else 5.5f
+            drawPath(
+                path = path,
+                color = Color(0xFFA5B4FC).copy(alpha = flashIntensity * (if (isFork) 0.50f else 0.75f)),
+                style = Stroke(width = glowWidth, cap = StrokeCap.Round),
+            )
+            val coreWidth = if (isFork) 1.2f else 2.0f
+            drawPath(
+                path = path,
+                color = Color.White.copy(alpha = flashIntensity * (if (isFork) 0.75f else 1.0f)),
+                style = Stroke(width = coreWidth, cap = StrokeCap.Round),
+            )
+        }
     }
 
-    // Falling rain streaks (faster and heavier) across full width
+    // Heavy storm rain streaks across full width
     for (drop in raindrops) {
         val progress = (rainPhase * drop.speed * 1.35f + drop.relYOffset) % 1f
         val startX = drop.relX * (width + 40.dp.toPx()) - progress * (width * 0.14f)
@@ -653,7 +781,9 @@ private fun DrawScope.drawThunderstormScene(
 
 private fun DrawScope.drawSnowScene(
     snowflakes: List<Snowflake>,
-    phase: Float,
+    clouds: List<CloudCluster>,
+    rainPhase: Float,
+    slowPhase: Float,
     width: Float,
     height: Float,
 ) {
@@ -671,10 +801,20 @@ private fun DrawScope.drawSnowScene(
         ),
     )
 
+    // Soft winter clouds
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFE2E8F0),
+        baseAlphaMultiplier = 0.50f,
+    )
+
     // Falling swaying snowflakes
     for (flake in snowflakes) {
-        val progress = (phase * flake.speed + flake.relYOffset) % 1f
-        val sway = sin(phase * 2f * PI.toFloat() * flake.swayFreq + flake.phase) * flake.swayAmp
+        val progress = (rainPhase * flake.speed + flake.relYOffset) % 1f
+        val sway = sin(rainPhase * 2f * PI.toFloat() * flake.swayFreq + flake.phase) * flake.swayAmp
         val x = (flake.relX * width + sway).coerceIn(0f, width)
         val y = progress * (height + flake.radius * 2f) - flake.radius
 

@@ -90,6 +90,8 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Psychology
 import com.music.bitchord.data.ai.AuraAccessGate
 import com.music.bitchord.data.ai.AuraAiPersona
+import com.music.bitchord.ui.screens.settings.AuraAdminPinDialog
+import com.music.bitchord.ui.screens.settings.AuraTelemetryPulseSheet
 import com.music.bitchord.data.AppUpdateChecker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -337,6 +339,8 @@ fun SettingsScreen(
     val auraAiPersona by AppSettings.auraAiPersona.collectAsStateWithLifecycle()
     var showAuraUnlockCelebration by remember { mutableStateOf(false) }
     var showCustomApiKeysDialog by remember { mutableStateOf(false) }
+    var showAdminPinDialog by remember { mutableStateOf(false) }
+    var showTelemetryPulseSheet by remember { mutableStateOf(false) }
     val backupScope = rememberCoroutineScope()
 
     val batterySettingsLauncher = rememberLauncherForActivityResult(
@@ -1922,7 +1926,9 @@ fun SettingsScreen(
                             color = androidx.compose.ui.graphics.Color(0xFF34D399),
                         )
                     },
-                    onClick = { uriHandler.openUri("https://auramusic-kjov.onrender.com/stats") },
+                    onClick = {
+                        showAdminPinDialog = true
+                    },
                 )
             }
         }
@@ -2085,8 +2091,12 @@ fun SettingsScreen(
                             AppSettings.setAuraAiUnlocked(true)
                             showAuraUnlockCelebration = true
                             searchQuery = ""
+                        } else if (AuraAccessGate.isAdminTelemetryUnlockCode(query)) {
+                            showAdminPinDialog = true
+                            searchQuery = ""
                         }
                     },
+                    onListenTogether = onListenTogether,
                     modifier = modifier,
                     searchResultsContent = if (searchQuery.isNotBlank()) {
                         {
@@ -2596,6 +2606,22 @@ fun SettingsScreen(
                     Text("Cancel")
                 }
             },
+        )
+    }
+
+    if (showAdminPinDialog) {
+        AuraAdminPinDialog(
+            onDismiss = { showAdminPinDialog = false },
+            onSuccess = {
+                showAdminPinDialog = false
+                showTelemetryPulseSheet = true
+            },
+        )
+    }
+
+    if (showTelemetryPulseSheet) {
+        AuraTelemetryPulseSheet(
+            onDismiss = { showTelemetryPulseSheet = false },
         )
     }
 }

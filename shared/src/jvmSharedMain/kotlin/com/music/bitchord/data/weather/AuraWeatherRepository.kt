@@ -300,7 +300,7 @@ object AuraWeatherRepository {
         return when (code) {
             0 -> if (isDay) "Clear Sky" to WeatherVisualType.CLEAR_DAY else "Clear Night" to WeatherVisualType.CLEAR_NIGHT
             1 -> if (isDay) "Mainly Clear" to WeatherVisualType.CLEAR_DAY else "Clear Night" to WeatherVisualType.CLEAR_NIGHT
-            2 -> "Partly Cloudy" to WeatherVisualType.CLOUDY
+            2 -> if (isDay) "Partly Cloudy" to WeatherVisualType.CLEAR_DAY else "Partly Cloudy" to WeatherVisualType.CLEAR_NIGHT
             3 -> "Overcast" to WeatherVisualType.CLOUDY
             45, 48 -> "Foggy" to WeatherVisualType.CLOUDY
             51, 53, 55 -> "Light Drizzle" to WeatherVisualType.RAIN
