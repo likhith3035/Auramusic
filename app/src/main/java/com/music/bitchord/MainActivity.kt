@@ -10326,11 +10326,9 @@ private fun BitChordApp(
                     },
 
                     onInstall = {
-
                         val ready = AppUpdateChecker.download.value as? AppUpdateChecker.DownloadState.Ready
-
                         ready?.let { AppUpdateChecker.installApk(context, it.file) }
-
+                        showUpdateDialog = false
                     },
 
                     onOpenReleasePage = {
