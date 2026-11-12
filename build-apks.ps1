@@ -1,7 +1,7 @@
 # ====================================================================
 # AuraMusic - All-in-One APK Build & Sign Script
 # ====================================================================
-$version = "3.2.1"
+$version = "3.3.0"
 
 if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
     $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"

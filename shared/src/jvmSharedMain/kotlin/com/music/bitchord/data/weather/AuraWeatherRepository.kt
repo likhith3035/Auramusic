@@ -119,7 +119,7 @@ object AuraWeatherRepository {
             val url = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=8&language=en&format=json"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "AuraMusic/3.2.1")
+                .header("User-Agent", "AuraMusic/3.3.0")
                 .build()
 
             Http.client.newCall(request).execute().use { response ->
@@ -186,7 +186,7 @@ object AuraWeatherRepository {
                 val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m"
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "AuraMusic/3.2.1")
+                    .header("User-Agent", "AuraMusic/3.3.0")
                     .build()
 
                 Http.client.newCall(request).execute().use { response ->
@@ -243,7 +243,7 @@ object AuraWeatherRepository {
             val geoUrl = "https://get.geojs.io/v1/ip/geo.json"
             val request = Request.Builder()
                 .url(geoUrl)
-                .header("User-Agent", "AuraMusic/3.2.1")
+                .header("User-Agent", "AuraMusic/3.3.0")
                 .build()
 
             Http.client.newCall(request).execute().use { response ->
@@ -272,7 +272,7 @@ object AuraWeatherRepository {
             val url = "https://freeipapi.com/api/json"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "AuraMusic/3.2.1")
+                .header("User-Agent", "AuraMusic/3.3.0")
                 .build()
 
             Http.client.newCall(request).execute().use { response ->

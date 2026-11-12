@@ -32,8 +32,31 @@ object AuraTelemetryRepository {
     private const val BASE_URL = "https://auramusic-stats.onrender.com"
     private const val STATS_URL = "$BASE_URL/api/stats"
     private const val HEARTBEAT_URL = "$BASE_URL/api/heartbeat"
+    private const val HEALTH_URL = "$BASE_URL/health"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Non-blocking background pre-warm probe to wake up sleeping Render free-tier containers.
+     */
+    suspend fun preWarmServer(): Unit = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url(HEALTH_URL)
+                .header("User-Agent", "AuraMusic/PreWarm")
+                .get()
+                .build()
+
+            val client = Http.client.newBuilder()
+                .connectTimeout(25, TimeUnit.SECONDS)
+                .readTimeout(25, TimeUnit.SECONDS)
+                .build()
+
+            client.newCall(request).execute().close()
+        } catch (_: Exception) {
+            // Silently ignore pre-warm failures
+        }
+    }
 
     suspend fun fetchStats(): Result<TelemetryStats> = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
@@ -45,8 +68,8 @@ object AuraTelemetryRepository {
                 .build()
 
             val client = Http.client.newBuilder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
+                .connectTimeout(45, TimeUnit.SECONDS)
+                .readTimeout(50, TimeUnit.SECONDS)
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -54,7 +77,7 @@ object AuraTelemetryRepository {
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("HTTP error ${response.code}"))
                 }
-                val bodyStr = response.body?.string() ?: return@withContext Result.failure(Exception("Empty response body"))
+                val bodyStr = response.body.string()
                 val root = json.parseToJsonElement(bodyStr).jsonObject
 
                 val activeToday = root["activeToday"]?.jsonPrimitive?.intOrNull ?: 0
@@ -117,15 +140,15 @@ object AuraTelemetryRepository {
                 .build()
 
             val client = Http.client.newBuilder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
+                .connectTimeout(45, TimeUnit.SECONDS)
+                .readTimeout(50, TimeUnit.SECONDS)
                 .build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("HTTP error ${response.code}"))
                 }
-                val bodyStr = response.body?.string() ?: return@withContext Result.failure(Exception("Empty body"))
+                val bodyStr = response.body.string()
                 val root = json.parseToJsonElement(bodyStr).jsonObject
                 val active = root["activeToday"]?.jsonPrimitive?.intOrNull ?: 1
                 Result.success(active)

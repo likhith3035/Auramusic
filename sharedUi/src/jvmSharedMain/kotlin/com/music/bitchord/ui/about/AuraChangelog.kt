@@ -112,6 +112,26 @@ data class ChangelogEntry(
  */
 val AURA_CHANGELOG_ENTRIES: List<ChangelogEntry> = listOf(
     ChangelogEntry(
+        id = "auramusic-v3-3-0-celestial-weather-and-telemetry",
+        date = "November 12, 2026",
+        time = "08:30 PM IST",
+        title = "AuraMusic v3.3.0: Photorealistic Celestial Weather, Listen Together & Live Telemetry",
+        tag = "Major Release",
+        tagColor = Color(0xFF6366F1),
+        category = ChangelogCategory.CloudParty,
+        description = "A flagship evolution bringing ambient nature, social listening, and network transparency together. Experience photorealistic celestial weather that reflects your local outdoors, a dedicated flagship Listen Together party hub, and a live network telemetry hub with milestone card rendering.",
+        highlights = listOf(
+            "Photorealistic Celestial Weather: Automatic sun and moon trajectory, twilight sky hues, and starry celestial night maps based on accurate local solar time.",
+            "Zero-Permission Global Forecasts: Open-Meteo keyless weather integration with automatic coarse IP location, instant city search, and unit toggling.",
+            "Flagship Listen Together Card: Live listening party pulse, participant counts, and one-tap invite link generation right on your home screen.",
+            "Live Network Telemetry Hub: Real-time DAU and all-time device metrics with 14-day spline trend charts, protected behind founder authentication.",
+            "Render Cloud Pre-Warm: Background probe automatically wakes up sleeping Render containers when opening Settings.",
+            "1080x1350 Milestone Share Cards: Native Android Canvas renderer generating obsidian graphic milestone cards with single-tap Android sharing.",
+        ),
+        buildChallenge = "Handling Render free-tier container sleep latency without timing out client requests, while rendering photorealistic celestial trajectories on Compose Canvas without battery drain.",
+        buildSolution = "Implemented silent pre-warming probes, 50s resilient timeouts with progressive wake-up feedback, and math-driven ephemeris equations cached with 45-minute TTL.",
+    ),
+    ChangelogEntry(
         id = "auramusic-v3-1-liquid-glass-and-player-specs",
         date = "October 20, 2026",
         time = "02:30 PM IST",

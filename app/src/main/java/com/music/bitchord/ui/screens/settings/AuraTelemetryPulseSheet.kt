@@ -30,15 +30,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -71,6 +74,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,7 +87,12 @@ import com.music.bitchord.data.telemetry.AuraTelemetryClient
 import com.music.bitchord.data.telemetry.AuraTelemetryRepository
 import com.music.bitchord.data.telemetry.DailyHistoryItem
 import com.music.bitchord.data.telemetry.TelemetryStats
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,15 +102,31 @@ fun AuraTelemetryPulseSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
     var stats by remember { mutableStateOf<TelemetryStats?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var loadingSeconds by remember { mutableStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isPinging by remember { mutableStateOf(false) }
     var pingNotice by remember { mutableStateOf<String?>(null) }
+    var isSharingCard by remember { mutableStateOf(false) }
+    var reportCopiedNotice by remember { mutableStateOf<String?>(null) }
 
     val activeCountAnim = remember { Animatable(0f) }
     val allTimeCountAnim = remember { Animatable(0f) }
+
+    // Track elapsed time during loading to show smart progressive wake-up feedback
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            loadingSeconds = 0
+            while (isActive && isLoading) {
+                delay(1000)
+                loadingSeconds++
+            }
+        }
+    }
 
     fun refreshStats() {
         coroutineScope.launch {
@@ -159,10 +186,11 @@ fun AuraTelemetryPulseSheet(
 
             Spacer(Modifier.height(14.dp))
 
-            // Server Connection Status Ribbon
+            // Server Connection Status Ribbon with Smart Cold-Start Wake-up Display
             ServerStatusRibbon(
                 stats = stats,
                 isLoading = isLoading,
+                loadingSeconds = loadingSeconds,
                 errorMessage = errorMessage,
             )
 
@@ -237,6 +265,40 @@ fun AuraTelemetryPulseSheet(
             )
 
             Spacer(Modifier.height(16.dp))
+
+            // Export & Share Telemetry Milestone Card
+            val currentStats = stats
+            if (currentStats != null) {
+                ShareActionsCard(
+                    stats = currentStats,
+                    isSharing = isSharingCard,
+                    copiedNotice = reportCopiedNotice,
+                    onShareCard = {
+                        coroutineScope.launch {
+                            isSharingCard = true
+                            TelemetryCardRenderer.shareMilestoneCard(context, currentStats)
+                            isSharingCard = false
+                        }
+                    },
+                    onCopyReport = {
+                        val report = buildString {
+                            appendLine("# AuraMusic Telemetry Report")
+                            appendLine("- Date: ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}")
+                            appendLine("- Active Today (DAU): ${currentStats.activeToday}")
+                            appendLine("- All-Time Devices: ${currentStats.allTimeDevices}")
+                            appendLine("- Latency: ${currentStats.latencyMs} ms")
+                            appendLine("- Server: auramusic-stats.onrender.com")
+                            if (currentStats.versions.isNotEmpty()) {
+                                appendLine("- Versions: " + currentStats.versions.entries.joinToString { "v${it.key} (${it.value})" })
+                            }
+                        }
+                        clipboardManager.setText(AnnotatedString(report))
+                        reportCopiedNotice = "Telemetry report copied to clipboard!"
+                    },
+                )
+
+                Spacer(Modifier.height(16.dp))
+            }
 
             // Privacy Guarantee
             PrivacyGuaranteeCard()
@@ -323,16 +385,21 @@ private fun TelemetryHeader(
 private fun ServerStatusRibbon(
     stats: TelemetryStats?,
     isLoading: Boolean,
+    loadingSeconds: Int,
     errorMessage: String?,
 ) {
     val isOnline = stats != null && errorMessage == null
+    val isWaking = isLoading && loadingSeconds >= 3
+
     val ribbonBg = when {
+        isWaking -> Color(0xFFF59E0B).copy(alpha = 0.14f)
         isLoading -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         isOnline -> Color(0xFF10B981).copy(alpha = 0.12f)
         else -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
     }
 
     val borderColor = when {
+        isWaking -> Color(0xFFF59E0B).copy(alpha = 0.40f)
         isLoading -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
         isOnline -> Color(0xFF10B981).copy(alpha = 0.35f)
         else -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
@@ -344,77 +411,103 @@ private fun ServerStatusRibbon(
         color = ribbonBg,
         border = BorderStroke(1.dp, borderColor),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isWaking -> Color(0xFFF59E0B)
+                                isLoading -> Color(0xFFFBBF24)
+                                isOnline -> Color(0xFF10B981)
+                                else -> MaterialTheme.colorScheme.error
+                            },
+                        ),
+                )
+
+                Spacer(Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = when {
+                            isWaking -> "Cloud Asleep (Free Tier) · Waking instance (~25s)..."
+                            isLoading -> "Connecting to Render Cloud..."
+                            isOnline -> "ONLINE · auramusic-stats.onrender.com"
+                            else -> "Server Offline / Waking Up"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            isWaking -> Color(0xFFF59E0B)
                             isLoading -> Color(0xFFFBBF24)
                             isOnline -> Color(0xFF10B981)
                             else -> MaterialTheme.colorScheme.error
                         },
-                    ),
-            )
-
-            Spacer(Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = when {
-                        isLoading -> "Connecting to Render Cloud..."
-                        isOnline -> "ONLINE · auramusic-stats.onrender.com"
-                        else -> "Server Offline / Waking Up"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = when {
-                        isLoading -> Color(0xFFFBBF24)
-                        isOnline -> Color(0xFF10B981)
-                        else -> MaterialTheme.colorScheme.error
-                    },
-                )
-                if (errorMessage != null) {
-                    Text(
-                        text = "Free tier instances may sleep. Tap refresh to wake up.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
                     )
-                }
-            }
-
-            if (isOnline && stats != null) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Speed,
-                            contentDescription = null,
-                            tint = if (stats.latencyMs < 300) Color(0xFF10B981) else Color(0xFFFBBF24),
-                            modifier = Modifier.size(13.dp),
-                        )
+                    if (isWaking) {
                         Text(
-                            text = "${stats.latencyMs} ms",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            text = "Render containers sleep after 15m. Booting up Docker container ($loadingSeconds s elapsed)...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    } else if (errorMessage != null) {
+                        Text(
+                            text = "Free tier instances may sleep. Tap refresh to wake up.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                         )
                     }
                 }
+
+                if (isOnline) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Speed,
+                                contentDescription = null,
+                                tint = if (stats.latencyMs < 300) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Text(
+                                text = "${stats.latencyMs} ms",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isWaking) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(CircleShape),
+                    color = Color(0xFFF59E0B),
+                    trackColor = Color(0xFFF59E0B).copy(alpha = 0.2f),
+                )
             }
         }
     }
@@ -829,7 +922,7 @@ private fun HeartbeatTestCard(
                     Text("Transmitting Heartbeat...")
                 } else {
                     Icon(
-                        imageVector = Icons.Rounded.Send,
+                        imageVector = Icons.AutoMirrored.Rounded.Send,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                     )
@@ -894,6 +987,137 @@ private fun PrivacyGuaranteeCard() {
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareActionsCard(
+    stats: TelemetryStats,
+    isSharing: Boolean,
+    copiedNotice: String?,
+    onShareCard: () -> Unit,
+    onCopyReport: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Export & Share Telemetry",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                ) {
+                    Text(
+                        text = "FOUNDER TOOL",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = "Generate a branded milestone poster or copy a clean Markdown report to share with your community or on GitHub.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Share Milestone Poster Button
+                Button(
+                    onClick = onShareCard,
+                    enabled = !isSharing,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    if (isSharing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Rendering...",
+                            fontSize = 12.sp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Share Card",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+
+                // Copy Markdown Report Button
+                OutlinedButton(
+                    onClick = onCopyReport,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ContentCopy,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Copy Report",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = copiedNotice != null) {
+                Column {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = copiedNotice.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF10B981),
+                    )
+                }
             }
         }
     }

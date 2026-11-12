@@ -92,6 +92,7 @@ import com.music.bitchord.data.ai.AuraAccessGate
 import com.music.bitchord.data.ai.AuraAiPersona
 import com.music.bitchord.ui.screens.settings.AuraAdminPinDialog
 import com.music.bitchord.ui.screens.settings.AuraTelemetryPulseSheet
+import com.music.bitchord.data.telemetry.AuraTelemetryRepository
 import com.music.bitchord.data.AppUpdateChecker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -426,6 +427,11 @@ fun SettingsScreen(
             isFirstSearchComposition = false
             scrollState.scrollTo(0)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        // Quietly pre-warm Render telemetry container in background
+        AuraTelemetryRepository.preWarmServer()
     }
 
     val accountGroup: @Composable () -> Unit = {
@@ -1909,25 +1915,6 @@ fun SettingsScreen(
                         coroutineScope.launch {
                             AppUpdateChecker.check()
                         }
-                    },
-                )
-            }
-            row("Live Network & Listener Pulse", "analytics", "listeners", "stats", "server", "telemetry", "pulse", "live", "parties") {
-                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                SettingsRow(
-                    icon = Icons.Rounded.GraphicEq,
-                    title = "Live Network & Listener Pulse",
-                    subtitle = "Real-time global listeners, party rooms & telemetry",
-                    trailing = {
-                        Text(
-                            text = "• LIVE",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            color = androidx.compose.ui.graphics.Color(0xFF34D399),
-                        )
-                    },
-                    onClick = {
-                        showAdminPinDialog = true
                     },
                 )
             }
