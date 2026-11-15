@@ -207,38 +207,63 @@ class AuraMusicPlayer {
     }
 
     // Playback Engine Resolution:
-    // Direct audio stream plays immediately with 0 delay and 0 CORS issues
-    if (track.audioUrl) {
-      this.playbackEngine = 'html5';
-      if (this.ytPlayer && this.ytPlayer.stopVideo) {
-        try { this.ytPlayer.stopVideo(); } catch (e) {}
+    // Full-length song priority: YouTube provides 100% full-length playback (3-5+ mins).
+    // While YouTube initializes or resolves, HTML5 audio preview starts immediately for instant sub-50ms feedback.
+    const playFullYouTube = (vid) => {
+      if (this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
+        this.playbackEngine = 'yt';
+        this.audio.pause();
+        this.ytPlayer.loadVideoById(vid);
+        if (!autoPlay) this.ytPlayer.pauseVideo();
       }
-      this.audio.src = track.audioUrl;
-      if (autoPlay) {
-        this.play();
-      }
-    } else if (window.AuraMusicApi) {
-      // Resolve audio stream from live catalog
-      window.AuraMusicApi.getDirectAudioStream(track.title, track.artist).then(info => {
-        if (info && this.currentTrack && this.currentTrack.id === track.id) {
-          track.audioUrl = info.audioUrl;
-          if (!track.art || track.art.includes('unsplash')) {
-            track.art = info.art;
-            if (barThumb) barThumb.src = track.art;
-            if (fsAlbumArt) fsAlbumArt.src = track.art;
-          }
-          this.playbackEngine = 'html5';
-          this.audio.src = track.audioUrl;
-          if (autoPlay) this.play();
-        }
-      });
-    }
+    };
 
-    // Background videoId resolution for YouTube if missing
-    if (!track.videoId && window.AuraMusicApi) {
-      window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
-        if (vid) track.videoId = vid;
-      });
+    if (track.videoId && this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
+      playFullYouTube(track.videoId);
+    } else {
+      // Immediate low-latency start using direct audio stream
+      if (track.audioUrl) {
+        this.playbackEngine = 'html5';
+        this.audio.src = track.audioUrl;
+        if (autoPlay) this.play();
+      } else if (window.AuraMusicApi) {
+        window.AuraMusicApi.getDirectAudioStream(track.title, track.artist).then(info => {
+          if (info && this.currentTrack && this.currentTrack.id === track.id) {
+            track.audioUrl = info.audioUrl;
+            if (!track.art || track.art.includes('unsplash')) {
+              track.art = info.art;
+              if (barThumb) barThumb.src = track.art;
+              if (fsAlbumArt) fsAlbumArt.src = track.art;
+            }
+            if (this.playbackEngine !== 'yt') {
+              this.audio.src = track.audioUrl;
+              if (autoPlay) this.play();
+            }
+          }
+        });
+      }
+
+      // Transition to full-length song as soon as videoId is ready
+      if (window.AuraMusicApi) {
+        if (track.videoId) {
+          const checkReady = setInterval(() => {
+            if (this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
+              clearInterval(checkReady);
+              if (this.currentTrack && this.currentTrack.id === track.id) {
+                playFullYouTube(track.videoId);
+              }
+            }
+          }, 250);
+          setTimeout(() => clearInterval(checkReady), 4000);
+        } else {
+          window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
+            if (vid && this.currentTrack && this.currentTrack.id === track.id) {
+              track.videoId = vid;
+              playFullYouTube(vid);
+            }
+          });
+        }
+      }
     }
   }
 
