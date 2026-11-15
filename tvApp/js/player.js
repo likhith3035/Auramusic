@@ -114,16 +114,28 @@ class AuraMusicPlayer {
       }
 
       this.ytPlayer = new YT.Player('yt-player-container', {
-        height: '120',
-        width: '120',
+        height: '100%',
+        width: '100%',
         playerVars: playerVars,
         events: {
           onReady: () => {
             this.isYtReady = true;
             try { this.ytPlayer.unMute(); } catch (e) { }
-            console.log('YouTube Audio Engine Ready on TV');
-            if (this.currentTrack && this.currentTrack.videoId && this.isPlaying && this.playbackEngine === 'yt') {
-              this.ytPlayer.loadVideoById(this.currentTrack.videoId);
+            console.log('YouTube Audio & Video Engine Ready on TV');
+            
+            const targetVid = this.pendingVideoId || (this.currentTrack ? this.currentTrack.videoId : null);
+            if (targetVid) {
+              this.playbackEngine = 'yt';
+              if (this.pendingAutoPlay || this.isPlaying) {
+                this.audio.pause();
+                this.audio.currentTime = 0;
+                this.ytPlayer.loadVideoById(targetVid);
+                this.isPlaying = true;
+                document.body.classList.add('playing');
+              } else {
+                this.ytPlayer.cueVideoById(targetVid);
+              }
+              this.pendingVideoId = null;
             }
           },
           onStateChange: (event) => {
@@ -131,6 +143,7 @@ class AuraMusicPlayer {
               this.isPlaying = true;
               this.playbackEngine = 'yt';
               this.audio.pause();
+              this.audio.currentTime = 0;
               document.body.classList.add('playing');
             } else if (event.data === YT.PlayerState.PAUSED) {
               this.isPlaying = false;
@@ -140,9 +153,23 @@ class AuraMusicPlayer {
             }
           },
           onError: (err) => {
-            console.warn('YouTube engine error, falling back to direct audio stream:', err);
-            this.playbackEngine = 'html5';
-            if (this.currentTrack && this.currentTrack.audioUrl) {
+            console.warn('YouTube engine error:', err);
+            // If YouTube iframe has an error with this video ID, try search playlist fallback
+            if (this.currentTrack && !this.currentTrack._ytSearchFallback && this.ytPlayer && typeof this.ytPlayer.loadPlaylist === 'function') {
+              this.currentTrack._ytSearchFallback = true;
+              console.log('Falling back to YouTube internal search playlist...');
+              try {
+                this.ytPlayer.loadPlaylist({
+                  list: `${this.currentTrack.title} ${this.currentTrack.artist}`,
+                  listType: 'search',
+                  index: 0
+                });
+                return;
+              } catch (e) { }
+            }
+
+            if (this.currentTrack && this.currentTrack.audioUrl && this.playbackEngine === 'yt') {
+              this.playbackEngine = 'html5';
               this.audio.src = this.currentTrack.audioUrl;
               this.audio.play().then(() => {
                 this.isPlaying = true;
@@ -208,75 +235,112 @@ class AuraMusicPlayer {
 
     // Playback Engine Resolution:
     // Full-length song priority: YouTube provides 100% full-length playback (3-5+ mins).
-    // While YouTube initializes or resolves, HTML5 audio preview starts immediately for instant sub-50ms feedback.
-    const playFullYouTube = (vid) => {
-      if (this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
-        this.playbackEngine = 'yt';
-        this.audio.pause();
-        this.ytPlayer.loadVideoById(vid);
-        if (!autoPlay) this.ytPlayer.pauseVideo();
-      }
-    };
+    if (track.videoId) {
+      this.playbackEngine = 'yt';
+      this.audio.pause();
+      this.audio.currentTime = 0;
 
-    if (track.videoId && this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
-      playFullYouTube(track.videoId);
+      if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+        if (autoPlay) {
+          this.ytPlayer.loadVideoById(track.videoId);
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+        } else {
+          this.ytPlayer.cueVideoById(track.videoId);
+          this.isPlaying = false;
+          document.body.classList.remove('playing');
+        }
+      } else {
+        this.pendingVideoId = track.videoId;
+        this.pendingAutoPlay = autoPlay;
+        if (autoPlay) {
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+        }
+      }
     } else {
-      // Immediate low-latency start using direct audio stream
-      if (track.audioUrl) {
-        this.playbackEngine = 'html5';
-        this.audio.src = track.audioUrl;
-        if (autoPlay) this.play();
-      } else if (window.AuraMusicApi) {
-        window.AuraMusicApi.getDirectAudioStream(track.title, track.artist).then(info => {
-          if (info && this.currentTrack && this.currentTrack.id === track.id) {
-            track.audioUrl = info.audioUrl;
-            if (!track.art || track.art.includes('unsplash')) {
-              track.art = info.art;
-              if (barThumb) barThumb.src = track.art;
-              if (fsAlbumArt) fsAlbumArt.src = track.art;
-            }
-            if (this.playbackEngine !== 'yt') {
-              this.audio.src = track.audioUrl;
-              if (autoPlay) this.play();
+      // If videoId is not yet resolved, start API resolution
+      if (window.AuraMusicApi) {
+        // Instant audio preview while resolving full YouTube stream if requested
+        if (track.audioUrl && autoPlay) {
+          this.playbackEngine = 'html5';
+          this.audio.src = track.audioUrl;
+          this.audio.play().then(() => {
+            this.isPlaying = true;
+            document.body.classList.add('playing');
+          }).catch(e => console.warn('Preview stream play warning:', e));
+        }
+
+        window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
+          if (vid && this.currentTrack && this.currentTrack.id === track.id) {
+            track.videoId = vid;
+            this.playbackEngine = 'yt';
+            const curTime = this.audio.currentTime || 0;
+            this.audio.pause();
+            this.audio.currentTime = 0;
+
+            if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+              if (autoPlay || this.isPlaying) {
+                this.ytPlayer.loadVideoById({ videoId: vid, startSeconds: curTime });
+                this.isPlaying = true;
+                document.body.classList.add('playing');
+              } else {
+                this.ytPlayer.cueVideoById(vid);
+              }
+            } else {
+              this.pendingVideoId = vid;
+              this.pendingAutoPlay = autoPlay || this.isPlaying;
             }
           }
         });
-      }
-
-      // Transition to full-length song as soon as videoId is ready
-      if (window.AuraMusicApi) {
-        if (track.videoId) {
-          const checkReady = setInterval(() => {
-            if (this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
-              clearInterval(checkReady);
-              if (this.currentTrack && this.currentTrack.id === track.id) {
-                playFullYouTube(track.videoId);
-              }
-            }
-          }, 250);
-          setTimeout(() => clearInterval(checkReady), 4000);
-        } else {
-          window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
-            if (vid && this.currentTrack && this.currentTrack.id === track.id) {
-              track.videoId = vid;
-              playFullYouTube(vid);
-            }
-          });
-        }
+      } else if (track.audioUrl) {
+        this.playbackEngine = 'html5';
+        this.audio.src = track.audioUrl;
+        if (autoPlay) this.play();
       }
     }
   }
 
   play() {
-    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.playVideo) {
+    // Priority 1: YouTube Full-Length Audio/Video Engine
+    const targetVid = this.currentTrack ? this.currentTrack.videoId : null;
+    if ((this.playbackEngine === 'yt' || targetVid) && this.isYtReady && this.ytPlayer) {
       try {
-        this.ytPlayer.playVideo();
+        this.playbackEngine = 'yt';
+        this.audio.pause();
+        this.audio.currentTime = 0;
+
+        if (targetVid) {
+          const state = typeof this.ytPlayer.getPlayerState === 'function' ? this.ytPlayer.getPlayerState() : -1;
+          if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.CUED) {
+            this.ytPlayer.playVideo();
+          } else if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
+            this.ytPlayer.loadVideoById(targetVid);
+          } else {
+            this.ytPlayer.playVideo();
+          }
+        } else if (typeof this.ytPlayer.playVideo === 'function') {
+          this.ytPlayer.playVideo();
+        }
         this.isPlaying = true;
         document.body.classList.add('playing');
         return;
-      } catch (e) { }
+      } catch (e) {
+        console.warn('YouTube playVideo exception:', e);
+      }
     }
 
+    // Priority 2: Waiting for YouTube ready
+    if (targetVid && !this.isYtReady) {
+      this.playbackEngine = 'yt';
+      this.pendingAutoPlay = true;
+      this.pendingVideoId = targetVid;
+      this.isPlaying = true;
+      document.body.classList.add('playing');
+      return;
+    }
+
+    // Priority 3: Fallback HTML5 audio preview
     if (this.audio.src) {
       this.playbackEngine = 'html5';
       this.audio.play().then(() => {
@@ -364,6 +428,9 @@ class AuraMusicPlayer {
     });
 
     this.audio.addEventListener('ended', () => {
+      // Ignore preview end if full-length YouTube engine is active
+      if (this.playbackEngine === 'yt') return;
+
       if (this.sleepTimerEndTimestamp && Date.now() >= this.sleepTimerEndTimestamp) {
         this.pause();
         this.sleepTimerEndTimestamp = null;

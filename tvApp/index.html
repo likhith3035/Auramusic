@@ -601,8 +601,18 @@
 
   </div>
 
-  <!-- Hidden YouTube Playback Engine for Smart TVs (active viewport placement prevents browser throttling) -->
-  <div id="yt-player-container" style="position:fixed;bottom:10px;right:10px;width:120px;height:70px;opacity:0.01;pointer-events:none;z-index:0;"></div>
+  <!-- Active Video Canvas for Living Room TV Playback (Spotify / YouTube Music TV Standard) -->
+  <div class="tv-video-canvas-tile" id="tvVideoCanvasTile">
+    <div class="canvas-tile-header">
+      <span class="canvas-live-badge">FULL-LENGTH AUDIO & VIDEO</span>
+      <button class="canvas-expand-btn focusable" id="btnCanvasExpand" title="Expand to Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+    </div>
+    <div class="canvas-video-wrapper">
+      <div id="yt-player-container"></div>
+    </div>
+  </div>
   
   <script src="js/spatial-navigation.js"></script>
   <script src="js/music-api.js"></script>

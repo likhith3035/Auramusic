@@ -270,6 +270,12 @@ class AuraAppController {
   }
 
   handleBack() {
+    const canvasTile = document.getElementById('tvVideoCanvasTile');
+    if (canvasTile && canvasTile.classList.contains('fullscreen-canvas')) {
+      canvasTile.classList.remove('fullscreen-canvas');
+      if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+      return true;
+    }
     const modal = document.getElementById('sleepTimerSheet');
     if (modal && modal.classList.contains('open')) {
       this.closeSleepTimer();
@@ -294,7 +300,7 @@ class AuraAppController {
     if (window.AndroidHost && typeof window.AndroidHost.exitApp === 'function') {
       window.AndroidHost.exitApp();
     } else if (window.tizen && window.tizen.application) {
-      try { window.tizen.application.getCurrentApplication().exit(); } catch (e) {}
+      try { window.tizen.application.getCurrentApplication().exit(); } catch (e) { }
     } else if (window.webOS && window.webOS.platformBack) {
       window.webOS.platformBack();
     } else if (window.webOSSystem && window.webOSSystem.platformBack) {
@@ -515,6 +521,18 @@ class AuraAppController {
     const btnSettings = document.getElementById('btn-settings');
     if (btnSettings) {
       btnSettings.addEventListener('click', () => this.switchView('settings'));
+    }
+
+    // Video Canvas Expand Button (Toggles between PiP tile and Fullscreen Video)
+    const btnCanvasExpand = document.getElementById('btnCanvasExpand');
+    if (btnCanvasExpand) {
+      btnCanvasExpand.addEventListener('click', () => {
+        const tile = document.getElementById('tvVideoCanvasTile');
+        if (tile) {
+          tile.classList.toggle('fullscreen-canvas');
+          if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+        }
+      });
     }
 
     // Sidebar Playlists
