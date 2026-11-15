@@ -97,10 +97,6 @@ class AuraMusicPlayer {
 
   setupYtPlayer() {
     try {
-      const validOrigin = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
-        ? window.location.origin
-        : undefined;
-
       const initialVid = (this.currentTrack && this.currentTrack.videoId) || '4NRXx6U8ABQ';
       const playerVars = {
         autoplay: 0,
@@ -112,9 +108,6 @@ class AuraMusicPlayer {
         playsinline: 1,
         modestbranding: 1
       };
-      if (validOrigin) {
-        playerVars.origin = validOrigin;
-      }
 
       this.ytPlayer = new YT.Player('yt-player-container', {
         height: '100%',
@@ -263,38 +256,39 @@ class AuraMusicPlayer {
         }
       }
     } else {
-      // If videoId is not yet resolved, start API resolution
+      // If videoId is not yet resolved, resolve it directly for full-length YouTube playback
+      this.playbackEngine = 'yt';
       if (window.AuraMusicApi) {
-        // Instant audio preview while resolving full YouTube stream if requested
-        if (track.audioUrl && autoPlay) {
-          this.playbackEngine = 'html5';
-          this.audio.src = track.audioUrl;
-          this.audio.play().then(() => {
-            this.isPlaying = true;
-            document.body.classList.add('playing');
-          }).catch(e => console.warn('Preview stream play warning:', e));
-        }
-
         window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
-          if (vid && this.currentTrack && this.currentTrack.id === track.id) {
-            track.videoId = vid;
-            this.playbackEngine = 'yt';
-            const curTime = this.audio.currentTime || 0;
-            this.audio.pause();
-            this.audio.currentTime = 0;
-
-            if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
-              if (autoPlay || this.isPlaying) {
-                this.ytPlayer.loadVideoById({ videoId: vid, startSeconds: curTime });
-                this.isPlaying = true;
-                document.body.classList.add('playing');
+          if (this.currentTrack && this.currentTrack.id === track.id) {
+            if (vid) {
+              track.videoId = vid;
+              this.playbackEngine = 'yt';
+              if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+                if (autoPlay) {
+                  this.ytPlayer.loadVideoById(vid);
+                  this.isPlaying = true;
+                  document.body.classList.add('playing');
+                } else {
+                  this.ytPlayer.cueVideoById(vid);
+                }
               } else {
-                this.ytPlayer.cueVideoById(vid);
+                this.pendingVideoId = vid;
+                this.pendingAutoPlay = autoPlay;
               }
-            } else {
-              this.pendingVideoId = vid;
-              this.pendingAutoPlay = autoPlay || this.isPlaying;
+            } else if (track.audioUrl) {
+              // Only fallback to audio stream if YouTube video is completely unavailable
+              this.playbackEngine = 'html5';
+              this.audio.src = track.audioUrl;
+              if (autoPlay) this.play();
             }
+          }
+        }).catch(err => {
+          console.warn('Video resolution error, falling back to direct stream:', err);
+          if (track.audioUrl) {
+            this.playbackEngine = 'html5';
+            this.audio.src = track.audioUrl;
+            if (autoPlay) this.play();
           }
         });
       } else if (track.audioUrl) {
