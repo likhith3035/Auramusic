@@ -284,7 +284,7 @@ class AuraMusicPlayer {
             if (vid) {
               track.videoId = vid;
               this.playbackEngine = 'yt';
-              const state = typeof this.ytPlayer?.getPlayerState === 'function' ? this.ytPlayer.getPlayerState() : -1;
+              const state = (this.ytPlayer && typeof this.ytPlayer.getPlayerState === 'function') ? this.ytPlayer.getPlayerState() : -1;
               if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
                 if (autoPlay) {
                   this.ytPlayer.loadVideoById(vid);
@@ -467,7 +467,7 @@ class AuraMusicPlayer {
       const d = this.ytPlayer.getDuration();
       if (d && d > 0) return d;
     }
-    return this.audio.duration || this.currentTrack?.duration || 180;
+    return this.audio.duration || (this.currentTrack && this.currentTrack.duration) || 180;
   }
 
   onTimeUpdate() {
