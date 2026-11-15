@@ -264,6 +264,20 @@
           </div>
           <!-- On-screen remote keyboard for TV -->
           <div class="tv-keyboard-wrapper" id="tvKeyboardWrapper">
+            <!-- Numbers Row -->
+            <div class="kbd-row">
+              <button class="kbd-key focusable" data-char="1">1</button>
+              <button class="kbd-key focusable" data-char="2">2</button>
+              <button class="kbd-key focusable" data-char="3">3</button>
+              <button class="kbd-key focusable" data-char="4">4</button>
+              <button class="kbd-key focusable" data-char="5">5</button>
+              <button class="kbd-key focusable" data-char="6">6</button>
+              <button class="kbd-key focusable" data-char="7">7</button>
+              <button class="kbd-key focusable" data-char="8">8</button>
+              <button class="kbd-key focusable" data-char="9">9</button>
+              <button class="kbd-key focusable" data-char="0">0</button>
+            </div>
+            <!-- Letter Rows -->
             <div class="kbd-row">
               <button class="kbd-key focusable" data-char="Q">Q</button>
               <button class="kbd-key focusable" data-char="W">W</button>
@@ -296,7 +310,8 @@
               <button class="kbd-key focusable" data-char="N">N</button>
               <button class="kbd-key focusable" data-char="M">M</button>
               <button class="kbd-key kbd-wide focusable" data-char="SPACE">SPACE</button>
-              <button class="kbd-key kbd-wide focusable" data-char="BACKSPACE">⌫ DEL</button>
+              <button class="kbd-key kbd-wide focusable" data-char="BACKSPACE">DEL</button>
+              <button class="kbd-key kbd-wide focusable" data-char="CLEAR">CLEAR</button>
             </div>
           </div>
           <div class="quick-picks-grid" id="search-results-grid"></div>
@@ -439,7 +454,7 @@
             </div>
             <div class="lyrics-viewport" id="fsLyricsViewport">
               <div class="lyrics-stack" id="fsLyricsStack">
-                <div class="lyric-item active">♪ Ambient instrumental opening...</div>
+                <div class="lyric-item active">Ambient instrumental opening...</div>
                 <div class="lyric-item">Dim the living room lights softly</div>
                 <div class="lyric-item">Let the soundwaves fill every corner</div>
                 <div class="lyric-item">Lossless frequencies in 24-bit clarity</div>
@@ -468,7 +483,9 @@
     <aside class="desktop-queue-panel" id="desktopQueuePanel">
       <div class="panel-header">
         <span class="panel-title">Playing Next</span>
-        <button class="panel-close-btn focusable" id="btn-queue-close">✕</button>
+        <button class="panel-close-btn focusable" id="btn-queue-close" aria-label="Close Queue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
       <div class="panel-queue-list" id="panelQueueList">
         <div class="track-row-card focusable active" tabindex="0">
@@ -518,8 +535,8 @@
 
   </div>
 
-  <!-- Hidden YouTube Playback Engine for Smart TVs -->
-  <div id="yt-player-container" style="position:fixed;bottom:-9999px;left:-9999px;width:200px;height:200px;opacity:0.001;pointer-events:none;z-index:-1;"></div>
+  <!-- Hidden YouTube Playback Engine for Smart TVs (active viewport placement prevents browser throttling) -->
+  <div id="yt-player-container" style="position:fixed;bottom:10px;right:10px;width:120px;height:70px;opacity:0.01;pointer-events:none;z-index:0;"></div>
   
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="js/spatial-navigation.js"></script>

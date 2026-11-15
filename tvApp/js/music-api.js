@@ -13,7 +13,32 @@ class AuraMusicApi {
       ['die for you__the weeknd', 'uPD0QOGChkY'],
       ['viva la vida__coldplay', 'dvgZkm1xWPE'],
       ['starboy__the weeknd', 'dMMUH_ZpbB0'],
-      ['espresso__sabrina carpenter', 'eVli-tstM5E']
+      ['espresso__sabrina carpenter', 'eVli-tstM5E'],
+      ['please please please__sabrina carpenter', 'QFvG_i4qX84'],
+      ['save your tears__the weeknd', 'XXYlFuWEuKI'],
+      ['bad guy__billie eilish', 'DyDfgMOUjCI'],
+      ['lovely__billie eilish', 'V1Pl8CzNzCw'],
+      ['fix you__coldplay', 'k4V3Mo61fJM'],
+      ['something just like this__coldplay', 'FM7Z-Xq8DvQ'],
+      ['a sky full of stars__coldplay', 'VPRjCeoBqrI'],
+      ['shape of you__ed sheeran', 'JGwWNGJdvx8'],
+      ['perfect__ed sheeran', '2Vv-BfVoq4g'],
+      ['as it was__harry styles', 'H5v3kku4y6Q'],
+      ['cruel summer__taylor swift', 'ic8j13piAhQ'],
+      ['blank space__taylor swift', 'e-ORhEE9VVg'],
+      ['anti-hero__taylor swift', 'b1kbLwvqugk'],
+      ['levitating__dua lipa', 'TUVcZfQe-Kw'],
+      ['houdini__dua lipa', 'suAR1PYFNYA'],
+      ['flowers__miley cyrus', 'G7KNmW9a75Y'],
+      ['sunflower__post malone', 'ApXoWvfEYVU'],
+      ['circles__post malone', 'wXhTHyIgQ_U'],
+      ['believer__imagine dragons', '7wtfhZwyrcc'],
+      ['demons__imagine dragons', 'mWRsgZuwf_8'],
+      ['stay__the kid laroi', 'kTJczUoc26U'],
+      ['gods plan__drake', 'uxpDa-c-4Mc'],
+      ['not like us__kendrick lamar', 'H58vbez_m4E'],
+      ['midnight echoes__aura sound lab', '4NRXx6U8ABQ'],
+      ['nordic forest ambient__fjord audio', '5qap5aO4i9A']
     ]);
   }
 
@@ -21,24 +46,23 @@ class AuraMusicApi {
    * Resolve a track's title & artist to a playable YouTube video ID
    */
   async getYoutubeVideoId(title, artist) {
-    const key = `${(title || '').toLowerCase().trim()}__${(artist || '').toLowerCase().trim()}`;
+    const t = (title || '').toLowerCase().trim();
+    const a = (artist || '').toLowerCase().trim();
+    const key = `${t}__${a}`;
+
+    // Direct key match
     for (const [k, v] of this.videoIdCache.entries()) {
       if (key.includes(k) || k.includes(key)) return v;
     }
 
-    try {
-      const q = encodeURIComponent(`${title} ${artist} audio`);
-      const res = await fetch(`https://invidious.f5.si/api/v1/search?q=${q}&type=video`);
-      if (res.ok) {
-        const items = await res.json();
-        if (items && items.length > 0 && items[0].videoId) {
-          this.videoIdCache.set(key, items[0].videoId);
-          return items[0].videoId;
-        }
+    // Keyword match on song title
+    for (const [k, v] of this.videoIdCache.entries()) {
+      const titlePart = k.split('__')[0];
+      if (titlePart.length >= 4 && t.includes(titlePart)) {
+        return v;
       }
-    } catch (e) {
-      console.log('Video ID lookup error, using fallback');
     }
+
     return null;
   }
 
@@ -57,6 +81,31 @@ class AuraMusicApi {
       console.warn('AuraMusicApi search fallback:', err);
       return [];
     }
+  }
+
+  /**
+   * Fetch direct audio stream and metadata for a specific song title and artist
+   */
+  async getDirectAudioStream(title, artist) {
+    if (!title) return null;
+    try {
+      const q = `${title} ${artist || ''}`.trim();
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&limit=1`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const item = data.results[0];
+        return {
+          audioUrl: item.previewUrl || '',
+          art: (item.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+          duration: Math.floor((item.trackTimeMillis || 180000) / 1000)
+        };
+      }
+    } catch (e) {
+      console.warn('AuraMusicApi getDirectAudioStream error:', e);
+    }
+    return null;
   }
 
   /**
@@ -89,13 +138,27 @@ class AuraMusicApi {
       .replace('100x100bb', '600x600bb')
       .replace('100x100', '600x600');
 
+    const title = item.trackName || 'Unknown Title';
+    const artist = item.artistName || 'Unknown Artist';
+    
+    // Check if we have a known YouTube video ID for full playback
+    let vid = null;
+    const key = `${title.toLowerCase().trim()}__${artist.toLowerCase().trim()}`;
+    for (const [k, v] of this.videoIdCache.entries()) {
+      if (key.includes(k) || k.includes(key)) {
+        vid = v;
+        break;
+      }
+    }
+
     return {
       id: `itunes-${item.trackId || Math.random().toString(36).substr(2, 9)}`,
-      title: item.trackName || 'Unknown Title',
-      artist: item.artistName || 'Unknown Artist',
+      title: title,
+      artist: artist,
       album: item.collectionName || 'Single',
       art: art || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
       audioUrl: item.previewUrl || '',
+      videoId: vid,
       duration: Math.floor((item.trackTimeMillis || 180000) / 1000)
     };
   }
@@ -138,7 +201,7 @@ class AuraMusicApi {
     }
 
     const fallback = [
-      { time: 0, text: `♪ Now Playing: ${title}` },
+      { time: 0, text: `Now Playing: ${title}` },
       { time: 5, text: `Artist: ${artist}` },
       { time: 10, text: "High-Fidelity Audio • Pure Acoustics" },
       { time: 20, text: "Enjoy the rhythm and melody..." }

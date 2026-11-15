@@ -288,7 +288,6 @@ class SpatialNavigation {
           break;
 
         case 27:    // Escape
-        case 8:     // Backspace
         case 10009: // Samsung Tizen Return / Back
         case 461:   // LG webOS Back
         case 4:     // Android TV Back
@@ -298,8 +297,27 @@ class SpatialNavigation {
           }
           break;
 
+        case 8:     // Backspace
+          if (window.AuraApp && window.AuraApp.currentView === 'search' && window.AuraApp.searchQuery && window.AuraApp.searchQuery.length > 0) {
+            e.preventDefault();
+            window.AuraApp.searchQuery = window.AuraApp.searchQuery.slice(0, -1);
+            const input = document.getElementById('searchInput');
+            if (input) input.value = window.AuraApp.searchQuery;
+            window.AuraApp.runSearch(window.AuraApp.searchQuery);
+            return;
+          }
+          e.preventDefault();
+          if (window.AuraApp && typeof window.AuraApp.handleBack === 'function') {
+            window.AuraApp.handleBack();
+          }
+          break;
+
         // Dedicated TV Remote Media Keys (Samsung, LG, Android TV):
         case 32:    // Spacebar
+          if (this.currentFocus && this.currentFocus.classList.contains('kbd-key')) {
+            // Let space click the keyboard key
+            break;
+          }
         case 179:   // MediaPlayPause
         case 10252: // Tizen MediaPlayPause
         case 85:    // Android KEYCODE_MEDIA_PLAY_PAUSE
@@ -325,15 +343,27 @@ class SpatialNavigation {
         case 417: // Tizen / webOS FastForward
         case 87:  // Android KEYCODE_MEDIA_NEXT
           e.preventDefault();
-          if (window.AuraPlayer) window.AuraPlayer.playNext();
+          if (window.AuraPlayer) window.AuraPlayer.nextTrack();
           break;
 
         case 177: // MediaTrackPrevious
         case 412: // Tizen / webOS Rewind
         case 88:  // Android KEYCODE_MEDIA_PREVIOUS
           e.preventDefault();
-          if (window.AuraPlayer) window.AuraPlayer.playPrevious();
+          if (window.AuraPlayer) window.AuraPlayer.prevTrack();
           break;
+      }
+
+      // Physical alphanumeric typing on search view
+      if (window.AuraApp && window.AuraApp.currentView === 'search' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key && e.key.length === 1 && /[0-9a-zA-Z ]/.test(e.key)) {
+          if (!this.currentFocus || !this.currentFocus.classList.contains('kbd-key')) {
+            window.AuraApp.searchQuery += e.key;
+            const input = document.getElementById('searchInput');
+            if (input) input.value = window.AuraApp.searchQuery;
+            window.AuraApp.runSearch(window.AuraApp.searchQuery);
+          }
+        }
       }
     });
   }

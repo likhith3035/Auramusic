@@ -28,8 +28,8 @@ class AuraMusicPlayer {
         title: 'Blinding Lights',
         artist: 'The Weeknd',
         album: 'After Hours',
-        art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800',
-        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
+        art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg',
+        audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a',
         videoId: '4NRXx6U8ABQ',
         duration: 200
       },
@@ -38,29 +38,30 @@ class AuraMusicPlayer {
         title: 'Yellow',
         artist: 'Coldplay',
         album: 'Parachutes',
-        art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
-        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lifelike-126735.mp3',
+        art: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f5/93/8c/f5938c49-964c-31d1-4b33-78b634f71fb7/190295978075.jpg/600x600bb.jpg',
+        audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/66/f3/1a/66f31a76-a6ed-cb4c-f353-23310a7ae9a8/mzaf_10593596652344378873.plus.aac.p.m4a',
         videoId: 'yKNxeF4KMsY',
         duration: 269
       },
       {
         id: 'track-3',
-        title: 'Birds of a Feather',
+        title: 'BIRDS OF A FEATHER',
         artist: 'Billie Eilish',
         album: 'HIT ME HARD AND SOFT',
-        art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800',
-        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77cb7.mp3?filename=chill-abstract-intention-12099.mp3',
+        art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/92/9f/69/929f69f1-9977-3a44-d674-11f70c852d1b/24UMGIM36186.rgb.jpg/600x600bb.jpg',
+        audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/34/31/d3/3431d34e-847f-5d66-df83-0bce688d997e/mzaf_18106743962423782018.plus.aac.p.m4a',
         videoId: 'd5gf9dXHevw',
         duration: 196
       },
       {
         id: 'track-4',
-        title: 'Midnight Echoes',
-        artist: 'Aura Sound Lab',
-        album: 'Spatial Acoustics',
-        art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800',
-        audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3',
-        duration: 164
+        title: 'Espresso',
+        artist: 'Sabrina Carpenter',
+        album: 'Short n Sweet',
+        art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/57/e8/7b/57e87ba0-5057-9bb9-c247-ce7dbe426e89/24UMGIM55213.rgb.jpg/600x600bb.jpg',
+        audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e9/4d/02/e94d0230-11ee-ef94-d2cf-a5d547bd73f4/mzaf_554140808559155562.plus.aac.p.m4a',
+        videoId: 'eVli-tstM5E',
+        duration: 175
       }
     ];
 
@@ -87,22 +88,32 @@ class AuraMusicPlayer {
 
   setupYtPlayer() {
     try {
+      const validOrigin = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+        ? window.location.origin
+        : undefined;
+
+      const playerVars = {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        rel: 0,
+        enablejsapi: 1
+      };
+      if (validOrigin) {
+        playerVars.origin = validOrigin;
+      }
+
       this.ytPlayer = new YT.Player('yt-player-container', {
-        height: '200',
-        width: '200',
-        playerVars: {
-          autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          rel: 0,
-          enablejsapi: 1
-        },
+        height: '120',
+        width: '120',
+        playerVars: playerVars,
         events: {
           onReady: () => {
             this.isYtReady = true;
+            try { this.ytPlayer.unMute(); } catch (e) {}
             console.log('YouTube Audio Engine Ready on TV');
-            if (this.currentTrack && this.currentTrack.videoId && this.isPlaying) {
+            if (this.currentTrack && this.currentTrack.videoId && this.isPlaying && this.playbackEngine === 'yt') {
               this.ytPlayer.loadVideoById(this.currentTrack.videoId);
             }
           },
@@ -121,9 +132,13 @@ class AuraMusicPlayer {
           },
           onError: (err) => {
             console.warn('YouTube engine error, falling back to direct audio stream:', err);
+            this.playbackEngine = 'html5';
             if (this.currentTrack && this.currentTrack.audioUrl) {
-              this.playbackEngine = 'html5';
-              this.audio.play().catch(e => console.warn(e));
+              this.audio.src = this.currentTrack.audioUrl;
+              this.audio.play().then(() => {
+                this.isPlaying = true;
+                document.body.classList.add('playing');
+              }).catch(e => console.warn(e));
             }
           }
         }
@@ -182,69 +197,68 @@ class AuraMusicPlayer {
       });
     }
 
-    // Playback Engine Resolution
-    const startPlayback = () => {
-      if (track.videoId && this.isYtReady && this.ytPlayer && this.ytPlayer.loadVideoById) {
-        this.playbackEngine = 'yt';
-        this.audio.pause();
-        this.ytPlayer.loadVideoById(track.videoId);
-        if (!autoPlay) this.ytPlayer.pauseVideo();
-      } else if (track.audioUrl) {
-        this.playbackEngine = 'html5';
-        this.audio.src = track.audioUrl;
-        if (autoPlay) this.play();
+    // Playback Engine Resolution:
+    // Direct audio stream plays immediately with 0 delay and 0 CORS issues
+    if (track.audioUrl) {
+      this.playbackEngine = 'html5';
+      if (this.ytPlayer && this.ytPlayer.stopVideo) {
+        try { this.ytPlayer.stopVideo(); } catch (e) {}
       }
-    };
-
-    if (track.videoId) {
-      startPlayback();
+      this.audio.src = track.audioUrl;
+      if (autoPlay) {
+        this.play();
+      }
     } else if (window.AuraMusicApi) {
-      // Resolve YouTube video ID in background
-      window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
-        if (vid) {
-          track.videoId = vid;
-          if (this.currentTrack && this.currentTrack.id === track.id) {
-            startPlayback();
+      // Resolve audio stream from live catalog
+      window.AuraMusicApi.getDirectAudioStream(track.title, track.artist).then(info => {
+        if (info && this.currentTrack && this.currentTrack.id === track.id) {
+          track.audioUrl = info.audioUrl;
+          if (!track.art || track.art.includes('unsplash')) {
+            track.art = info.art;
+            if (barThumb) barThumb.src = track.art;
+            if (fsAlbumArt) fsAlbumArt.src = track.art;
           }
-        } else if (track.audioUrl) {
           this.playbackEngine = 'html5';
           this.audio.src = track.audioUrl;
           if (autoPlay) this.play();
         }
       });
+    }
 
-      // While resolving YouTube, start HTML5 audio preview immediately if present
-      if (track.audioUrl) {
-        this.playbackEngine = 'html5';
-        this.audio.src = track.audioUrl;
-        if (autoPlay) this.play();
-      }
-    } else if (track.audioUrl) {
-      this.playbackEngine = 'html5';
-      this.audio.src = track.audioUrl;
-      if (autoPlay) this.play();
+    // Background videoId resolution for YouTube if missing
+    if (!track.videoId && window.AuraMusicApi) {
+      window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
+        if (vid) track.videoId = vid;
+      });
     }
   }
 
   play() {
     if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.playVideo) {
-      this.ytPlayer.playVideo();
-      this.isPlaying = true;
-      document.body.classList.add('playing');
-    } else {
+      try {
+        this.ytPlayer.playVideo();
+        this.isPlaying = true;
+        document.body.classList.add('playing');
+        return;
+      } catch (e) {}
+    }
+
+    if (this.audio.src) {
+      this.playbackEngine = 'html5';
       this.audio.play().then(() => {
         this.isPlaying = true;
         document.body.classList.add('playing');
       }).catch(e => console.warn('Audio play policy:', e));
+    } else if (this.currentTrack) {
+      this.loadTrack(this.currentTrack, true);
     }
   }
 
   pause() {
-    if (this.playbackEngine === 'yt' && this.isYtReady && this.ytPlayer && this.ytPlayer.pauseVideo) {
-      this.ytPlayer.pauseVideo();
-    } else {
-      this.audio.pause();
+    if (this.ytPlayer && this.ytPlayer.pauseVideo) {
+      try { this.ytPlayer.pauseVideo(); } catch (e) {}
     }
+    this.audio.pause();
     this.isPlaying = false;
     document.body.classList.remove('playing');
   }
@@ -268,6 +282,10 @@ class AuraMusicPlayer {
     this.loadTrack(this.queue[this.queueIndex], true);
   }
 
+  playNext() {
+    this.nextTrack();
+  }
+
   prevTrack() {
     let cur = this.getCurrentTime();
     if (cur > 3) {
@@ -277,6 +295,10 @@ class AuraMusicPlayer {
     if (this.queue.length === 0) return;
     this.queueIndex = (this.queueIndex - 1 + this.queue.length) % this.queue.length;
     this.loadTrack(this.queue[this.queueIndex], true);
+  }
+
+  playPrevious() {
+    this.prevTrack();
   }
 
   toggleShuffle() {

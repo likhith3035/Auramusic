@@ -30,14 +30,14 @@ class AuraAppController {
   populateHomeFeed() {
     // 1. Initial quick picks rendered immediately
     const initialQuickPicks = [
-      { id: 'qp-1', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3', duration: 200 },
-      { id: 'qp-2', title: 'Yellow', artist: 'Coldplay', album: 'Parachutes', art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lifelike-126735.mp3', duration: 269 },
-      { id: 'qp-3', title: 'Birds of a Feather', artist: 'Billie Eilish', album: 'HIT ME HARD AND SOFT', art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77cb7.mp3?filename=chill-abstract-intention-12099.mp3', duration: 196 },
-      { id: 'qp-4', title: 'Midnight Echoes', artist: 'Aura Sound Lab', album: 'Spatial Acoustics', art: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3', duration: 164 },
-      { id: 'qp-5', title: 'Espresso', artist: 'Sabrina Carpenter', album: 'Short n Sweet', art: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lifelike-126735.mp3', duration: 175 },
-      { id: 'qp-6', title: 'Die For You', artist: 'The Weeknd', album: 'Starboy', art: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77cb7.mp3?filename=chill-abstract-intention-12099.mp3', duration: 260 },
-      { id: 'qp-7', title: 'Viva La Vida', artist: 'Coldplay', album: 'Viva La Vida', art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=solitude-dark-ambient-electronic-10777.mp3', duration: 242 },
-      { id: 'qp-8', title: 'Starboy', artist: 'The Weeknd ft. Daft Punk', album: 'Starboy', art: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400', audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3', duration: 230 }
+      { id: 'qp-1', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg', videoId: '4NRXx6U8ABQ', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a', duration: 216 },
+      { id: 'qp-2', title: 'Yellow', artist: 'Coldplay', album: 'Parachutes', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f5/93/8c/f5938c49-964c-31d1-4b33-78b634f71fb7/190295978075.jpg/600x600bb.jpg', videoId: 'yKNxeF4KMsY', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/66/f3/1a/66f31a76-a6ed-cb4c-f353-23310a7ae9a8/mzaf_10593596652344378873.plus.aac.p.m4a', duration: 269 },
+      { id: 'qp-3', title: 'BIRDS OF A FEATHER', artist: 'Billie Eilish', album: 'HIT ME HARD AND SOFT', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/92/9f/69/929f69f1-9977-3a44-d674-11f70c852d1b/24UMGIM36186.rgb.jpg/600x600bb.jpg', videoId: 'd5gf9dXHevw', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/34/31/d3/3431d34e-847f-5d66-df83-0bce688d997e/mzaf_18106743962423782018.plus.aac.p.m4a', duration: 210 },
+      { id: 'qp-4', title: 'Espresso', artist: 'Sabrina Carpenter', album: 'Short n Sweet', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/57/e8/7b/57e87ba0-5057-9bb9-c247-ce7dbe426e89/24UMGIM55213.rgb.jpg/600x600bb.jpg', videoId: 'eVli-tstM5E', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e9/4d/02/e94d0230-11ee-ef94-d2cf-a5d547bd73f4/mzaf_554140808559155562.plus.aac.p.m4a', duration: 175 },
+      { id: 'qp-5', title: 'Die For You', artist: 'The Weeknd', album: 'Starboy', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e2/61/f8/e261f8c1-73db-9a7a-c89e-1068f19970e0/16UMGIM67863.rgb.jpg/600x600bb.jpg', videoId: 'uPD0QOGChkY', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/50/50/1a/50501a86-bd74-e90d-8a56-68c9b5e6e7d6/mzaf_4588197682084244913.plus.aac.p.m4a', duration: 260 },
+      { id: 'qp-6', title: 'Viva La Vida', artist: 'Coldplay', album: 'Viva La Vida', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/52/aa/85/52aa851f-15b7-6322-f91f-df84b15b7b19/190295978044.jpg/600x600bb.jpg', videoId: 'dvgZkm1xWPE', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a3/30/8e/a3308eed-d8b7-e0b3-f09d-5e1b0f4d660a/mzaf_8517946447501075134.plus.aac.p.m4a', duration: 241 },
+      { id: 'qp-7', title: 'Starboy', artist: 'The Weeknd ft. Daft Punk', album: 'Starboy', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/92/bb/b592bb72-52e3-e756-9b26-9f56d08f47ab/16UMGIM67864.rgb.jpg/600x600bb.jpg', videoId: 'dMMUH_ZpbB0', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a', duration: 230 },
+      { id: 'qp-8', title: 'Cruel Summer', artist: 'Taylor Swift', album: 'Lover', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/49/3d/ab/493dab54-f920-9043-6181-80993b8116c9/19UMGIM53909.rgb.jpg/600x600bb.jpg', videoId: 'ic8j13piAhQ', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/44/af/81/44af8168-9609-1b85-5048-ada08dceacf3/mzaf_1341699644335558812.plus.aac.p.m4a', duration: 178 }
     ];
 
     this.renderQuickPicks(initialQuickPicks);
@@ -125,8 +125,26 @@ class AuraAppController {
         <div class="album-card-sub">${item.sub}</div>
       `;
       card.addEventListener('click', () => {
-        if (window.AuraPlayer) {
-          window.AuraPlayer.loadTrack(window.AuraPlayer.tracks[0], true);
+        if (!window.AuraPlayer) return;
+        if (item.track) {
+          window.AuraPlayer.loadTrack(item.track, true);
+        } else if (item.query && window.AuraMusicApi) {
+          window.AuraMusicApi.search(item.query, 6).then(res => {
+            if (res && res.length > 0) {
+              window.AuraPlayer.queue = [...res];
+              window.AuraPlayer.renderQueue();
+              window.AuraPlayer.loadTrack(res[0], true);
+            }
+          });
+        } else {
+          window.AuraPlayer.loadTrack({
+            id: `card-${Math.random().toString(36).substr(2, 9)}`,
+            title: item.title,
+            artist: item.sub.replace(/Album • |Playlist • |Curated • /g, ''),
+            album: item.title,
+            art: item.art,
+            duration: 210
+          }, true);
         }
       });
       el.appendChild(card);
@@ -231,9 +249,15 @@ class AuraAppController {
     keys.forEach(k => {
       k.addEventListener('click', () => {
         const ch = k.getAttribute('data-char');
-        if (ch === 'SPACE') this.searchQuery += ' ';
-        else if (ch === 'BACKSPACE') this.searchQuery = this.searchQuery.slice(0, -1);
-        else this.searchQuery += ch;
+        if (ch === 'SPACE') {
+          this.searchQuery += ' ';
+        } else if (ch === 'BACKSPACE') {
+          this.searchQuery = this.searchQuery.slice(0, -1);
+        } else if (ch === 'CLEAR') {
+          this.searchQuery = '';
+        } else {
+          this.searchQuery += ch;
+        }
 
         if (input) input.value = this.searchQuery;
         this.runSearch(this.searchQuery);
@@ -245,7 +269,10 @@ class AuraAppController {
     const container = document.getElementById('search-results-grid');
     if (!container) return;
     container.innerHTML = '';
-    if (!query || !query.trim()) return;
+    if (!query || !query.trim()) {
+      container.innerHTML = '<div style="color: var(--nt-muted); padding: 16px;">Type a song title, artist, or album name using the keyboard above.</div>';
+      return;
+    }
 
     // Show searching spinner / text
     const loadingNotice = document.createElement('div');
@@ -293,6 +320,29 @@ class AuraAppController {
     document.querySelectorAll('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.switchView(btn.getAttribute('data-view'));
+      });
+    });
+
+    // Spotlight Play Favorites
+    const spotPlay = document.getElementById('btn-spotlight-play');
+    if (spotPlay) {
+      spotPlay.addEventListener('click', () => {
+        if (window.AuraPlayer) {
+          if (window.AuraPlayer.queue.length > 0) {
+            window.AuraPlayer.loadTrack(window.AuraPlayer.queue[0], true);
+          } else {
+            window.AuraPlayer.play();
+          }
+        }
+      });
+    }
+
+    // Shelf action (Play all)
+    document.querySelectorAll('.shelf-action').forEach(act => {
+      act.addEventListener('click', () => {
+        if (window.AuraPlayer && window.AuraPlayer.queue.length > 0) {
+          window.AuraPlayer.loadTrack(window.AuraPlayer.queue[0], true);
+        }
       });
     });
 
