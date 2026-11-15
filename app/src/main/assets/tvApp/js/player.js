@@ -83,6 +83,15 @@ class AuraMusicPlayer {
 
     if (window.YT && window.YT.Player) {
       this.setupYtPlayer();
+    } else if (!document.getElementById('yt-api-script')) {
+      const tag = document.createElement('script');
+      tag.id = 'yt-api-script';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      tag.async = true;
+      tag.onerror = () => {
+        console.warn('YouTube IFrame API unreachable; falling back to direct audio engine.');
+      };
+      document.head.appendChild(tag);
     }
   }
 
@@ -333,10 +342,24 @@ class AuraMusicPlayer {
       if (this.sleepTimerEndTimestamp && Date.now() >= this.sleepTimerEndTimestamp) {
         this.pause();
         this.sleepTimerEndTimestamp = null;
-        alert("Aura Sleep Timer finished.");
+        console.log('Aura Sleep Timer finished playback.');
         return;
       }
       this.nextTrack();
+    });
+
+    this.audio.addEventListener('error', (e) => {
+      console.warn('HTML5 Audio stream error:', e);
+      if (this.currentTrack && !this.currentTrack._retried && window.AuraMusicApi) {
+        this.currentTrack._retried = true;
+        window.AuraMusicApi.getDirectAudioStream(this.currentTrack.title, this.currentTrack.artist).then(info => {
+          if (info && info.audioUrl && this.currentTrack) {
+            this.currentTrack.audioUrl = info.audioUrl;
+            this.audio.src = info.audioUrl;
+            this.play();
+          }
+        });
+      }
     });
   }
 

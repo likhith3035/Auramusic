@@ -317,6 +317,72 @@
           <div class="quick-picks-grid" id="search-results-grid"></div>
         </section>
 
+        <!-- VIEW 3: EXPLORE -->
+        <section class="feed-view" id="view-explore">
+          <div class="shelf-title-row">
+            <h2 class="shelf-heading">Explore Music</h2>
+          </div>
+          <!-- Trending Charts -->
+          <section class="feed-shelf">
+            <div class="shelf-title-row">
+              <h2 class="shelf-heading">Featured Charts</h2>
+            </div>
+            <div class="shelf-carousel" id="carousel-explore-charts"></div>
+          </section>
+          <!-- Genres & Moods -->
+          <section class="feed-shelf">
+            <div class="shelf-title-row">
+              <h2 class="shelf-heading">Genres & Moods</h2>
+            </div>
+            <div class="shelf-carousel" id="carousel-explore-genres"></div>
+          </section>
+        </section>
+
+        <!-- VIEW 4: LIBRARY -->
+        <section class="feed-view" id="view-library">
+          <div class="shelf-title-row">
+            <h2 class="shelf-heading">Your Library</h2>
+          </div>
+          <div class="quick-picks-grid" id="grid-library-tracks"></div>
+        </section>
+
+        <!-- VIEW 5: SETTINGS -->
+        <section class="feed-view" id="view-settings">
+          <div class="shelf-title-row">
+            <h2 class="shelf-heading">Settings & Audio Engine</h2>
+          </div>
+          <div class="settings-container" style="max-width: 800px; display: flex; flex-direction: column; gap: 16px;">
+            <div class="setting-card focusable" tabindex="0" style="background: var(--nt-surface-elevated); border: 1px solid var(--nt-border); border-radius: 12px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 700; font-size: 15px;">Audio Quality</div>
+                <div style="color: var(--nt-muted); font-size: 13px; margin-top: 4px;">BitChord 24-bit Lossless Engine (Gapless Playback)</div>
+              </div>
+              <span class="greeting-badge" style="margin: 0;">HI-RES FLAC</span>
+            </div>
+            <div class="setting-card focusable" tabindex="0" style="background: var(--nt-surface-elevated); border: 1px solid var(--nt-border); border-radius: 12px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 700; font-size: 15px;">OLED Burn-in Protection</div>
+                <div style="color: var(--nt-muted); font-size: 13px; margin-top: 4px;">Auto-dim and subtle pixel shift after 2 minutes of idle</div>
+              </div>
+              <span class="greeting-badge" style="margin: 0; background: rgba(0, 229, 255, 0.15); color: var(--aura-cyan); border-color: rgba(0, 229, 255, 0.4);">ENABLED</span>
+            </div>
+            <div class="setting-card focusable" tabindex="0" style="background: var(--nt-surface-elevated); border: 1px solid var(--nt-border); border-radius: 12px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 700; font-size: 15px;">Display Scaling</div>
+                <div style="color: var(--nt-muted); font-size: 13px; margin-top: 4px;">10-Foot Living Room Spatial Layout (4K UHD & 1080p)</div>
+              </div>
+              <span class="greeting-badge" style="margin: 0;">4K ULTRA HD</span>
+            </div>
+            <div class="setting-card focusable" tabindex="0" style="background: var(--nt-surface-elevated); border: 1px solid var(--nt-border); border-radius: 12px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 700; font-size: 15px;">Target Platforms</div>
+                <div style="color: var(--nt-muted); font-size: 13px; margin-top: 4px;">LG webOS (3.0+) • Samsung Tizen (3.0+) • Android TV (5.0+)</div>
+              </div>
+              <span class="greeting-badge" style="margin: 0;">V3.3.0 TV</span>
+            </div>
+          </div>
+        </section>
+
       </main>
 
     </div>
@@ -538,7 +604,6 @@
   <!-- Hidden YouTube Playback Engine for Smart TVs (active viewport placement prevents browser throttling) -->
   <div id="yt-player-container" style="position:fixed;bottom:10px;right:10px;width:120px;height:70px;opacity:0.01;pointer-events:none;z-index:0;"></div>
   
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="js/spatial-navigation.js"></script>
   <script src="js/music-api.js"></script>
   <script src="js/player.js"></script>

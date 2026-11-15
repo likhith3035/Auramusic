@@ -9,7 +9,13 @@
   "largeIcon": "Logo.png",
   "bgImage": "Banner.png",
   "resolution": "1920x1080",
+  "uiRevision": "2",
+  "handlesRelaunch": true,
+  "disableBackHistoryAPI": true,
   "supportGpu": true,
   "supportAudioGuidance": true,
-  "requiredMemory": 64
+  "requiredMemory": 64,
+  "requiredPermissions": [
+    "media.audio"
+  ]
 }

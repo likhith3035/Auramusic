@@ -13,6 +13,8 @@ class AuraAppController {
   init() {
     this.setupGreeting();
     this.populateHomeFeed();
+    this.populateExploreFeed();
+    this.populateLibraryFeed();
     this.bindEvents();
     this.setupKeyboard();
   }
@@ -83,6 +85,52 @@ class AuraAppController {
         if (window.SpatialNav) window.SpatialNav.refreshFocusables();
       });
     }
+  }
+
+  populateExploreFeed() {
+    const charts = [
+      { title: 'Global Top 50', sub: 'Chart • Updated Daily', art: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400', query: 'top hits 2026' },
+      { title: 'Viral Hits TV', sub: 'Trending • Worldwide', art: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400', query: 'viral hits' },
+      { title: 'Fresh Releases', sub: 'New Music Friday', art: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400', query: 'new pop music' },
+      { title: 'Chill Acoustic', sub: 'Unplugged Sessions', art: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=400', query: 'acoustic coffeehouse' }
+    ];
+    this.renderCarousel('carousel-explore-charts', charts);
+
+    const genres = [
+      { title: 'Pop & Dance', sub: 'Dua Lipa • Sabrina Carpenter', art: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400', query: 'pop dance hits' },
+      { title: 'Alternative Rock', sub: 'Coldplay • Imagine Dragons', art: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400', query: 'alternative rock' },
+      { title: 'Lo-Fi & Study', sub: 'Deep Focus Beats', art: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400', query: 'lofi study beats' },
+      { title: 'R&B & Soul', sub: 'The Weeknd • SZA', art: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400', query: 'The Weeknd SZA' }
+    ];
+    this.renderCarousel('carousel-explore-genres', genres);
+  }
+
+  populateLibraryFeed() {
+    const libTracks = [
+      { id: 'lib-1', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg', videoId: '4NRXx6U8ABQ', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a', duration: 216 },
+      { id: 'lib-2', title: 'Yellow', artist: 'Coldplay', album: 'Parachutes', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f5/93/8c/f5938c49-964c-31d1-4b33-78b634f71fb7/190295978075.jpg/600x600bb.jpg', videoId: 'yKNxeF4KMsY', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/66/f3/1a/66f31a76-a6ed-cb4c-f353-23310a7ae9a8/mzaf_10593596652344378873.plus.aac.p.m4a', duration: 269 },
+      { id: 'lib-3', title: 'BIRDS OF A FEATHER', artist: 'Billie Eilish', album: 'HIT ME HARD AND SOFT', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/92/9f/69/929f69f1-9977-3a44-d674-11f70c852d1b/24UMGIM36186.rgb.jpg/600x600bb.jpg', videoId: 'd5gf9dXHevw', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/34/31/d3/3431d34e-847f-5d66-df83-0bce688d997e/mzaf_18106743962423782018.plus.aac.p.m4a', duration: 210 },
+      { id: 'lib-4', title: 'Espresso', artist: 'Sabrina Carpenter', album: 'Short n Sweet', art: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/57/e8/7b/57e87ba0-5057-9bb9-c247-ce7dbe426e89/24UMGIM55213.rgb.jpg/600x600bb.jpg', videoId: 'eVli-tstM5E', audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e9/4d/02/e94d0230-11ee-ef94-d2cf-a5d547bd73f4/mzaf_554140808559155562.plus.aac.p.m4a', duration: 175 }
+    ];
+    const grid = document.getElementById('grid-library-tracks');
+    if (!grid) return;
+    grid.innerHTML = '';
+    libTracks.forEach(track => {
+      const row = document.createElement('div');
+      row.className = 'track-row-card focusable';
+      row.tabIndex = 0;
+      row.innerHTML = `
+        <img class="track-row-thumb" src="${track.art}" alt="${track.title}">
+        <div class="track-row-details">
+          <div class="track-row-title">${track.title}</div>
+          <div class="track-row-artist">${track.artist}</div>
+        </div>
+      `;
+      row.addEventListener('click', () => {
+        if (window.AuraPlayer) window.AuraPlayer.loadTrack(track, true);
+      });
+      grid.appendChild(row);
+    });
   }
 
   renderQuickPicks(tracks) {
@@ -225,21 +273,34 @@ class AuraAppController {
     const modal = document.getElementById('sleepTimerSheet');
     if (modal && modal.classList.contains('open')) {
       this.closeSleepTimer();
-      return;
+      return true;
     }
     const qp = document.getElementById('desktopQueuePanel');
     if (qp && qp.classList.contains('open')) {
       this.toggleQueuePanel();
-      return;
+      return true;
     }
     const fs = document.getElementById('fullscreenPlayer');
     if (fs && fs.classList.contains('open')) {
       this.closeFullscreenPlayer();
-      return;
+      return true;
     }
     if (this.currentView !== 'home') {
       this.switchView('home');
+      return true;
     }
+
+    // Top-level Home screen reached -> exit app on Smart TVs
+    if (window.AndroidHost && typeof window.AndroidHost.exitApp === 'function') {
+      window.AndroidHost.exitApp();
+    } else if (window.tizen && window.tizen.application) {
+      try { window.tizen.application.getCurrentApplication().exit(); } catch (e) {}
+    } else if (window.webOS && window.webOS.platformBack) {
+      window.webOS.platformBack();
+    } else if (window.webOSSystem && window.webOSSystem.platformBack) {
+      window.webOSSystem.platformBack();
+    }
+    return false;
   }
 
   setupKeyboard() {
@@ -447,6 +508,28 @@ class AuraAppController {
           else window.AuraPlayer.setSleepTimer(parseInt(mins, 10));
         }
         this.closeSleepTimer();
+      });
+    });
+
+    // Settings Button in sidebar
+    const btnSettings = document.getElementById('btn-settings');
+    if (btnSettings) {
+      btnSettings.addEventListener('click', () => this.switchView('settings'));
+    }
+
+    // Sidebar Playlists
+    document.querySelectorAll('.playlist-link').forEach(link => {
+      link.addEventListener('click', () => {
+        const text = link.textContent.trim();
+        if (window.AuraMusicApi) {
+          window.AuraMusicApi.search(text, 6).then(res => {
+            if (res && res.length > 0 && window.AuraPlayer) {
+              window.AuraPlayer.queue = [...res];
+              window.AuraPlayer.renderQueue();
+              window.AuraPlayer.loadTrack(res[0], true);
+            }
+          });
+        }
       });
     });
   }

@@ -17,6 +17,7 @@ class SpatialNavigation {
 
   init() {
     this.initAudioTick();
+    this.registerTizenKeys();
     this.bindEvents();
     this.initOledWatchdog();
 
@@ -27,6 +28,23 @@ class SpatialNavigation {
                       document.querySelector('.focusable');
       if (initial) this.setFocus(initial, false);
     });
+  }
+
+  /**
+   * Register Smart TV Remote keys on Samsung Tizen OS so media and numeric keys fire keydown events.
+   */
+  registerTizenKeys() {
+    if (window.tizen && window.tizen.tvinputdevice) {
+      const keys = [
+        'MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaFastForward', 'MediaRewind', 'MediaStop',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+      ];
+      keys.forEach(k => {
+        try {
+          window.tizen.tvinputdevice.registerKey(k);
+        } catch (e) {}
+      });
+    }
   }
 
   /**

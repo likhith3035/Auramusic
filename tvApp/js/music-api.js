@@ -63,6 +63,30 @@ class AuraMusicApi {
       }
     }
 
+    // Live query via fast Piped API resolver
+    try {
+      const query = `${title} ${artist}`.trim();
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 3500);
+      const res = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+        signal: ctrl.signal
+      });
+      clearTimeout(tid);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items && data.items.length > 0 && data.items[0].url) {
+          const match = data.items[0].url.match(/v=([a-zA-Z0-9_-]{11})/);
+          if (match && match[1]) {
+            const vid = match[1];
+            this.videoIdCache.set(key, vid);
+            return vid;
+          }
+        }
+      }
+    } catch (e) {
+      // Quiet failover to direct audio preview
+    }
+
     return null;
   }
 
