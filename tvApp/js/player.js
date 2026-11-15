@@ -101,13 +101,16 @@ class AuraMusicPlayer {
         ? window.location.origin
         : undefined;
 
+      const initialVid = (this.currentTrack && this.currentTrack.videoId) || '4NRXx6U8ABQ';
       const playerVars = {
         autoplay: 0,
-        controls: 0,
-        disablekb: 1,
-        fs: 0,
+        controls: 1,
+        disablekb: 0,
+        fs: 1,
         rel: 0,
-        enablejsapi: 1
+        enablejsapi: 1,
+        playsinline: 1,
+        modestbranding: 1
       };
       if (validOrigin) {
         playerVars.origin = validOrigin;
@@ -116,6 +119,7 @@ class AuraMusicPlayer {
       this.ytPlayer = new YT.Player('yt-player-container', {
         height: '100%',
         width: '100%',
+        videoId: initialVid,
         playerVars: playerVars,
         events: {
           onReady: () => {
