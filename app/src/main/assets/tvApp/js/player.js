@@ -256,15 +256,36 @@ class AuraMusicPlayer {
         }
       }
     } else {
-      // If videoId is not yet resolved, resolve it directly for full-length YouTube playback
+      // If videoId is not yet resolved, start full-length YouTube playback immediately via native search playlist
       this.playbackEngine = 'yt';
+      this.audio.pause();
+      this.audio.currentTime = 0;
+
+      if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadPlaylist === 'function') {
+        if (autoPlay) {
+          try {
+            this.ytPlayer.loadPlaylist({
+              list: `${track.title} ${track.artist}`,
+              listType: 'search',
+              index: 0
+            });
+            this.isPlaying = true;
+            document.body.classList.add('playing');
+          } catch (e) {
+            console.warn('Native search playlist load error:', e);
+          }
+        }
+      }
+
+      // In parallel, resolve exact video ID from catalog for caching
       if (window.AuraMusicApi) {
         window.AuraMusicApi.getYoutubeVideoId(track.title, track.artist).then(vid => {
           if (this.currentTrack && this.currentTrack.id === track.id) {
             if (vid) {
               track.videoId = vid;
               this.playbackEngine = 'yt';
-              if (this.isYtReady && this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+              const state = typeof this.ytPlayer?.getPlayerState === 'function' ? this.ytPlayer.getPlayerState() : -1;
+              if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
                 if (autoPlay) {
                   this.ytPlayer.loadVideoById(vid);
                   this.isPlaying = true;
@@ -272,81 +293,62 @@ class AuraMusicPlayer {
                 } else {
                   this.ytPlayer.cueVideoById(vid);
                 }
-              } else {
-                this.pendingVideoId = vid;
-                this.pendingAutoPlay = autoPlay;
               }
-            } else if (track.audioUrl) {
-              // Only fallback to audio stream if YouTube video is completely unavailable
-              this.playbackEngine = 'html5';
-              this.audio.src = track.audioUrl;
-              if (autoPlay) this.play();
             }
           }
         }).catch(err => {
-          console.warn('Video resolution error, falling back to direct stream:', err);
-          if (track.audioUrl) {
-            this.playbackEngine = 'html5';
-            this.audio.src = track.audioUrl;
-            if (autoPlay) this.play();
-          }
+          console.warn('YouTube resolver warning:', err);
         });
-      } else if (track.audioUrl) {
-        this.playbackEngine = 'html5';
-        this.audio.src = track.audioUrl;
-        if (autoPlay) this.play();
       }
     }
   }
 
   play() {
-    // Priority 1: YouTube Full-Length Audio/Video Engine
-    const targetVid = this.currentTrack ? this.currentTrack.videoId : null;
-    if ((this.playbackEngine === 'yt' || targetVid) && this.isYtReady && this.ytPlayer) {
-      try {
-        this.playbackEngine = 'yt';
-        this.audio.pause();
-        this.audio.currentTime = 0;
+    // 100% Full-Length YouTube Audio/Video Engine
+    this.playbackEngine = 'yt';
+    this.audio.pause();
+    this.audio.currentTime = 0;
 
-        if (targetVid) {
-          const state = typeof this.ytPlayer.getPlayerState === 'function' ? this.ytPlayer.getPlayerState() : -1;
-          if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.CUED) {
-            this.ytPlayer.playVideo();
-          } else if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
-            this.ytPlayer.loadVideoById(targetVid);
-          } else {
-            this.ytPlayer.playVideo();
-          }
+    if (this.isYtReady && this.ytPlayer) {
+      try {
+        const state = typeof this.ytPlayer.getPlayerState === 'function' ? this.ytPlayer.getPlayerState() : -1;
+        if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.CUED) {
+          this.ytPlayer.playVideo();
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+          return;
+        } else if (this.currentTrack && this.currentTrack.videoId) {
+          this.ytPlayer.loadVideoById(this.currentTrack.videoId);
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+          return;
+        } else if (this.currentTrack && typeof this.ytPlayer.loadPlaylist === 'function') {
+          this.ytPlayer.loadPlaylist({
+            list: `${this.currentTrack.title} ${this.currentTrack.artist}`,
+            listType: 'search',
+            index: 0
+          });
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+          return;
         } else if (typeof this.ytPlayer.playVideo === 'function') {
           this.ytPlayer.playVideo();
+          this.isPlaying = true;
+          document.body.classList.add('playing');
+          return;
         }
-        this.isPlaying = true;
-        document.body.classList.add('playing');
-        return;
       } catch (e) {
-        console.warn('YouTube playVideo exception:', e);
+        console.warn('YouTube play exception:', e);
       }
     }
 
-    // Priority 2: Waiting for YouTube ready
-    if (targetVid && !this.isYtReady) {
-      this.playbackEngine = 'yt';
+    if (this.currentTrack) {
       this.pendingAutoPlay = true;
-      this.pendingVideoId = targetVid;
+      if (this.currentTrack.videoId) {
+        this.pendingVideoId = this.currentTrack.videoId;
+      }
       this.isPlaying = true;
       document.body.classList.add('playing');
-      return;
-    }
-
-    // Priority 3: Fallback HTML5 audio preview
-    if (this.audio.src) {
-      this.playbackEngine = 'html5';
-      this.audio.play().then(() => {
-        this.isPlaying = true;
-        document.body.classList.add('playing');
-      }).catch(e => console.warn('Audio play policy:', e));
-    } else if (this.currentTrack) {
-      this.loadTrack(this.currentTrack, true);
     }
   }
 
