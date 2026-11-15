@@ -166,6 +166,9 @@ class AuraMusicPlayer {
     if (fsSongTitle) fsSongTitle.textContent = track.title;
     if (fsArtistName) fsArtistName.textContent = track.artist;
 
+    // Update dynamic ambient background gradient for TV
+    this.updateAmbientGlow(track);
+
     this.renderLyrics();
     this.renderQueue();
 
@@ -285,6 +288,20 @@ class AuraMusicPlayer {
     });
   }
 
+  updateAmbientGlow(track) {
+    const fsPlayer = document.getElementById('fullscreenPlayer');
+    if (!fsPlayer) return;
+    // Derive a rich visual hue from the track title + artist
+    const str = `${track.title || ''}${track.artist || ''}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h1 = Math.abs(hash) % 360;
+    const h2 = (h1 + 45) % 360;
+    fsPlayer.style.background = `radial-gradient(circle at 25% 35%, hsla(${h1}, 75%, 20%, 0.65) 0%, #0A0A0C 70%), radial-gradient(circle at 75% 65%, hsla(${h2}, 80%, 16%, 0.5) 0%, transparent 60%)`;
+  }
+
   bindAudioEvents() {
     this.audio.addEventListener('timeupdate', () => {
       if (this.playbackEngine === 'html5') this.onTimeUpdate();
@@ -294,7 +311,7 @@ class AuraMusicPlayer {
       if (this.sleepTimerEndTimestamp && Date.now() >= this.sleepTimerEndTimestamp) {
         this.pause();
         this.sleepTimerEndTimestamp = null;
-        alert("🌙 Aura Sleep Timer finished.");
+        alert("Aura Sleep Timer finished.");
         return;
       }
       this.nextTrack();

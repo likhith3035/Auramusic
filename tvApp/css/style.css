@@ -1064,16 +1064,154 @@ body.desktop-theme {
 }
 
 /* ==========================================================================
-   Clean 10-Foot Focus Highlight (Precision Remote Control State)
+   Flagship 10-Foot Living Room Focus & Spatial Styling (Spotify & Apple TV Standard)
    ========================================================================== */
-.focusable {
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+:root {
+  --tv-safe-margin-h: 4vw;
+  --tv-safe-margin-v: 4vh;
+  --aura-cyan: #00E5FF;
+  --aura-cyan-glow: rgba(0, 229, 255, 0.45);
+  --aura-cyan-deep: rgba(0, 229, 255, 0.18);
 }
 
+/* 10-Foot TV Overscan Protection */
+.app-shell {
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.desktop-sidebar {
+  padding: 28px 18px;
+}
+
+.desktop-feed {
+  padding: 24px 32px 120px 32px;
+}
+
+/* Base focusable transition */
+.focusable {
+  transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1),
+              border-color 0.2s ease,
+              background-color 0.2s ease;
+  position: relative;
+  will-change: transform, box-shadow;
+}
+
+/* Spotify-Grade Card Focus & Halo Zoom */
 .focusable:focus,
 .focusable.focused {
-  border-color: var(--nt-white) !important;
-  background-color: rgba(255, 255, 255, 0.12) !important;
-  outline: 2px solid var(--nt-white);
-  outline-offset: 1px;
+  outline: none !important;
+  z-index: 20 !important;
+  border-color: var(--aura-cyan) !important;
+}
+
+/* Content cards (Albums, Playlists, Tracks) zoom & glow */
+.album-square-card.focused,
+.track-row-card.focused,
+.playlist-card.focused,
+.playlist-link.focused {
+  transform: scale(1.06) translateZ(0);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.8),
+              0 0 0 2.5px var(--aura-cyan),
+              0 0 24px var(--aura-cyan-glow) !important;
+  border-radius: 12px;
+}
+
+/* Sidebar navigation buttons focus */
+.nav-btn.focused {
+  transform: scale(1.04) translateZ(0);
+  background-color: var(--aura-cyan-deep) !important;
+  color: var(--nt-white) !important;
+  box-shadow: 0 0 0 2px var(--aura-cyan), 0 0 16px var(--aura-cyan-glow) !important;
+}
+
+.nav-btn.focused .nav-svg {
+  color: var(--aura-cyan) !important;
+}
+
+/* Transport & Play/Pause Button Focus */
+.play-pause-circle.focused {
+  transform: scale(1.14) translateZ(0);
+  box-shadow: 0 0 0 4px var(--aura-cyan), 0 0 30px var(--aura-cyan-glow) !important;
+}
+
+.player-icon-btn.focused,
+.fs-tab-btn.focused,
+.fs-back-btn.focused,
+.settings-btn.focused {
+  transform: scale(1.15) translateZ(0);
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  color: var(--aura-cyan) !important;
+  box-shadow: 0 0 0 2px var(--aura-cyan), 0 0 16px var(--aura-cyan-glow) !important;
+  border-radius: 50%;
+}
+
+/* Scrubber bar focus */
+.scrub-track.focused {
+  transform: scaleY(1.4);
+  box-shadow: 0 0 0 2px var(--aura-cyan), 0 0 16px var(--aura-cyan-glow) !important;
+}
+
+/* Virtual Keyboard Keys Focus */
+.kbd-key.focused {
+  transform: scale(1.12) translateZ(0);
+  background-color: var(--aura-cyan) !important;
+  color: #000000 !important;
+  box-shadow: 0 8px 20px rgba(0, 229, 255, 0.5), 0 0 12px var(--aura-cyan-glow) !important;
+  border-color: #FFFFFF !important;
+}
+
+/* ==========================================================================
+   Flagship TV Ambient Background & OLED Screen Protection
+   ========================================================================== */
+.tv-ambient-mesh {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.45;
+  filter: blur(80px);
+  transition: background 1.5s ease-in-out;
+  background: radial-gradient(circle at 30% 40%, rgba(0, 229, 255, 0.25) 0%, transparent 60%),
+              radial-gradient(circle at 70% 60%, rgba(215, 25, 33, 0.2) 0%, transparent 60%);
+}
+
+/* OLED Burn-in Protection: Gentle Idle Dimming & Pixel Shift */
+.oled-idle-dim {
+  transition: opacity 1.2s ease;
+  opacity: 0.4 !important;
+}
+
+.oled-pixel-shift {
+  animation: oledShiftCycle 180s infinite alternate ease-in-out;
+}
+
+@keyframes oledShiftCycle {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(3px, -2px); }
+  50% { transform: translate(-2px, 3px); }
+  75% { transform: translate(2px, 2px); }
+  100% { transform: translate(-3px, -2px); }
+}
+
+/* 4K TV (2160p) Crisp Scaling */
+@media screen and (min-width: 2560px) {
+  body.desktop-theme {
+    font-size: 18px;
+  }
+  .app-shell {
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: 1fr 120px;
+  }
+  .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+  .brand-name {
+    font-size: 26px;
+  }
 }

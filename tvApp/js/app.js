@@ -147,7 +147,10 @@ class AuraAppController {
       else n.classList.remove('active');
     });
 
-    if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+    if (window.SpatialNav) {
+      window.SpatialNav.refreshFocusables();
+      window.SpatialNav.restoreViewFocus(`view-${viewName}`);
+    }
   }
 
   openFullscreenPlayer() {
@@ -168,7 +171,11 @@ class AuraAppController {
     const fs = document.getElementById('fullscreenPlayer');
     if (fs) {
       fs.classList.remove('open');
-      if (window.SpatialNav) window.SpatialNav.refreshFocusables();
+      if (window.SpatialNav) {
+        window.SpatialNav.refreshFocusables();
+        const miniCard = document.getElementById('playerMiniCard');
+        if (miniCard) window.SpatialNav.setFocus(miniCard);
+      }
     }
   }
 

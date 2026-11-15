@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraMusic</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="desktop-theme">
+
+  <div class="app-shell">
+
+    <!-- DESKTOP-STYLE LEFT SIDEBAR (BitChord Desktop Exact Layout) -->
+    <aside class="desktop-sidebar">
+      <!-- App Brand -->
+      <div class="sidebar-brand focusable" id="brand-header" tabindex="0">
+        <img class="brand-logo" src="Logo.png" alt="AuraMusic">
+        <span class="brand-name">AuraMusic</span>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="sidebar-nav">
+        <button class="nav-btn active focusable" id="nav-home" data-view="home">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+          </svg>
+          <span>Home</span>
+        </button>
+
+        <button class="nav-btn focusable" id="nav-explore" data-view="explore">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+          </svg>
+          <span>Explore</span>
+        </button>
+
+        <button class="nav-btn focusable" id="nav-search" data-view="search">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span>Search</span>
+        </button>
+
+        <button class="nav-btn focusable" id="nav-library" data-view="library">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 10l-2.5-1.5L13 12V6h5v6z"/>
+          </svg>
+          <span>Library</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+
+      <!-- Playlists section -->
+      <div class="sidebar-subheading">PLAYLISTS</div>
+      <div class="sidebar-playlists" id="sidebarPlaylists">
+        <div class="playlist-link focusable" tabindex="0">Liked Songs</div>
+        <div class="playlist-link focusable" tabindex="0">Daily Mix 1</div>
+        <div class="playlist-link focusable" tabindex="0">Hi-Res Favorites</div>
+        <div class="playlist-link focusable" tabindex="0">Lo-Fi & Study</div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button class="settings-btn focusable" id="btn-settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="footer-svg">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN APP BODY -->
+    <div class="desktop-main-body">
+
+      <!-- TOP TOOLBAR -->
+      <header class="desktop-topbar">
+        <div class="topbar-search-container focusable" id="topbarSearch" tabindex="0">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" class="topbar-input" id="searchInput" placeholder="Search songs, albums, artists..." readonly>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="chip-filter active focusable" tabindex="0">All</div>
+          <div class="chip-filter focusable" tabindex="0">Energize</div>
+          <div class="chip-filter focusable" tabindex="0">Relax</div>
+          <div class="chip-filter focusable" tabindex="0">Focus</div>
+          <div class="chip-filter focusable" tabindex="0">Commute</div>
+        </div>
+
+        <div class="topbar-user focusable" id="topbarUser" tabindex="0" title="Account">
+          <div class="user-avatar">A</div>
+        </div>
+      </header>
+
+      <!-- SCROLLABLE FEED CONTAINER -->
+      <main class="desktop-feed" id="desktopFeed">
+
+        <!-- VIEW 1: HOME FEED (BitChord Desktop Exact Layout) -->
+        <section class="feed-view active" id="view-home">
+          
+          <!-- Aura Greeting Header (SharedUi Component) -->
+          <div class="aura-greeting-card">
+            <div class="greeting-left">
+              <span class="greeting-badge">AURA HI-RES PLAYBACK</span>
+              <h1 class="greeting-title" id="greetingTitle">Good evening, Audiophile</h1>
+              <p class="greeting-sub">BitChord Engine • Lossless FLAC & Gapless Playback</p>
+            </div>
+            <div class="greeting-right">
+              <button class="spotlight-play-btn focusable" id="btn-spotlight-play">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="play-svg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Play Favorites</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Shelf 1: Quick Picks (4-column track rows like BitChord Desktop HomeScreen.kt) -->
+          <section class="feed-shelf">
+            <div class="shelf-title-row">
+              <h2 class="shelf-heading">Quick picks</h2>
+              <span class="shelf-action focusable" tabindex="0">Play all</span>
+            </div>
+            <div class="quick-picks-grid" id="grid-quick-picks">
+              <div class="track-row-card focusable" tabindex="0" data-track="Midnight Echoes">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=200" alt="Midnight Echoes">
+                <div class="track-row-details">
+                  <div class="track-row-title">Midnight Echoes</div>
+                  <div class="track-row-artist">Aura Sound Lab</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Neon Horizon">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200" alt="Neon Horizon">
+                <div class="track-row-details">
+                  <div class="track-row-title">Neon Horizon</div>
+                  <div class="track-row-artist">The Cyber Waves</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Tokyo Rain Walk">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200" alt="Tokyo Rain Walk">
+                <div class="track-row-details">
+                  <div class="track-row-title">Tokyo Rain Walk</div>
+                  <div class="track-row-artist">Komorebi Quartet</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Starlight Odyssey">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=200" alt="Starlight Odyssey">
+                <div class="track-row-details">
+                  <div class="track-row-title">Starlight Odyssey</div>
+                  <div class="track-row-artist">Aura Symphony</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Blinding Lights">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200" alt="Blinding Lights">
+                <div class="track-row-details">
+                  <div class="track-row-title">Blinding Lights</div>
+                  <div class="track-row-artist">The Weeknd</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Birds of a Feather">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200" alt="Birds of a Feather">
+                <div class="track-row-details">
+                  <div class="track-row-title">Birds of a Feather</div>
+                  <div class="track-row-artist">Billie Eilish</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Espresso">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=200" alt="Espresso">
+                <div class="track-row-details">
+                  <div class="track-row-title">Espresso</div>
+                  <div class="track-row-artist">Sabrina Carpenter</div>
+                </div>
+              </div>
+              <div class="track-row-card focusable" tabindex="0" data-track="Velvet Sunset">
+                <img class="track-row-thumb" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200" alt="Velvet Sunset">
+                <div class="track-row-details">
+                  <div class="track-row-title">Velvet Sunset</div>
+                  <div class="track-row-artist">Solaris Duo</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Shelf 2: Listen Again (Clean square cards) -->
+          <section class="feed-shelf">
+            <div class="shelf-title-row">
+              <h2 class="shelf-heading">Listen again</h2>
+              <span class="shelf-action focusable" tabindex="0">More</span>
+            </div>
+            <div class="shelf-carousel" id="carousel-listen-again">
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400" alt="Spatial Acoustics">
+                <div class="album-card-title">Spatial Acoustics</div>
+                <div class="album-card-sub">Album • Aura Sound Lab</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400" alt="Nothing Synthwave">
+                <div class="album-card-title">Nothing Synthwave</div>
+                <div class="album-card-sub">Album • The Cyber Waves</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400" alt="Chill Sessions">
+                <div class="album-card-title">Chill Sessions</div>
+                <div class="album-card-sub">Playlist • 45 songs</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400" alt="Deep Space">
+                <div class="album-card-title">Deep Space</div>
+                <div class="album-card-sub">EP • 6 tracks</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400" alt="Late Night Lo-Fi">
+                <div class="album-card-title">Late Night Lo-Fi</div>
+                <div class="album-card-sub">Playlist • Curated</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Shelf 3: Forgotten Favorites -->
+          <section class="feed-shelf">
+            <div class="shelf-title-row">
+              <h2 class="shelf-heading">Forgotten favorites</h2>
+              <span class="shelf-action focusable" tabindex="0">More</span>
+            </div>
+            <div class="shelf-carousel" id="carousel-forgotten">
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400" alt="After Hours">
+                <div class="album-card-title">After Hours</div>
+                <div class="album-card-sub">Album • The Weeknd</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400" alt="Happier Than Ever">
+                <div class="album-card-title">Happier Than Ever</div>
+                <div class="album-card-sub">Album • Billie Eilish</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1442512595331-e89e73853f31?w=400" alt="Coffeehouse Acoustic">
+                <div class="album-card-title">Coffeehouse Acoustic</div>
+                <div class="album-card-sub">Playlist • Relax</div>
+              </div>
+              <div class="album-square-card focusable" tabindex="0">
+                <img class="album-cover-img" src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400" alt="Nordic Forest Ambient">
+                <div class="album-card-title">Nordic Forest Ambient</div>
+                <div class="album-card-sub">Album • Fjord Audio</div>
+              </div>
+            </div>
+          </section>
+
+        </section>
+
+        <!-- VIEW 2: SEARCH RESULTS -->
+        <section class="feed-view" id="view-search">
+          <div class="shelf-title-row">
+            <h2 class="shelf-heading">Search Results</h2>
+          </div>
+          <!-- On-screen remote keyboard for TV -->
+          <div class="tv-keyboard-wrapper" id="tvKeyboardWrapper">
+            <div class="kbd-row">
+              <button class="kbd-key focusable" data-char="Q">Q</button>
+              <button class="kbd-key focusable" data-char="W">W</button>
+              <button class="kbd-key focusable" data-char="E">E</button>
+              <button class="kbd-key focusable" data-char="R">R</button>
+              <button class="kbd-key focusable" data-char="T">T</button>
+              <button class="kbd-key focusable" data-char="Y">Y</button>
+              <button class="kbd-key focusable" data-char="U">U</button>
+              <button class="kbd-key focusable" data-char="I">I</button>
+              <button class="kbd-key focusable" data-char="O">O</button>
+              <button class="kbd-key focusable" data-char="P">P</button>
+            </div>
+            <div class="kbd-row">
+              <button class="kbd-key focusable" data-char="A">A</button>
+              <button class="kbd-key focusable" data-char="S">S</button>
+              <button class="kbd-key focusable" data-char="D">D</button>
+              <button class="kbd-key focusable" data-char="F">F</button>
+              <button class="kbd-key focusable" data-char="G">G</button>
+              <button class="kbd-key focusable" data-char="H">H</button>
+              <button class="kbd-key focusable" data-char="J">J</button>
+              <button class="kbd-key focusable" data-char="K">K</button>
+              <button class="kbd-key focusable" data-char="L">L</button>
+            </div>
+            <div class="kbd-row">
+              <button class="kbd-key focusable" data-char="Z">Z</button>
+              <button class="kbd-key focusable" data-char="X">X</button>
+              <button class="kbd-key focusable" data-char="C">C</button>
+              <button class="kbd-key focusable" data-char="V">V</button>
+              <button class="kbd-key focusable" data-char="B">B</button>
+              <button class="kbd-key focusable" data-char="N">N</button>
+              <button class="kbd-key focusable" data-char="M">M</button>
+              <button class="kbd-key kbd-wide focusable" data-char="SPACE">SPACE</button>
+              <button class="kbd-key kbd-wide focusable" data-char="BACKSPACE">⌫ DEL</button>
+            </div>
+          </div>
+          <div class="quick-picks-grid" id="search-results-grid"></div>
+        </section>
+
+      </main>
+
+    </div>
+
+    <!-- PERSISTENT BOTTOM PLAYER BAR (BitChord Desktop Exact Layout) -->
+    <footer class="desktop-player-bar" id="desktopPlayerBar">
+      <!-- Left Track Info -->
+      <div class="player-left-section focusable" id="playerMiniCard" tabindex="0" title="Open Fullscreen Now Playing">
+        <img class="player-thumb" id="barThumb" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=120" alt="Track Art">
+        <div class="player-text-details">
+          <div class="player-track-name" id="barTitle">Midnight Echoes</div>
+          <div class="player-track-sub" id="barArtist">Aura Sound Lab • 24-bit FLAC</div>
+        </div>
+        <button class="player-icon-btn focusable" id="barLikeBtn" title="Like">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Center Controls & Scrubber -->
+      <div class="player-center-section">
+        <div class="transport-buttons">
+          <button class="player-icon-btn focusable" id="barShuffleBtn" title="Shuffle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          </button>
+          <button class="player-icon-btn focusable" id="barPrevBtn" title="Previous">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="svg-btn"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button class="play-pause-circle focusable" id="barPlayPauseBtn" title="Play / Pause">
+            <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <button class="player-icon-btn focusable" id="barNextBtn" title="Next">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="svg-btn"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button class="player-icon-btn focusable" id="barRepeatBtn" title="Repeat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+        </div>
+
+        <div class="scrubber-bar-container">
+          <span class="scrub-time" id="barCurrentTime">00:00</span>
+          <div class="scrub-track focusable" id="barScrubTrack" tabindex="0">
+            <div class="scrub-fill" id="barScrubFill" style="width: 0%"></div>
+          </div>
+          <span class="scrub-time" id="barTotalTime">02:44</span>
+        </div>
+      </div>
+
+      <!-- Right Extras: Lyrics, Queue, Sleep Timer -->
+      <div class="player-right-section">
+        <button class="player-icon-btn focusable" id="barLyricsBtn" title="Lyrics">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </button>
+        <button class="player-icon-btn focusable" id="barQueueBtn" title="Queue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </button>
+        <button class="player-icon-btn focusable" id="barTimerBtn" title="Smart Sleep Timer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </button>
+      </div>
+    </footer>
+
+    <!-- FULLSCREEN LANDSCAPE PLAYER OVERLAY (BitChord Desktop LandscapePlayer.kt) -->
+    <div class="desktop-fullscreen-player" id="fullscreenPlayer">
+      <div class="fs-header">
+        <button class="fs-back-btn focusable" id="btn-fs-close" title="Back to Browser">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="fs-header-title">Now Playing</span>
+        <div class="fs-header-tabs">
+          <button class="fs-tab-btn active focusable" id="tab-fs-lyrics">Lyrics</button>
+          <button class="fs-tab-btn focusable" id="tab-fs-queue">Up Next</button>
+        </div>
+      </div>
+
+      <div class="fs-body">
+        <!-- Left: Album artwork, credits & transport controls -->
+        <div class="fs-left-column">
+          <div class="fs-art-wrapper">
+            <img class="fs-art-img" id="fsAlbumArt" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800" alt="Album Sleeve">
+          </div>
+          
+          <div class="fs-track-info">
+            <div class="fs-badge-row">
+              <span class="fs-badge">HI-RES LOSSLESS</span>
+              <span class="fs-badge badge-codec">FLAC • 96kHz/24-bit</span>
+            </div>
+            <h1 class="fs-song-title" id="fsSongTitle">Midnight Echoes</h1>
+            <p class="fs-artist-name" id="fsArtistName">Aura Sound Lab</p>
+          </div>
+
+          <!-- Desktop Scrubber & Transport in Fullscreen -->
+          <div class="fs-player-controls">
+            <div class="scrubber-bar-container">
+              <span class="scrub-time" id="fsCurrentTime">00:00</span>
+              <div class="scrub-track focusable" id="fsScrubTrack" tabindex="0">
+                <div class="scrub-fill" id="fsScrubFill" style="width: 0%"></div>
+              </div>
+              <span class="scrub-time" id="fsTotalTime">02:44</span>
+            </div>
+
+            <div class="transport-buttons fs-transport-row">
+              <button class="player-icon-btn focusable" id="fsShuffleBtn" title="Shuffle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+              </button>
+              <button class="player-icon-btn focusable" id="fsPrevBtn" title="Previous">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="svg-btn"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"/></svg>
+              </button>
+              <button class="play-pause-circle focusable" id="fsPlayPauseBtn" title="Play / Pause">
+                <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              </button>
+              <button class="player-icon-btn focusable" id="fsNextBtn" title="Next">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="svg-btn"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"/></svg>
+              </button>
+              <button class="player-icon-btn focusable" id="fsRepeatBtn" title="Repeat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              </button>
+              <button class="player-icon-btn focusable" id="fsLikeBtn" title="Favorite">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="svg-btn"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Synced Lyrics Panel (Desktop LyricsSidePanel.kt) / Up Next Queue -->
+        <div class="fs-right-column">
+          <!-- Lyrics View -->
+          <div class="lyrics-card" id="fsLyricsContainer">
+            <div class="lyrics-card-header">
+              <span class="lyrics-title">LYRICS</span>
+              <span class="lyrics-source">Synced</span>
+            </div>
+            <div class="lyrics-viewport" id="fsLyricsViewport">
+              <div class="lyrics-stack" id="fsLyricsStack">
+                <div class="lyric-item active">♪ Ambient instrumental opening...</div>
+                <div class="lyric-item">Dim the living room lights softly</div>
+                <div class="lyric-item">Let the soundwaves fill every corner</div>
+                <div class="lyric-item">Lossless frequencies in 24-bit clarity</div>
+                <div class="lyric-item">Sink deep into the couch tonight</div>
+                <div class="lyric-item">No rushing, just pure acoustic aura</div>
+                <div class="lyric-item">Midnight echoes through the room</div>
+                <div class="lyric-item">Floating between the drums and keys</div>
+                <div class="lyric-item">Nothing in between, just the music</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Queue View (Initially Hidden) -->
+          <div class="fs-queue-card" id="fsQueueContainer" style="display: none;">
+            <div class="lyrics-card-header">
+              <span class="lyrics-title">UP NEXT IN QUEUE</span>
+              <span class="lyrics-source">BitChord Playback</span>
+            </div>
+            <div class="fs-queue-list" id="fsQueueList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUEUE SIDE PANEL (Desktop QueueSidePanel.kt) -->
+    <aside class="desktop-queue-panel" id="desktopQueuePanel">
+      <div class="panel-header">
+        <span class="panel-title">Playing Next</span>
+        <button class="panel-close-btn focusable" id="btn-queue-close">✕</button>
+      </div>
+      <div class="panel-queue-list" id="panelQueueList">
+        <div class="track-row-card focusable active" tabindex="0">
+          <img class="track-row-thumb" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=120" alt="Midnight Echoes">
+          <div class="track-row-details">
+            <div class="track-row-title">Midnight Echoes</div>
+            <div class="track-row-artist">Aura Sound Lab</div>
+          </div>
+        </div>
+        <div class="track-row-card focusable" tabindex="0">
+          <img class="track-row-thumb" src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=120" alt="Neon Horizon">
+          <div class="track-row-details">
+            <div class="track-row-title">Neon Horizon</div>
+            <div class="track-row-artist">The Cyber Waves</div>
+          </div>
+        </div>
+        <div class="track-row-card focusable" tabindex="0">
+          <img class="track-row-thumb" src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=120" alt="Tokyo Rain Walk">
+          <div class="track-row-details">
+            <div class="track-row-title">Tokyo Rain Walk</div>
+            <div class="track-row-artist">Komorebi Quartet</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- SMART SLEEP TIMER SHEET (Aura Desktop SmartSleepTimer.kt) -->
+    <div class="desktop-modal" id="sleepTimerSheet">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <span class="modal-chip">SMART SLEEP TIMER</span>
+          <h2 class="modal-heading">Bedtime Care</h2>
+          <p class="modal-sub">Completes the active song smoothly without abrupt cut-off.</p>
+        </div>
+        <div class="timer-grid">
+          <button class="timer-pill focusable" data-mins="15">15 min</button>
+          <button class="timer-pill focusable" data-mins="30">30 min</button>
+          <button class="timer-pill focusable" data-mins="45">45 min</button>
+          <button class="timer-pill focusable" data-mins="60">60 min</button>
+          <button class="timer-pill focusable" data-mins="album">End of Album</button>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-cancel-btn focusable" id="btn-timer-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Hidden YouTube Playback Engine for Smart TVs -->
+  <div id="yt-player-container" style="position:fixed;bottom:-9999px;left:-9999px;width:200px;height:200px;opacity:0.001;pointer-events:none;z-index:-1;"></div>
+  
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="js/spatial-navigation.js"></script>
+  <script src="js/music-api.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

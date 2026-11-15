@@ -1,45 +1,110 @@
 /**
- * AuraMusic TV Spatial Navigation Engine (D-Pad Controller)
- * Handles remote control input (Up, Down, Left, Right, Enter, Back)
- * Compatible with Samsung Tizen, LG webOS, Android TV, and standard Desktop Keyboards.
+ * AuraMusic Flagship TV Spatial Navigation Engine (D-Pad Controller)
+ * Engineered for 10-foot living room interaction matching Spotify and Apple Music TV.
+ * Compatible with Samsung Tizen OS, LG webOS, Android TV, Google TV, and Desktop Keyboard.
  */
 
 class SpatialNavigation {
   constructor() {
     this.currentFocus = null;
     this.focusableElements = [];
+    this.viewFocusMemory = new Map();
+    this.audioCtx = null;
+    this.idleTimer = null;
+    this.isIdle = false;
     this.init();
   }
 
   init() {
+    this.initAudioTick();
     this.bindEvents();
+    this.initOledWatchdog();
+
     window.addEventListener('load', () => {
       this.refreshFocusables();
-      // Set initial focus to Home Nav item or Hero Play
-      const initial = document.getElementById('btn-hero-play') || document.querySelector('.focusable');
-      if (initial) this.setFocus(initial);
+      const initial = document.getElementById('btn-hero-play') ||
+                      document.querySelector('.nav-btn.active') ||
+                      document.querySelector('.focusable');
+      if (initial) this.setFocus(initial, false);
     });
   }
 
+  /**
+   * Synthesize a subtle, low-latency audio tick on D-pad navigation.
+   * Completely self-contained via Web Audio API with zero asset dependencies.
+   */
+  initAudioTick() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        this.audioCtx = new AudioCtx();
+      }
+    } catch (e) {
+      // Audio context may require first user gesture on some ROMs
+    }
+  }
+
+  playTick() {
+    if (!this.audioCtx) return;
+    try {
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 0.025);
+      gain.gain.setValueAtTime(0.04, this.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.025);
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+      osc.start();
+      osc.stop(this.audioCtx.currentTime + 0.025);
+    } catch (e) {}
+  }
+
+  /**
+   * OLED Screen Protection Watchdog:
+   * Dims static UI after 2 minutes of remote inactivity while playing.
+   */
+  initOledWatchdog() {
+    const resetIdle = () => {
+      if (this.isIdle) {
+        this.isIdle = false;
+        document.body.classList.remove('oled-idle-dim');
+      }
+      clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(() => {
+        const fsPlayer = document.getElementById('fullscreenPlayer');
+        if (fsPlayer && fsPlayer.classList.contains('active')) {
+          this.isIdle = true;
+          document.body.classList.add('oled-idle-dim');
+        }
+      }, 120000); // 2 minutes
+    };
+
+    window.addEventListener('keydown', resetIdle);
+    resetIdle();
+  }
+
   refreshFocusables() {
-    // Find all visible .focusable elements in the document
     const all = Array.from(document.querySelectorAll('.focusable'));
     this.focusableElements = all.filter(el => {
-      // Must be visible and not inside an inactive view or hidden container
       const style = window.getComputedStyle(el);
       const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-      const closestView = el.closest('.tv-view');
+      const closestView = el.closest('.feed-view');
       const isViewActive = !closestView || closestView.classList.contains('active');
       const closestModal = el.closest('.tv-modal');
       const isModalActive = !closestModal || closestModal.classList.contains('open');
-      const closestDrawer = el.closest('.tv-drawer');
+      const closestDrawer = el.closest('.desktop-queue-panel');
       const isDrawerActive = !closestDrawer || closestDrawer.classList.contains('open');
 
       return isVisible && isViewActive && isModalActive && isDrawerActive;
     });
   }
 
-  setFocus(element) {
+  setFocus(element, playSound = true) {
     if (!element) return;
     if (this.currentFocus) {
       this.currentFocus.classList.remove('focused');
@@ -48,12 +113,17 @@ class SpatialNavigation {
     this.currentFocus.classList.add('focused');
     this.currentFocus.focus();
 
-    // Smoothly ensure element is visible in view/shelf
+    // Remember focus for current active view
+    const currentView = element.closest('.feed-view');
+    if (currentView && currentView.id) {
+      this.viewFocusMemory.set(currentView.id, element);
+    }
+
+    if (playSound) this.playTick();
     this.ensureVisible(element);
   }
 
   ensureVisible(element) {
-    // If inside a horizontal shelf, scroll horizontally
     const shelf = element.closest('.shelf-track');
     if (shelf) {
       const shelfRect = shelf.getBoundingClientRect();
@@ -62,10 +132,26 @@ class SpatialNavigation {
       shelf.scrollBy({ left: offset, behavior: 'smooth' });
     }
 
-    // If inside a view, ensure vertical scroll
-    const view = element.closest('.tv-view');
+    const view = element.closest('.feed-view') || element.closest('.desktop-feed');
     if (view && !shelf) {
       element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  /**
+   * Restore the last focused element in a given view
+   */
+  restoreViewFocus(viewId) {
+    this.refreshFocusables();
+    const remembered = this.viewFocusMemory.get(viewId);
+    if (remembered && this.focusableElements.includes(remembered)) {
+      this.setFocus(remembered, false);
+      return;
+    }
+    const viewEl = document.getElementById(viewId);
+    if (viewEl) {
+      const first = viewEl.querySelector('.focusable');
+      if (first) this.setFocus(first, false);
     }
   }
 
@@ -123,11 +209,39 @@ class SpatialNavigation {
 
       if (isCandidate) {
         // Geometric distance weight favoring direct axis alignment
-        const distance = Math.hypot(primaryDiff, secondaryDiff * 1.5);
+        const distance = Math.hypot(primaryDiff, secondaryDiff * 1.6);
         if (distance < minDistance) {
           minDistance = distance;
           bestTarget = candidate;
         }
+      }
+    }
+
+    // Boundary Catchers (Spotify TV UX Rules):
+    // 1. Moving Left at the leftmost card of content -> Focus the active sidebar navigation button
+    if (!bestTarget && direction === 'left') {
+      const activeNav = document.querySelector('.desktop-sidebar .nav-btn.active') ||
+                        document.querySelector('.desktop-sidebar .focusable');
+      if (activeNav && activeNav !== this.currentFocus) {
+        bestTarget = activeNav;
+      }
+    }
+
+    // 2. Moving Down from the bottom shelf -> Focus the bottom Now Playing bar
+    if (!bestTarget && direction === 'down') {
+      const playerPlayBtn = document.getElementById('btn-play-pause') ||
+                            document.querySelector('.desktop-player-bar .focusable');
+      if (playerPlayBtn && playerPlayBtn !== this.currentFocus) {
+        bestTarget = playerPlayBtn;
+      }
+    }
+
+    // 3. Moving Up from the bottom Now Playing bar -> Restore content focus
+    if (!bestTarget && direction === 'up' && this.currentFocus.closest('.desktop-player-bar')) {
+      const activeView = document.querySelector('.feed-view.active');
+      if (activeView) {
+        const remembered = this.viewFocusMemory.get(activeView.id) || activeView.querySelector('.focusable');
+        if (remembered) bestTarget = remembered;
       }
     }
 
@@ -138,10 +252,6 @@ class SpatialNavigation {
 
   bindEvents() {
     window.addEventListener('keydown', (e) => {
-      // Smart TV Key Codes:
-      // Tizen: 38 (Up), 40 (Down), 37 (Left), 39 (Right), 13 (Enter), 10009 (Return)
-      // webOS: 38, 40, 37, 39, 13, 461 (Back)
-      // Android TV: 19 (Up), 20 (Down), 21 (Left), 22 (Right), 66 (Enter), 4 (Back)
       const code = e.keyCode || e.which;
 
       switch (code) {
@@ -177,10 +287,10 @@ class SpatialNavigation {
           }
           break;
 
-        case 27: // Escape
-        case 8:  // Backspace
-        case 10009: // Tizen Return
-        case 461:   // webOS Back
+        case 27:    // Escape
+        case 8:     // Backspace
+        case 10009: // Samsung Tizen Return / Back
+        case 461:   // LG webOS Back
         case 4:     // Android TV Back
           e.preventDefault();
           if (window.AuraApp && typeof window.AuraApp.handleBack === 'function') {
@@ -188,11 +298,41 @@ class SpatialNavigation {
           }
           break;
 
-        case 32: // Spacebar -> Play / Pause shortcut
+        // Dedicated TV Remote Media Keys (Samsung, LG, Android TV):
+        case 32:    // Spacebar
+        case 179:   // MediaPlayPause
+        case 10252: // Tizen MediaPlayPause
+        case 85:    // Android KEYCODE_MEDIA_PLAY_PAUSE
           e.preventDefault();
-          if (window.AuraPlayer) {
-            window.AuraPlayer.togglePlay();
+          if (window.AuraPlayer) window.AuraPlayer.togglePlay();
+          break;
+
+        case 415:   // Tizen / webOS MediaPlay
+        case 126:   // Android KEYCODE_MEDIA_PLAY
+          e.preventDefault();
+          if (window.AuraPlayer && !window.AuraPlayer.isPlaying) window.AuraPlayer.togglePlay();
+          break;
+
+        case 19:    // MediaPause (when standalone)
+        case 127:   // Android KEYCODE_MEDIA_PAUSE
+          if (e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            if (window.AuraPlayer && window.AuraPlayer.isPlaying) window.AuraPlayer.togglePlay();
           }
+          break;
+
+        case 176: // MediaTrackNext
+        case 417: // Tizen / webOS FastForward
+        case 87:  // Android KEYCODE_MEDIA_NEXT
+          e.preventDefault();
+          if (window.AuraPlayer) window.AuraPlayer.playNext();
+          break;
+
+        case 177: // MediaTrackPrevious
+        case 412: // Tizen / webOS Rewind
+        case 88:  // Android KEYCODE_MEDIA_PREVIOUS
+          e.preventDefault();
+          if (window.AuraPlayer) window.AuraPlayer.playPrevious();
           break;
       }
     });
