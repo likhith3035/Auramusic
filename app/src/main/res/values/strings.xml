@@ -1003,6 +1003,7 @@
     <string name="separate_app_sound_samsung">Separate App Sound (Samsung One UI)</string>
     <string name="separate_app_sound_samsung_subtitle">Open system settings to route all other phone audio to the phone speaker</string>
     <string name="party_shield">Party Shield</string>
+    <string name="party_shield_bluetooth_intro">Party Shield Active: Music won\'t pause while scrolling Reels or Shorts</string>
     <string name="dim_for_video">Dim for Video (-14dB)</string>
     <string name="dim_for_video_subtitle">Quiet music to hear speech in Reels and videos</string>
 

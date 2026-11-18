@@ -285,6 +285,9 @@ object AppSettings {
     /** Temporary volume dim (-14dB) for hearing short video speech while music plays. */
     val musicDimmed = MutableStateFlow(false)
 
+    /** Whether the user has seen the one-time Bluetooth intro toast for Party Shield. */
+    val hasSeenPartyShieldIntro = MutableStateFlow(false)
+
     /** Unprocessed output to a DAC; see [BitPerfectMode]. */
     val bitPerfectMode = MutableStateFlow(BitPerfectMode.OFF)
 
@@ -925,6 +928,7 @@ object AppSettings {
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         ignoreAudioFocus.value = prefs.getBoolean(KEY_IGNORE_AUDIO_FOCUS, false)
         autoLockBluetooth.value = prefs.getBoolean(KEY_AUTO_LOCK_BLUETOOTH, false)
+        hasSeenPartyShieldIntro.value = prefs.getBoolean(KEY_HAS_SEEN_PARTY_SHIELD_INTRO, false)
         bitPerfectMode.value = runCatching {
             BitPerfectMode.valueOf(prefs.getString(KEY_BIT_PERFECT_MODE, null) ?: BitPerfectMode.OFF.name)
         }.getOrDefault(BitPerfectMode.OFF)
@@ -1951,6 +1955,11 @@ object AppSettings {
         musicDimmed.value = value
     }
 
+    fun setHasSeenPartyShieldIntro(value: Boolean) {
+        hasSeenPartyShieldIntro.value = value
+        prefs.edit().putBoolean(KEY_HAS_SEEN_PARTY_SHIELD_INTRO, value).apply()
+    }
+
     fun setBitPerfectMode(value: BitPerfectMode) {
         bitPerfectMode.value = value
         prefs.edit().putString(KEY_BIT_PERFECT_MODE, value.name).apply()
@@ -2413,6 +2422,7 @@ object AppSettings {
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_IGNORE_AUDIO_FOCUS = "ignore_audio_focus"
     private const val KEY_AUTO_LOCK_BLUETOOTH = "auto_lock_bluetooth"
+    private const val KEY_HAS_SEEN_PARTY_SHIELD_INTRO = "has_seen_party_shield_intro"
     private const val KEY_BIT_PERFECT_MODE = "bit_perfect_mode"
     private const val KEY_USB_ALLOW_FIXED_VOLUME = "usb_allow_fixed_volume"
     private const val KEY_CONVERT_FOR_LIMITED_DAC = "convert_for_limited_dac"

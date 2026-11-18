@@ -529,12 +529,31 @@ class PlaybackService : MediaLibraryService() {
     private val bluetoothTracker by lazy { BluetoothAudioTracker(this) }
     private val smartFocusManager by lazy { SmartFocusManager() }
     private var sleepTimerVolumeMultiplier: Float = 1.0f
+    private var volumeAnimator: android.animation.ValueAnimator? = null
 
-    private fun updateActivePlayerVolume() {
+    private fun updateActivePlayerVolume(animated: Boolean = true) {
         val duck = smartFocusManager.duckMultiplier
         val dim = if (AppSettings.musicDimmed.value) 0.20f else 1.0f
-        val mult = sleepTimerVolumeMultiplier * duck * dim
-        eachPlayer { it.volume = mult }
+        val targetMult = sleepTimerVolumeMultiplier * duck * dim
+        val currentVolume = player?.volume ?: 1.0f
+
+        if (!animated || kotlin.math.abs(currentVolume - targetMult) < 0.01f) {
+            volumeAnimator?.cancel()
+            volumeAnimator = null
+            eachPlayer { it.volume = targetMult }
+            return
+        }
+
+        volumeAnimator?.cancel()
+        volumeAnimator = android.animation.ValueAnimator.ofFloat(currentVolume, targetMult).apply {
+            duration = 250L
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            addUpdateListener { animator ->
+                val v = animator.animatedValue as Float
+                eachPlayer { it.volume = v }
+            }
+            start()
+        }
     }
 
     /**
@@ -653,6 +672,7 @@ class PlaybackService : MediaLibraryService() {
             // would be a picker that had quietly broken the obvious behaviour.
             AudioRouting.forget()
             requestOutputReconfiguration()
+            checkBluetoothPartyShieldIntro(addedDevices)
         }
         override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
             // A chosen output that has been unplugged is no longer a choice.
@@ -663,6 +683,29 @@ class PlaybackService : MediaLibraryService() {
                 AudioRouting.forget()
             }
             requestOutputReconfiguration()
+        }
+    }
+
+    private fun checkBluetoothPartyShieldIntro(addedDevices: Array<AudioDeviceInfo>) {
+        if (AppSettings.hasSeenPartyShieldIntro.value) return
+        val hasBtSink = addedDevices.any { device ->
+            device.isSink && (
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+                ))
+            )
+        }
+        if (hasBtSink) {
+            AppSettings.setHasSeenPartyShieldIntro(true)
+            scope.launch(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    applicationContext,
+                    getString(R.string.party_shield_bluetooth_intro),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -1053,6 +1096,9 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (AppSettings.musicDimmed.value) {
+                AppSettings.setMusicDimmed(false)
+            }
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                 SmartSleepTimer.recordUserActivity()
             }
@@ -2853,6 +2899,9 @@ class PlaybackService : MediaLibraryService() {
         // first callback reads already describes the new arrangement.
         player = incoming
         spare = outgoing
+        if (AppSettings.musicDimmed.value) {
+            AppSettings.setMusicDimmed(false)
+        }
         val heldFilter = activeFilter
         activeFilter = spareFilter
         spareFilter = heldFilter
