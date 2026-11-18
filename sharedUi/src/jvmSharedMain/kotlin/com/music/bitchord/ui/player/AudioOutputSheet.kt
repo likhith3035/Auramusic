@@ -30,6 +30,8 @@ import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -121,6 +123,9 @@ internal fun AudioOutputSheet(
 
         Spacer(Modifier.height(6.dp))
         AudioPipelineRow(onClick = onOpenPipeline)
+
+        Spacer(Modifier.height(6.dp))
+        PartyShieldRow()
     }
 }
 
@@ -194,6 +199,78 @@ private fun AudioPipelineRow(onClick: () -> Unit) {
             contentDescription = null,
             tint = Color.White.copy(alpha = 0.35f),
             modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/**
+ * Quick toggle for Party Shield: disables audio focus handling so music
+ * does not pause or duck when scrolling Instagram Reels, TikTok, or YouTube shorts.
+ */
+@Composable
+private fun PartyShieldRow() {
+    val haptics = rememberHaptics()
+    val ignoreFocus by PlayerPlatform.host.settings.ignoreAudioFocus.collectAsStateWithLifecycle()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ROW_SHAPE)
+            .background(Color.White.copy(alpha = if (ignoreFocus) 0.10f else 0.05f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                haptics.play(Haptic.Select)
+                PlayerPlatform.host.settings.setIgnoreAudioFocus(!ignoreFocus)
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = if (ignoreFocus) 0.16f else 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Headphones,
+                contentDescription = null,
+                tint = if (ignoreFocus) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.width(13.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(Res.string.party_shield),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = if (ignoreFocus) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                color = Color.White.copy(alpha = if (ignoreFocus) 1f else 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(Res.string.party_shield_subtitle),
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.55f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Switch(
+            checked = ignoreFocus,
+            onCheckedChange = {
+                haptics.play(Haptic.Select)
+                PlayerPlatform.host.settings.setIgnoreAudioFocus(it)
+            },
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                checkedBorderColor = MaterialTheme.colorScheme.primary,
+            ),
         )
     }
 }

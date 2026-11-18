@@ -2704,7 +2704,7 @@ class PlaybackService : MediaLibraryService() {
         .setRenderersFactory(silenceSkippingRenderers(spatial, equalizer, filter, loudness))
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
-        .setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ ownsSession)
+        .setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ ownsSession && !AppSettings.ignoreAudioFocus.value)
         .setHandleAudioBecomingNoisy(ownsSession)
         // Back restarts the track once you're this far into it; only a
         // press before that steps to the previous one.
@@ -2775,7 +2775,8 @@ class PlaybackService : MediaLibraryService() {
      * the song you are listening to, which is whichever one the session is on.
      */
     private fun setSessionOwner(target: ExoPlayer, owns: Boolean) {
-        target.setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ owns)
+        val handleFocus = owns && !AppSettings.ignoreAudioFocus.value
+        target.setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ handleFocus)
         target.setHandleAudioBecomingNoisy(owns)
     }
 
@@ -5706,8 +5707,11 @@ class PlaybackService : MediaLibraryService() {
     private fun applyOutputRoute() {
         val manager = audioManager ?: return
         val usb = preferredUsbDevice()
+        val bt = preferredBluetoothDevice()
         val chosen = AudioRouting.infoFor(manager, AudioRouting.selectedId.value)
-        val preferred = chosen ?: usb.takeIf { AppSettings.preferUsbDac.value }
+        val preferred = chosen
+            ?: usb.takeIf { AppSettings.preferUsbDac.value }
+            ?: bt.takeIf { AppSettings.autoLockBluetooth.value }
         eachPlayer { it.setPreferredAudioDevice(preferred) }
 
         val activeDevice = resolveActiveOutputDevice()
@@ -5953,11 +5957,22 @@ class PlaybackService : MediaLibraryService() {
                 device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
         }
 
+    private fun preferredBluetoothDevice(): AudioDeviceInfo? = audioManager
+        ?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        ?.firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                device.type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
+                device.type == AudioDeviceInfo.TYPE_BLE_BROADCAST
+        }
+
     private fun resolveActiveOutputDevice(): AudioDeviceInfo? {
         val manager = audioManager ?: return null
         val infos = runCatching { manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) }.getOrNull() ?: return null
         val chosen = AudioRouting.infoFor(manager, AudioRouting.selectedId.value)
-        val preferred = chosen ?: preferredUsbDevice().takeIf { AppSettings.preferUsbDac.value }
+        val preferred = chosen
+            ?: preferredUsbDevice().takeIf { AppSettings.preferUsbDac.value }
+            ?: preferredBluetoothDevice().takeIf { AppSettings.autoLockBluetooth.value }
         return preferred ?: AudioRouting.activeOf(infos, null)
     }
 
@@ -6011,6 +6026,15 @@ class PlaybackService : MediaLibraryService() {
         watchDirectWindow()
         scope.launch {
             AppSettings.preferUsbDac.drop(1).collect { requestOutputReconfiguration() }
+        }
+        scope.launch {
+            AppSettings.autoLockBluetooth.drop(1).collect { requestOutputReconfiguration() }
+        }
+        scope.launch {
+            AppSettings.ignoreAudioFocus.drop(1).collect { ignore ->
+                val handleFocus = !ignore
+                eachPlayer { it.setAudioAttributes(AUDIO_ATTRIBUTES, handleFocus) }
+            }
         }
         scope.launch {
             AudioRouting.selectedId.drop(1).collect { requestOutputReconfiguration() }

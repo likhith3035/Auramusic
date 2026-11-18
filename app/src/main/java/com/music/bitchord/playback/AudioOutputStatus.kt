@@ -118,6 +118,8 @@ object AudioOutputStatus {
         /** YouTube's own normalization figure for the playing track, in dB, when known. */
         val loudnessLufs: Float? = null,
     ) {
+        val isBluetooth: Boolean get() = routeKind == AudioRouting.Kind.BLUETOOTH
+
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is Snapshot) return false

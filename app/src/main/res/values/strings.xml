@@ -996,6 +996,13 @@
     <string name="output_precision">Output precision</string>
 
     <string name="prefer_usb_dac">Prefer USB DAC</string>
+    <string name="ignore_audio_focus">Play over Reels and other apps</string>
+    <string name="ignore_audio_focus_subtitle">Keep music playing uninterrupted when Instagram, YouTube, TikTok, or games make sound</string>
+    <string name="auto_lock_bluetooth">Auto-lock to Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Direct music strictly to Bluetooth speakers or headphones while phone sounds stay on device</string>
+    <string name="separate_app_sound_samsung">Separate App Sound (Samsung One UI)</string>
+    <string name="separate_app_sound_samsung_subtitle">Open system settings to route all other phone audio to the phone speaker</string>
+    <string name="party_shield">Party Shield</string>
 
     <string name="loudness_normalization">Loudness normalization</string>
 

@@ -253,6 +253,8 @@ fun SettingsScreen(
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
+    val ignoreAudioFocus by AppSettings.ignoreAudioFocus.collectAsStateWithLifecycle()
+    val autoLockBluetooth by AppSettings.autoLockBluetooth.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
@@ -677,6 +679,51 @@ fun SettingsScreen(
                     onCheckedChange = AppSettings::setPreferUsbDac,
                     badge = stringResource(R.string.connected).takeIf { outputStatus.isUsb },
                 )
+            }
+            val ignoreAudioFocusTitle = stringResource(R.string.ignore_audio_focus)
+            row(ignoreAudioFocusTitle, "audio", "focus", "reels", "instagram", "party", "overlap") {
+                SettingsSubRow(
+                    title = ignoreAudioFocusTitle,
+                    subtitle = stringResource(R.string.ignore_audio_focus_subtitle),
+                    checked = ignoreAudioFocus,
+                    onCheckedChange = AppSettings::setIgnoreAudioFocus,
+                )
+            }
+            val autoLockBluetoothTitle = stringResource(R.string.auto_lock_bluetooth)
+            row(autoLockBluetoothTitle, "bluetooth", "output", "party", "shield", "speaker") {
+                SettingsSubRow(
+                    title = autoLockBluetoothTitle,
+                    subtitle = stringResource(R.string.auto_lock_bluetooth_subtitle),
+                    checked = autoLockBluetooth,
+                    onCheckedChange = AppSettings::setAutoLockBluetooth,
+                    badge = stringResource(R.string.connected).takeIf { outputStatus.isBluetooth },
+                )
+            }
+            if (android.os.Build.MANUFACTURER.contains("samsung", ignoreCase = true)) {
+                val samsungTitle = stringResource(R.string.separate_app_sound_samsung)
+                row(samsungTitle, "samsung", "sound", "separate", "reels") {
+                    SettingsSubRow(
+                        title = samsungTitle,
+                        subtitle = stringResource(R.string.separate_app_sound_samsung_subtitle),
+                        checked = false,
+                        onCheckedChange = {
+                            runCatching {
+                                val intent = android.content.Intent("com.samsung.android.setting.SEPARATE_APP_SOUND").apply {
+                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            }.onFailure {
+                                runCatching {
+                                    val fallback = android.content.Intent(android.provider.Settings.ACTION_SOUND_SETTINGS).apply {
+                                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(fallback)
+                                }
+                            }
+                        },
+                        badge = "One UI",
+                    )
+                }
             }
             val loudnessTitle = stringResource(R.string.loudness_normalization)
             row(loudnessTitle, "loudness", "volume", "normalize", "replaygain", "lufs") {
