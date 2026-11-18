@@ -46,6 +46,8 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.settings.MixBlend
+import com.music.bitchord.ui.haptics.Haptic
+import com.music.bitchord.ui.haptics.rememberHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
@@ -138,6 +140,10 @@ fun ThinSlider(
         label = "fillFactor",
     )
 
+    val haptics = rememberHaptics()
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnFinished by rememberUpdatedState(onValueChangeFinished)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -150,7 +156,10 @@ fun ThinSlider(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     dragging = true
-                    onValueChange((down.position.x / size.width).coerceIn(0f, 1f))
+                    haptics.play(Haptic.Select)
+                    val initialFraction = (down.position.x / size.width).coerceIn(0f, 1f)
+                    var lastHapticFraction = initialFraction
+                    currentOnValueChange(initialFraction)
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -160,13 +169,22 @@ fun ThinSlider(
                             break
                         }
                         if (pointer.positionChanged()) {
-                            onValueChange((pointer.position.x / size.width).coerceIn(0f, 1f))
+                            val newFraction = (pointer.position.x / size.width).coerceIn(0f, 1f)
+                            currentOnValueChange(newFraction)
                             pointer.consume()
+
+                            // Micro-tick for every ~2.5% of scrub distance across the timeline.
+                            // Creates a mechanical rotary dial / ratchet feedback sensation.
+                            if (kotlin.math.abs(newFraction - lastHapticFraction) >= 0.025f) {
+                                haptics.play(Haptic.Tick)
+                                lastHapticFraction = newFraction
+                            }
                         }
                     }
 
                     dragging = false
-                    onValueChangeFinished?.invoke()
+                    haptics.play(Haptic.Select)
+                    currentOnFinished?.invoke()
                 }
             },
         contentAlignment = Alignment.Center,
