@@ -282,6 +282,9 @@ object AppSettings {
     /** Automatically lock AuraMusic output strictly to connected Bluetooth devices. */
     val autoLockBluetooth = MutableStateFlow(false)
 
+    /** Temporary volume dim (-14dB) for hearing short video speech while music plays. */
+    val musicDimmed = MutableStateFlow(false)
+
     /** Unprocessed output to a DAC; see [BitPerfectMode]. */
     val bitPerfectMode = MutableStateFlow(BitPerfectMode.OFF)
 
@@ -1942,6 +1945,10 @@ object AppSettings {
     fun setAutoLockBluetooth(value: Boolean) {
         autoLockBluetooth.value = value
         prefs.edit().putBoolean(KEY_AUTO_LOCK_BLUETOOTH, value).apply()
+    }
+
+    fun setMusicDimmed(value: Boolean) {
+        musicDimmed.value = value
     }
 
     fun setBitPerfectMode(value: BitPerfectMode) {

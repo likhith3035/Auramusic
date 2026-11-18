@@ -5,12 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.widget.Toast
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
@@ -525,6 +527,119 @@ class PlaybackService : MediaLibraryService() {
 
     private val audioManager by lazy { getSystemService(AudioManager::class.java) }
     private val bluetoothTracker by lazy { BluetoothAudioTracker(this) }
+    private val smartFocusManager by lazy { SmartFocusManager() }
+    private var sleepTimerVolumeMultiplier: Float = 1.0f
+
+    private fun updateActivePlayerVolume() {
+        val duck = smartFocusManager.duckMultiplier
+        val dim = if (AppSettings.musicDimmed.value) 0.20f else 1.0f
+        val mult = sleepTimerVolumeMultiplier * duck * dim
+        eachPlayer { it.volume = mult }
+    }
+
+    /**
+     * Intelligent Audio Focus & Call State Manager:
+     * 1. Phone / WhatsApp calls: Auto-pauses music on incoming/active calls, auto-resumes when call ends.
+     * 2. Navigation (Google Maps / Waze): Smoothly ducks music volume to 25% during voice prompts.
+     * 3. Social Media (Reels / Shorts / TikTok): Ignores focus loss when Party Shield is ON.
+     */
+    private inner class SmartFocusManager : AudioManager.OnAudioFocusChangeListener {
+        private var focusRequest: AudioFocusRequest? = null
+        private var hasFocus = false
+        var wasPlayingBeforeCall = false
+        var isDucked = false
+            private set
+
+        val duckMultiplier: Float
+            get() = if (isDucked) 0.25f else 1.0f
+
+        fun requestFocus(): Boolean {
+            val manager = audioManager ?: return false
+            if (hasFocus) return true
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(false)
+                    .setOnAudioFocusChangeListener(this)
+                    .build()
+                focusRequest = req
+                manager.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                manager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            }
+            hasFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+            return hasFocus
+        }
+
+        fun abandonFocus() {
+            if (!hasFocus) return
+            val manager = audioManager ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                focusRequest?.let { manager.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                manager.abandonAudioFocus(this)
+            }
+            hasFocus = false
+            isDucked = false
+        }
+
+        fun isCallActive(): Boolean {
+            val mode = audioManager?.mode ?: return false
+            return mode == AudioManager.MODE_IN_CALL ||
+                mode == AudioManager.MODE_IN_COMMUNICATION ||
+                mode == AudioManager.MODE_RINGTONE
+        }
+
+        override fun onAudioFocusChange(focusChange: Int) {
+            when (focusChange) {
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    hasFocus = true
+                    if (isDucked) {
+                        isDucked = false
+                        updateActivePlayerVolume()
+                    }
+                    if (wasPlayingBeforeCall && !isCallActive()) {
+                        wasPlayingBeforeCall = false
+                        player?.playWhenReady = true
+                    }
+                }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                    isDucked = true
+                    updateActivePlayerVolume()
+                }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    if (isCallActive()) {
+                        wasPlayingBeforeCall = player?.playWhenReady == true
+                        if (wasPlayingBeforeCall) {
+                            player?.playWhenReady = false
+                        }
+                    } else if (AppSettings.ignoreAudioFocus.value) {
+                        // Party Shield ON: Instagram Reels, TikTok, YouTube Shorts -> Keep playing at full volume!
+                    } else {
+                        player?.playWhenReady = false
+                    }
+                }
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    if (isCallActive()) {
+                        wasPlayingBeforeCall = player?.playWhenReady == true
+                        if (wasPlayingBeforeCall) {
+                            player?.playWhenReady = false
+                        }
+                    } else if (!AppSettings.ignoreAudioFocus.value) {
+                        player?.playWhenReady = false
+                    }
+                }
+            }
+        }
+    }
     private var currentAudioInputFormat: Format? = null
     private val outputDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
@@ -900,7 +1015,12 @@ class PlaybackService : MediaLibraryService() {
             // speaker — an internal path, since the session player's door
             // already sends a listener's play to the receiver. The phone goes
             // quiet again and the receiver is asked instead.
-            if (playWhenReady) player?.let(castPlayback::onLocalStartedPlaying)
+            if (playWhenReady) {
+                player?.let(castPlayback::onLocalStartedPlaying)
+                smartFocusManager.requestFocus()
+            } else if (!smartFocusManager.wasPlayingBeforeCall) {
+                smartFocusManager.abandonFocus()
+            }
             publishWidgetState(playing = playWhenReady)
             // The only place the *reason* can be read. A party has to tell a
             // pause the listener asked for from one another app imposed, and
@@ -2704,7 +2824,7 @@ class PlaybackService : MediaLibraryService() {
         .setRenderersFactory(silenceSkippingRenderers(spatial, equalizer, filter, loudness))
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
-        .setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ ownsSession && !AppSettings.ignoreAudioFocus.value)
+        .setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ false)
         .setHandleAudioBecomingNoisy(ownsSession)
         // Back restarts the track once you're this far into it; only a
         // press before that steps to the previous one.
@@ -2775,8 +2895,7 @@ class PlaybackService : MediaLibraryService() {
      * the song you are listening to, which is whichever one the session is on.
      */
     private fun setSessionOwner(target: ExoPlayer, owns: Boolean) {
-        val handleFocus = owns && !AppSettings.ignoreAudioFocus.value
-        target.setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ handleFocus)
+        target.setAudioAttributes(AUDIO_ATTRIBUTES, /* handleAudioFocus = */ false)
         target.setHandleAudioBecomingNoisy(owns)
     }
 
@@ -5431,13 +5550,15 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             SmartSleepTimer.deadlineMs.collectLatest { deadline ->
                 if (deadline == null) {
-                    player?.volume = 1f
+                    sleepTimerVolumeMultiplier = 1f
+                    updateActivePlayerVolume()
                     return@collectLatest
                 }
                 while (isActive) {
                     val remaining = deadline - MonotonicClock.nowMs()
                     val mult = SmartSleepTimer.updateVolumeMultiplier(remaining)
-                    player?.volume = mult
+                    sleepTimerVolumeMultiplier = mult
+                    updateActivePlayerVolume()
                     if (remaining <= 0L) break
                     val fadeMs = SmartSleepTimer.fadeOutDurationSeconds.value * 1000L
                     val nextDelay = if (remaining <= fadeMs) 250L else (remaining - fadeMs).coerceIn(250L, 5000L)
@@ -5447,14 +5568,16 @@ class PlaybackService : MediaLibraryService() {
                 val shouldPauseNow = SmartSleepTimer.onDurationCountdownExpired(isPlaying)
                 if (shouldPauseNow) {
                     player?.pause()
-                    player?.volume = 1f
+                    sleepTimerVolumeMultiplier = 1f
+                    updateActivePlayerVolume()
                 }
             }
         }
         scope.launch {
             SmartSleepTimer.status.collect { status ->
                 if (status == SleepTimerStatus.OFF || status == SleepTimerStatus.PAUSED) {
-                    player?.volume = 1f
+                    sleepTimerVolumeMultiplier = 1f
+                    updateActivePlayerVolume()
                 }
             }
         }
@@ -6031,10 +6154,7 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.autoLockBluetooth.drop(1).collect { requestOutputReconfiguration() }
         }
         scope.launch {
-            AppSettings.ignoreAudioFocus.drop(1).collect { ignore ->
-                val handleFocus = !ignore
-                eachPlayer { it.setAudioAttributes(AUDIO_ATTRIBUTES, handleFocus) }
-            }
+            AppSettings.musicDimmed.drop(1).collect { updateActivePlayerVolume() }
         }
         scope.launch {
             AudioRouting.selectedId.drop(1).collect { requestOutputReconfiguration() }
@@ -6617,6 +6737,7 @@ class PlaybackService : MediaLibraryService() {
         CastController.detach(castPlayback)
         castPlayback.release()
         closeAudioEffectSession()
+        smartFocusManager.abandonFocus()
         bluetoothTracker.stop()
         audioManager?.unregisterAudioDeviceCallback(outputDeviceCallback)
         partySync?.stop()

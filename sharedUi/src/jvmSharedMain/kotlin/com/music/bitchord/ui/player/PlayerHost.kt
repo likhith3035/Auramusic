@@ -253,8 +253,10 @@ interface PlayerSettingsSource {
     val preferUsbDac: StateFlow<Boolean>
     val ignoreAudioFocus: StateFlow<Boolean> get() = MutableStateFlow(false)
     val autoLockBluetooth: StateFlow<Boolean> get() = MutableStateFlow(false)
+    val musicDimmed: StateFlow<Boolean> get() = MutableStateFlow(false)
     fun setIgnoreAudioFocus(enabled: Boolean) {}
     fun setAutoLockBluetooth(enabled: Boolean) {}
+    fun setMusicDimmed(enabled: Boolean) {}
     val prioritizeSpotifyCanvas: StateFlow<Boolean>
     val reduceAnimation: StateFlow<Boolean>
     val reduceDynamicBlur: StateFlow<Boolean>

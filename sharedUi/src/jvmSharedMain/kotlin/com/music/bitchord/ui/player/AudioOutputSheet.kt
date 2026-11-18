@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Bluetooth
@@ -211,67 +212,124 @@ private fun AudioPipelineRow(onClick: () -> Unit) {
 private fun PartyShieldRow() {
     val haptics = rememberHaptics()
     val ignoreFocus by PlayerPlatform.host.settings.ignoreAudioFocus.collectAsStateWithLifecycle()
+    val isDimmed by PlayerPlatform.host.settings.musicDimmed.collectAsStateWithLifecycle()
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ROW_SHAPE)
             .background(Color.White.copy(alpha = if (ignoreFocus) 0.10f else 0.05f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) {
-                haptics.play(Haptic.Select)
-                PlayerPlatform.host.settings.setIgnoreAudioFocus(!ignoreFocus)
-            }
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = if (ignoreFocus) 0.16f else 0.08f)),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    haptics.play(Haptic.Select)
+                    PlayerPlatform.host.settings.setIgnoreAudioFocus(!ignoreFocus)
+                },
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Headphones,
-                contentDescription = null,
-                tint = if (ignoreFocus) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Spacer(Modifier.width(13.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = stringResource(Res.string.party_shield),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontWeight = if (ignoreFocus) FontWeight.SemiBold else FontWeight.Normal,
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = if (ignoreFocus) 0.16f else 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Headphones,
+                    contentDescription = null,
+                    tint = if (ignoreFocus) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(Res.string.party_shield),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = if (ignoreFocus) FontWeight.SemiBold else FontWeight.Normal,
+                    ),
+                    color = Color.White.copy(alpha = if (ignoreFocus) 1f else 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.party_shield_subtitle),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Switch(
+                checked = ignoreFocus,
+                onCheckedChange = {
+                    haptics.play(Haptic.Select)
+                    PlayerPlatform.host.settings.setIgnoreAudioFocus(it)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
                 ),
-                color = Color.White.copy(alpha = if (ignoreFocus) 1f else 0.85f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = stringResource(Res.string.party_shield_subtitle),
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.55f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
         }
-        Switch(
-            checked = ignoreFocus,
-            onCheckedChange = {
-                haptics.play(Haptic.Select)
-                PlayerPlatform.host.settings.setIgnoreAudioFocus(it)
-            },
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                checkedBorderColor = MaterialTheme.colorScheme.primary,
-            ),
-        )
+
+        if (ignoreFocus) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = if (isDimmed) 0.14f else 0.06f))
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        PlayerPlatform.host.settings.setMusicDimmed(!isDimmed)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.VolumeDown,
+                    contentDescription = null,
+                    tint = if (isDimmed) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(Res.string.dim_for_video),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = if (isDimmed) FontWeight.SemiBold else FontWeight.Normal,
+                        ),
+                        color = Color.White.copy(alpha = if (isDimmed) 1f else 0.85f),
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = stringResource(Res.string.dim_for_video_subtitle),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.50f),
+                        maxLines = 1,
+                    )
+                }
+                Switch(
+                    checked = isDimmed,
+                    onCheckedChange = {
+                        haptics.play(Haptic.Select)
+                        PlayerPlatform.host.settings.setMusicDimmed(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+        }
     }
 }
 
