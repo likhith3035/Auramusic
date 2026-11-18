@@ -628,12 +628,15 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 AudioManager.AUDIOFOCUS_LOSS -> {
+                    hasFocus = false
                     if (isCallActive()) {
                         wasPlayingBeforeCall = player?.playWhenReady == true
                         if (wasPlayingBeforeCall) {
                             player?.playWhenReady = false
                         }
-                    } else if (!AppSettings.ignoreAudioFocus.value) {
+                    } else {
+                        // Permanent focus loss: a full-length media player started (e.g. Netflix, Amazon Prime, Spotify).
+                        // Pause gracefully so music does not clash with full movies or another music player.
                         player?.playWhenReady = false
                     }
                 }
