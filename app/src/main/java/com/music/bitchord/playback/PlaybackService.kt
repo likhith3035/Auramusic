@@ -538,7 +538,7 @@ class PlaybackService : MediaLibraryService() {
     internal fun getSpareFilter(): TransitionFilterProcessor = spareFilter
 
     internal val currentVolumeMultiplier: Float
-        get() = sleepTimerVolumeMultiplier * smartFocusManager.duckMultiplier * (if (AppSettings.musicDimmed.value) 0.20f else 1.0f)
+        get() = sleepTimerVolumeMultiplier * smartFocusManager.duckMultiplier
 
     internal fun adoptPlayerForDj(outgoing: ExoPlayer, incoming: ExoPlayer) {
         adoptPlayer(outgoing, incoming)
@@ -546,8 +546,7 @@ class PlaybackService : MediaLibraryService() {
 
     private fun updateActivePlayerVolume(animated: Boolean = true) {
         val duck = smartFocusManager.duckMultiplier
-        val dim = if (AppSettings.musicDimmed.value) 0.20f else 1.0f
-        val targetMult = sleepTimerVolumeMultiplier * duck * dim
+        val targetMult = sleepTimerVolumeMultiplier * duck
 
         if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
             volumeAnimator?.cancel()
@@ -581,7 +580,7 @@ class PlaybackService : MediaLibraryService() {
      * Intelligent Audio Focus & Call State Manager:
      * 1. Phone / WhatsApp calls: Auto-pauses music on incoming/active calls, auto-resumes when call ends.
      * 2. Navigation (Google Maps / Waze): Smoothly ducks music volume to 25% during voice prompts.
-     * 3. Social Media (Reels / Shorts / TikTok): Ignores focus loss when Party Shield is ON.
+     * 3. External Media: Gracefully pauses music when another app starts playing sound.
      */
     private inner class SmartFocusManager : AudioManager.OnAudioFocusChangeListener {
         private var focusRequest: AudioFocusRequest? = null
@@ -625,10 +624,6 @@ class PlaybackService : MediaLibraryService() {
                 modeListener?.let { audioManager?.removeOnModeChangedListener(it) }
                 modeListener = null
             }
-        }
-
-        fun resetDucking() {
-            isDucked = false
         }
 
         fun release() {
@@ -695,47 +690,26 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    if (!AppSettings.ignoreAudioFocus.value) {
-                        isDucked = true
-                        updateActivePlayerVolume()
-                    }
+                    isDucked = true
+                    updateActivePlayerVolume()
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     if (isCallActive()) {
                         wasPlayingBeforeCall = player?.playWhenReady == true
-                        if (wasPlayingBeforeCall) {
-                            player?.playWhenReady = false
-                            if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
-                                spare?.playWhenReady = false
-                            }
-                        }
-                    } else if (AppSettings.ignoreAudioFocus.value) {
-                        // Party Shield ON: Instagram Reels, TikTok, YouTube Shorts -> Keep playing at full volume!
-                    } else {
-                        player?.playWhenReady = false
-                        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
-                            spare?.playWhenReady = false
-                        }
+                    }
+                    player?.playWhenReady = false
+                    if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                        spare?.playWhenReady = false
                     }
                 }
                 AudioManager.AUDIOFOCUS_LOSS -> {
                     hasFocus = false
                     if (isCallActive()) {
                         wasPlayingBeforeCall = player?.playWhenReady == true
-                        if (wasPlayingBeforeCall) {
-                            player?.playWhenReady = false
-                            if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
-                                spare?.playWhenReady = false
-                            }
-                        }
-                    } else if (AppSettings.ignoreAudioFocus.value) {
-                        // Party Shield ON: Instagram Reels, TikTok, YouTube Shorts, etc. -> Keep playing continuously!
-                    } else {
-                        // Normal mode: full player started, pause gracefully
-                        player?.playWhenReady = false
-                        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
-                            spare?.playWhenReady = false
-                        }
+                    }
+                    player?.playWhenReady = false
+                    if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                        spare?.playWhenReady = false
                     }
                 }
             }
@@ -751,7 +725,6 @@ class PlaybackService : MediaLibraryService() {
             // would be a picker that had quietly broken the obvious behaviour.
             AudioRouting.forget()
             requestOutputReconfiguration()
-            checkBluetoothPartyShieldIntro(addedDevices)
         }
         override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
             // A chosen output that has been unplugged is no longer a choice.
@@ -762,29 +735,6 @@ class PlaybackService : MediaLibraryService() {
                 AudioRouting.forget()
             }
             requestOutputReconfiguration()
-        }
-    }
-
-    private fun checkBluetoothPartyShieldIntro(addedDevices: Array<AudioDeviceInfo>) {
-        if (AppSettings.hasSeenPartyShieldIntro.value) return
-        val hasBtSink = addedDevices.any { device ->
-            device.isSink && (
-                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (
-                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                    device.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
-                ))
-            )
-        }
-        if (hasBtSink) {
-            AppSettings.setHasSeenPartyShieldIntro(true)
-            scope.launch(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    applicationContext,
-                    getString(R.string.party_shield_bluetooth_intro),
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            }
         }
     }
 
@@ -1180,9 +1130,6 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            if (AppSettings.musicDimmed.value) {
-                AppSettings.setMusicDimmed(false)
-            }
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                 SmartSleepTimer.recordUserActivity()
             }
@@ -2985,9 +2932,6 @@ class PlaybackService : MediaLibraryService() {
         // first callback reads already describes the new arrangement.
         player = incoming
         spare = outgoing
-        if (AppSettings.musicDimmed.value) {
-            AppSettings.setMusicDimmed(false)
-        }
         val heldFilter = activeFilter
         activeFilter = spareFilter
         spareFilter = heldFilter
@@ -6290,17 +6234,6 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             AppSettings.autoLockBluetooth.drop(1).collect { requestOutputReconfiguration() }
-        }
-        scope.launch {
-            AppSettings.musicDimmed.drop(1).collect { updateActivePlayerVolume() }
-        }
-        scope.launch {
-            AppSettings.ignoreAudioFocus.drop(1).collect { ignore ->
-                if (ignore && smartFocusManager.isDucked) {
-                    smartFocusManager.resetDucking()
-                    updateActivePlayerVolume()
-                }
-            }
         }
         scope.launch {
             AudioRouting.selectedId.drop(1).collect { requestOutputReconfiguration() }

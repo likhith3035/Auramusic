@@ -151,12 +151,8 @@ class AndroidPlayerHost(context: Context) : PlayerHost {
         override val nothingOsMode get() = AppSettings.nothingOsMode
 
         override val preferUsbDac get() = AppSettings.preferUsbDac
-        override val ignoreAudioFocus get() = AppSettings.ignoreAudioFocus
         override val autoLockBluetooth get() = AppSettings.autoLockBluetooth
-        override val musicDimmed get() = AppSettings.musicDimmed
-        override fun setIgnoreAudioFocus(enabled: Boolean) = AppSettings.setIgnoreAudioFocus(enabled)
         override fun setAutoLockBluetooth(enabled: Boolean) = AppSettings.setAutoLockBluetooth(enabled)
-        override fun setMusicDimmed(enabled: Boolean) = AppSettings.setMusicDimmed(enabled)
 
         override val prioritizeSpotifyCanvas get() = AppSettings.prioritizeSpotifyCanvas
 

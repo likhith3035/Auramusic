@@ -253,7 +253,6 @@ fun SettingsScreen(
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
-    val ignoreAudioFocus by AppSettings.ignoreAudioFocus.collectAsStateWithLifecycle()
     val autoLockBluetooth by AppSettings.autoLockBluetooth.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
@@ -680,17 +679,8 @@ fun SettingsScreen(
                     badge = stringResource(R.string.connected).takeIf { outputStatus.isUsb },
                 )
             }
-            val ignoreAudioFocusTitle = stringResource(R.string.ignore_audio_focus)
-            row(ignoreAudioFocusTitle, "audio", "focus", "reels", "instagram", "party", "overlap") {
-                SettingsSubRow(
-                    title = ignoreAudioFocusTitle,
-                    subtitle = stringResource(R.string.ignore_audio_focus_subtitle),
-                    checked = ignoreAudioFocus,
-                    onCheckedChange = AppSettings::setIgnoreAudioFocus,
-                )
-            }
             val autoLockBluetoothTitle = stringResource(R.string.auto_lock_bluetooth)
-            row(autoLockBluetoothTitle, "bluetooth", "output", "party", "shield", "speaker") {
+            row(autoLockBluetoothTitle, "bluetooth", "output", "speaker") {
                 SettingsSubRow(
                     title = autoLockBluetoothTitle,
                     subtitle = stringResource(R.string.auto_lock_bluetooth_subtitle),
