@@ -1,6 +1,17 @@
 package com.music.bitchord.data.ai
 
 /**
+ * Harmonic relationship classifications based on the Camelot Mixing Wheel.
+ */
+enum class HarmonicRelationship(val label: String, val isCompatible: Boolean) {
+    EXACT("EXACT MATCH", true),
+    RELATIVE("RELATIVE KEY", true),
+    ENERGY_UP("+1 ENERGY", true),
+    ENERGY_DOWN("-1 SUBDOMINANT", true),
+    CLASH("KEY CLASH", false),
+}
+
+/**
  * Camelot Wheel harmonic key representations for seamless DJ transitions.
  * Supports numbers 1..12 with 'A' (Minor) or 'B' (Major).
  */
@@ -21,6 +32,20 @@ data class CamelotKey(val number: Int, val letter: Char) {
         return (stepDiff == 1 || stepDiff == 11) && letter == other.letter
     }
 
+    /**
+     * Returns the exact harmonic relationship with [other] on the Camelot Wheel.
+     */
+    fun getRelationship(other: CamelotKey): HarmonicRelationship {
+        if (this == other) return HarmonicRelationship.EXACT
+        if (number == other.number && letter != other.letter) return HarmonicRelationship.RELATIVE
+        if (letter == other.letter) {
+            val forwardDiff = (other.number - number + 12) % 12
+            if (forwardDiff == 1) return HarmonicRelationship.ENERGY_UP
+            if (forwardDiff == 11) return HarmonicRelationship.ENERGY_DOWN
+        }
+        return HarmonicRelationship.CLASH
+    }
+
     companion object {
         fun fromString(str: String): CamelotKey? {
             val trimmed = str.trim().uppercase()
@@ -33,3 +58,4 @@ data class CamelotKey(val number: Int, val letter: Char) {
         }
     }
 }
+

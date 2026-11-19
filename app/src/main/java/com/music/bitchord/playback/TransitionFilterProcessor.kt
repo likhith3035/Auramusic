@@ -68,6 +68,12 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
     @Volatile
     var leadUs: Long = 0L
 
+    @Volatile
+    var leftChannelGain: Float = 1.0f
+
+    @Volatile
+    var rightChannelGain: Float = 1.0f
+
     // ---- Echo out ------------------------------------------------------------
     //
     // A feedback delay after the filters, for Advanced Automix's echo out: the
@@ -193,8 +199,11 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
     private fun filter(block: AudioBlock, frameCount: Int) {
         val targetLow = targetLowPassHz
         val targetHigh = targetHighPassHz
+        val lGain = leftChannelGain
+        val rGain = rightChannelGain
         val parked = targetLow >= OPEN_HZ && targetHigh <= OFF_HZ &&
-            currentLowPassHz >= OPEN_HZ - SETTLED_HZ && currentHighPassHz <= OFF_HZ + SETTLED_HZ
+            currentLowPassHz >= OPEN_HZ - SETTLED_HZ && currentHighPassHz <= OFF_HZ + SETTLED_HZ &&
+            lGain == 1.0f && rGain == 1.0f
         if (parked) {
             clearStateIfNeeded()
             return
@@ -218,6 +227,8 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
                     var sample = block.samples[baseIdx + channel]
                     if (lowOn) sample = lowPass(channel, sample)
                     if (highOn) sample = highPass(channel, sample)
+                    if (channel == 0 && lGain != 1.0f) sample *= lGain
+                    else if (channel == 1 && rGain != 1.0f) sample *= rGain
                     // Headroom preserved: no clamping to [-1.0f, +1.0f]
                     block.samples[baseIdx + channel] = sample
                 }
@@ -257,6 +268,8 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
         echoSeenGeneration = echoGeneration - 1
         targetLowPassHz = OPEN_HZ
         targetHighPassHz = OFF_HZ
+        leftChannelGain = 1.0f
+        rightChannelGain = 1.0f
         lowState = FloatArray(0)
         highState = FloatArray(0)
         channelCount = 0
@@ -272,8 +285,11 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
 
         val targetLow = targetLowPassHz
         val targetHigh = targetHighPassHz
+        val lGain = leftChannelGain
+        val rGain = rightChannelGain
         val parked = targetLow >= OPEN_HZ && targetHigh <= OFF_HZ &&
-            currentLowPassHz >= OPEN_HZ - SETTLED_HZ && currentHighPassHz <= OFF_HZ + SETTLED_HZ
+            currentLowPassHz >= OPEN_HZ - SETTLED_HZ && currentHighPassHz <= OFF_HZ + SETTLED_HZ &&
+            lGain == 1.0f && rGain == 1.0f
         if (parked) {
             clearStateIfNeeded()
             outputBuffer.put(inputBuffer)
@@ -301,6 +317,8 @@ class TransitionFilterProcessor : BaseAudioProcessor() {
                     var sample = inputBuffer.short.toFloat() * invScale
                     if (lowOn) sample = lowPass(channel, sample)
                     if (highOn) sample = highPass(channel, sample)
+                    if (channel == 0 && lGain != 1.0f) sample *= lGain
+                    else if (channel == 1 && rGain != 1.0f) sample *= rGain
                     outputBuffer.putShort(PcmBoundary.clamp16FromFloat(sample))
                 }
             }

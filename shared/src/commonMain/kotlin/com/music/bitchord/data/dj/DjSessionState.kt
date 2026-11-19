@@ -92,6 +92,18 @@ object DjSessionState {
     private val _isBeatSynced = MutableStateFlow(false)
     val isBeatSynced: StateFlow<Boolean> = _isBeatSynced.asStateFlow()
 
+    private val _isHamsterMode = MutableStateFlow(false)
+    val isHamsterMode: StateFlow<Boolean> = _isHamsterMode.asStateFlow()
+
+    private val _isSplitCueEnabled = MutableStateFlow(false)
+    val isSplitCueEnabled: StateFlow<Boolean> = _isSplitCueEnabled.asStateFlow()
+
+    private val _isBrakingA = MutableStateFlow(false)
+    val isBrakingA: StateFlow<Boolean> = _isBrakingA.asStateFlow()
+
+    private val _isBrakingB = MutableStateFlow(false)
+    val isBrakingB: StateFlow<Boolean> = _isBrakingB.asStateFlow()
+
     private val _isAutoDropping = MutableStateFlow(false)
     val isAutoDropping: StateFlow<Boolean> = _isAutoDropping.asStateFlow()
 
@@ -128,6 +140,10 @@ object DjSessionState {
     fun updateDeckAHotCues(cues: List<Long?>) { _deckAHotCues.value = cues }
     fun updateDeckBHotCues(cues: List<Long?>) { _deckBHotCues.value = cues }
     fun updateIsBeatSynced(synced: Boolean) { _isBeatSynced.value = synced }
+    fun updateIsHamsterMode(enabled: Boolean) { _isHamsterMode.value = enabled }
+    fun updateIsSplitCueEnabled(enabled: Boolean) { _isSplitCueEnabled.value = enabled }
+    fun updateIsBrakingA(braking: Boolean) { _isBrakingA.value = braking }
+    fun updateIsBrakingB(braking: Boolean) { _isBrakingB.value = braking }
     fun updateIsAutoDropping(dropping: Boolean) { _isAutoDropping.value = dropping }
     fun updateLowKillA(kill: Boolean) { _lowKillA.value = kill }
     fun updateLowKillB(kill: Boolean) { _lowKillB.value = kill }
@@ -146,6 +162,8 @@ interface DjAudioController {
     fun toggleDeckBPlayPause()
     fun cueDeckA()
     fun cueDeckB()
+    fun triggerBrakeA()
+    fun triggerBrakeB()
     fun setDeckASpeed(speed: Float)
     fun setDeckBSpeed(speed: Float)
     fun nudgePitchA(positive: Boolean)
@@ -166,6 +184,8 @@ interface DjAudioController {
     fun selectDeckBSong(song: Song)
     fun toggleLowKillA()
     fun toggleLowKillB()
+    fun toggleHamsterMode()
+    fun toggleSplitCue()
 }
 
 /**
@@ -180,6 +200,8 @@ object NoOpDjAudioController : DjAudioController {
     override fun toggleDeckBPlayPause() {}
     override fun cueDeckA() {}
     override fun cueDeckB() {}
+    override fun triggerBrakeA() {}
+    override fun triggerBrakeB() {}
     override fun setDeckASpeed(speed: Float) {}
     override fun setDeckBSpeed(speed: Float) {}
     override fun nudgePitchA(positive: Boolean) {}
@@ -200,6 +222,8 @@ object NoOpDjAudioController : DjAudioController {
     override fun selectDeckBSong(song: Song) {}
     override fun toggleLowKillA() {}
     override fun toggleLowKillB() {}
+    override fun toggleHamsterMode() {}
+    override fun toggleSplitCue() {}
 }
 
 /**

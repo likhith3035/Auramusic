@@ -82,6 +82,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.ai.AuraNeuralDjEngine
+import com.music.bitchord.data.ai.HarmonicRelationship
 import com.music.bitchord.data.dj.CrossfaderCurve
 import com.music.bitchord.data.dj.DjBridge
 import com.music.bitchord.data.dj.DjSessionState
@@ -153,6 +154,10 @@ fun DjDecksSheet(
     val deckAHotCues by DjSessionState.deckAHotCues.collectAsStateWithLifecycle()
     val deckBHotCues by DjSessionState.deckBHotCues.collectAsStateWithLifecycle()
     val isBeatSynced by DjSessionState.isBeatSynced.collectAsStateWithLifecycle()
+    val isHamsterMode by DjSessionState.isHamsterMode.collectAsStateWithLifecycle()
+    val isSplitCueEnabled by DjSessionState.isSplitCueEnabled.collectAsStateWithLifecycle()
+    val isBrakingA by DjSessionState.isBrakingA.collectAsStateWithLifecycle()
+    val isBrakingB by DjSessionState.isBrakingB.collectAsStateWithLifecycle()
     val isAutoDropping by DjSessionState.isAutoDropping.collectAsStateWithLifecycle()
     val lowKillA by DjSessionState.lowKillA.collectAsStateWithLifecycle()
     val lowKillB by DjSessionState.lowKillB.collectAsStateWithLifecycle()
@@ -227,6 +232,7 @@ fun DjDecksSheet(
                             themeColor = DeckAThemeColor,
                             song = deckASong,
                             isPlaying = deckAPlaying,
+                            isBraking = isBrakingA,
                             positionMs = deckAPos,
                             durationMs = deckADur,
                             bpm = deckABpm,
@@ -240,6 +246,10 @@ fun DjDecksSheet(
                             onCue = {
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.cueDeckA()
+                            },
+                            onBrake = {
+                                haptics.play(Haptic.Tick)
+                                DjBridge.current.triggerBrakeA()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
@@ -258,7 +268,15 @@ fun DjDecksSheet(
                             curve = crossfaderCurve,
                             isBeatSynced = isBeatSynced,
                             isAutoDropping = isAutoDropping,
+                            isHamsterMode = isHamsterMode,
+                            isSplitCueEnabled = isSplitCueEnabled,
+                            deckAPosMs = deckAPos,
+                            deckADurationMs = deckADur,
+                            deckAPlaying = deckAPlaying,
                             deckABpm = deckABpm,
+                            deckBPosMs = deckBPos,
+                            deckBDurationMs = deckBDur,
+                            deckBPlaying = deckBPlaying,
                             deckBBpm = deckBBpm,
                             onCrossfaderChange = { fraction ->
                                 DjBridge.current.setCrossfader(fraction)
@@ -266,6 +284,14 @@ fun DjDecksSheet(
                             onCurveToggle = {
                                 val next = if (crossfaderCurve == CrossfaderCurve.SMOOTH) CrossfaderCurve.CUT else CrossfaderCurve.SMOOTH
                                 DjBridge.current.setCrossfaderCurve(next)
+                            },
+                            onHamsterToggle = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.toggleHamsterMode()
+                            },
+                            onSplitCueToggle = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.toggleSplitCue()
                             },
                             onSync = {
                                 haptics.play(Haptic.Select)
@@ -279,7 +305,7 @@ fun DjDecksSheet(
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.commitTransition()
                             },
-                            modifier = Modifier.width(220.dp).fillMaxHeight(),
+                            modifier = Modifier.width(230.dp).fillMaxHeight(),
                         )
 
                         DeckCard(
@@ -287,6 +313,7 @@ fun DjDecksSheet(
                             themeColor = DeckBThemeColor,
                             song = deckBSong,
                             isPlaying = deckBPlaying,
+                            isBraking = isBrakingB,
                             positionMs = deckBPos,
                             durationMs = deckBDur,
                             bpm = deckBBpm,
@@ -300,6 +327,10 @@ fun DjDecksSheet(
                             onCue = {
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.cueDeckB()
+                            },
+                            onBrake = {
+                                haptics.play(Haptic.Tick)
+                                DjBridge.current.triggerBrakeB()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
@@ -324,6 +355,7 @@ fun DjDecksSheet(
                             themeColor = DeckAThemeColor,
                             song = deckASong,
                             isPlaying = deckAPlaying,
+                            isBraking = isBrakingA,
                             positionMs = deckAPos,
                             durationMs = deckADur,
                             bpm = deckABpm,
@@ -337,6 +369,10 @@ fun DjDecksSheet(
                             onCue = {
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.cueDeckA()
+                            },
+                            onBrake = {
+                                haptics.play(Haptic.Tick)
+                                DjBridge.current.triggerBrakeA()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
@@ -355,7 +391,15 @@ fun DjDecksSheet(
                             curve = crossfaderCurve,
                             isBeatSynced = isBeatSynced,
                             isAutoDropping = isAutoDropping,
+                            isHamsterMode = isHamsterMode,
+                            isSplitCueEnabled = isSplitCueEnabled,
+                            deckAPosMs = deckAPos,
+                            deckADurationMs = deckADur,
+                            deckAPlaying = deckAPlaying,
                             deckABpm = deckABpm,
+                            deckBPosMs = deckBPos,
+                            deckBDurationMs = deckBDur,
+                            deckBPlaying = deckBPlaying,
                             deckBBpm = deckBBpm,
                             onCrossfaderChange = { fraction ->
                                 DjBridge.current.setCrossfader(fraction)
@@ -363,6 +407,14 @@ fun DjDecksSheet(
                             onCurveToggle = {
                                 val next = if (crossfaderCurve == CrossfaderCurve.SMOOTH) CrossfaderCurve.CUT else CrossfaderCurve.SMOOTH
                                 DjBridge.current.setCrossfaderCurve(next)
+                            },
+                            onHamsterToggle = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.toggleHamsterMode()
+                            },
+                            onSplitCueToggle = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.toggleSplitCue()
                             },
                             onSync = {
                                 haptics.play(Haptic.Select)
@@ -384,6 +436,7 @@ fun DjDecksSheet(
                             themeColor = DeckBThemeColor,
                             song = deckBSong,
                             isPlaying = deckBPlaying,
+                            isBraking = isBrakingB,
                             positionMs = deckBPos,
                             durationMs = deckBDur,
                             bpm = deckBBpm,
@@ -397,6 +450,10 @@ fun DjDecksSheet(
                             onCue = {
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.cueDeckB()
+                            },
+                            onBrake = {
+                                haptics.play(Haptic.Tick)
+                                DjBridge.current.triggerBrakeB()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
@@ -439,6 +496,7 @@ private fun DeckCard(
     themeColor: Color,
     song: Song?,
     isPlaying: Boolean,
+    isBraking: Boolean,
     positionMs: Long,
     durationMs: Long,
     bpm: Int,
@@ -450,6 +508,7 @@ private fun DeckCard(
     lowKill: Boolean,
     onPlayPause: () -> Unit,
     onCue: () -> Unit,
+    onBrake: () -> Unit,
     onToggleLowKill: () -> Unit,
     onSpeedChange: (Float) -> Unit,
     onPitchNudge: (Boolean) -> Unit,
@@ -694,8 +753,8 @@ private fun DeckCard(
                                 .padding(horizontal = 7.dp, vertical = 3.dp),
                         ) {
                             Text(
-                                text = if (isSet) {
-                                    val sec = (cuePos!! / 1000L)
+                                text = if (isSet && cuePos != null) {
+                                    val sec = (cuePos / 1000L)
                                     String.format("%d:%02d", sec / 60, sec % 60)
                                 } else {
                                     "H${i + 1}"
@@ -710,7 +769,7 @@ private fun DeckCard(
                 }
             }
 
-            // Transport Row: CUE, PLAY/PAUSE, LOW KILL, Filter Slider
+            // Transport Row: CUE, BRAKE, PLAY/PAUSE, LOW KILL, Filter Slider
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -723,13 +782,32 @@ private fun DeckCard(
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                         .clickable(onClick = onCue)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(horizontal = 9.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "CUE",
                         color = Color.White,
                         fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+
+                // BRAKE (Turntable Motor Stop) Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isBraking) Color(0xFFFF3366).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, if (isBraking) Color(0xFFFF3366) else Color.White.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                        .clickable(enabled = isPlaying && !isBraking, onClick = onBrake)
+                        .padding(horizontal = 7.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isBraking) "STOPPING" else "BRAKE",
+                        color = if (isBraking) Color(0xFFFF3366) else Color.White.copy(alpha = 0.85f),
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -759,7 +837,7 @@ private fun DeckCard(
                         .background(if (lowKill) Color(0xFFFF4D4D).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f))
                         .border(1.dp, if (lowKill) Color(0xFFFF4D4D) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                         .clickable(onClick = onToggleLowKill)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 7.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -772,7 +850,7 @@ private fun DeckCard(
                 }
 
                 // Mini Filter Sweep Slider (-1.0f .. +1.0f)
-                Box(modifier = Modifier.width(90.dp)) {
+                Box(modifier = Modifier.width(82.dp)) {
                     Slider(
                         value = filterAmount,
                         onValueChange = { newVal ->
@@ -796,7 +874,144 @@ private fun DeckCard(
 }
 
 /**
- * Center DJ Mixer Console with the Equal-Power / Cut Crossfader, Curve Selector, Beat SYNC, Auto-Drop, and Takeover.
+ * Horizontal Dual Stacked Waveform Phase Meter.
+ * Displays moving beat transients and kick-drum downbeats for both Deck A and Deck B,
+ * aligned against a center playhead with live phase differential calculation.
+ */
+@Composable
+private fun StackedPhaseWaveform(
+    deckAPosMs: Long,
+    deckADurationMs: Long,
+    deckAPlaying: Boolean,
+    deckABpm: Int,
+    deckBPosMs: Long,
+    deckBDurationMs: Long,
+    deckBPlaying: Boolean,
+    deckBBpm: Int,
+    modifier: Modifier = Modifier,
+) {
+    val bpmA = deckABpm.coerceAtLeast(60)
+    val bpmB = deckBBpm.coerceAtLeast(60)
+    val beatMsA = 60_000f / bpmA
+    val beatMsB = 60_000f / bpmB
+    val phaseA = (deckAPosMs % beatMsA.toLong()) / beatMsA
+    val phaseB = (deckBPosMs % beatMsB.toLong()) / beatMsB
+    val phaseDiff = ((phaseB - phaseA + 1.5f) % 1.0f) - 0.5f
+    val isPhaseAligned = kotlin.math.abs(phaseDiff) < 0.08f && deckAPlaying && deckBPlaying
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF04060A))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        // Phase status readout
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "PHASE METER",
+                color = Color.White.copy(alpha = 0.40f),
+                fontSize = 8.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (!deckAPlaying || !deckBPlaying) {
+                    "STANDBY"
+                } else if (isPhaseAligned) {
+                    "IN PHASE"
+                } else {
+                    val deltaMs = (phaseDiff * beatMsB).roundToInt()
+                    if (deltaMs > 0) "+${deltaMs}ms (SLOW B)" else "${deltaMs}ms (NUDGE B)"
+                },
+                color = if (isPhaseAligned) Color(0xFF00E676) else if (deckAPlaying && deckBPlaying) Color(0xFFFFD166) else Color.White.copy(alpha = 0.50f),
+                fontSize = 8.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // Dual Waveform Canvas
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(28.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val midY = h / 2f
+                val centerX = w / 2f
+
+                // Deck A (Top Lane, Cyan)
+                val beatDistPx = 36f
+                val offsetA = (deckAPosMs.toFloat() / beatMsA) * beatDistPx
+                val startBeatA = ((offsetA - centerX) / beatDistPx).toInt() - 1
+                val endBeatA = ((offsetA + centerX) / beatDistPx).toInt() + 1
+
+                for (b in startBeatA..endBeatA) {
+                    val beatX = centerX + (b * beatDistPx - offsetA)
+                    if (beatX in 0f..w) {
+                        val isDownbeat = (b % 4 == 0)
+                        val barH = if (isDownbeat) 10f else 6f
+                        drawLine(
+                            color = DeckAThemeColor.copy(alpha = if (isDownbeat) 0.90f else 0.45f),
+                            start = Offset(beatX, midY - 2f),
+                            end = Offset(beatX, midY - 2f - barH),
+                            strokeWidth = if (isDownbeat) 2.5f else 1.5f,
+                        )
+                    }
+                }
+
+                // Midline separator
+                drawLine(
+                    color = Color.White.copy(alpha = 0.12f),
+                    start = Offset(0f, midY),
+                    end = Offset(w, midY),
+                    strokeWidth = 1f,
+                )
+
+                // Deck B (Bottom Lane, Amber)
+                val offsetB = (deckBPosMs.toFloat() / beatMsB) * beatDistPx
+                val startBeatB = ((offsetB - centerX) / beatDistPx).toInt() - 1
+                val endBeatB = ((offsetB + centerX) / beatDistPx).toInt() + 1
+
+                for (b in startBeatB..endBeatB) {
+                    val beatX = centerX + (b * beatDistPx - offsetB)
+                    if (beatX in 0f..w) {
+                        val isDownbeat = (b % 4 == 0)
+                        val barH = if (isDownbeat) 10f else 6f
+                        drawLine(
+                            color = DeckBThemeColor.copy(alpha = if (isDownbeat) 0.90f else 0.45f),
+                            start = Offset(beatX, midY + 2f),
+                            end = Offset(beatX, midY + 2f + barH),
+                            strokeWidth = if (isDownbeat) 2.5f else 1.5f,
+                        )
+                    }
+                }
+
+                // Center playhead cursor line
+                drawLine(
+                    color = Color(0xFFFF3366),
+                    start = Offset(centerX, 0f),
+                    end = Offset(centerX, h),
+                    strokeWidth = 2f,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Center DJ Mixer Console with the Equal-Power / Cut Crossfader, Curve Selector, Beat SYNC, Auto-Drop, Takeover,
+ * Hamster Reversible Crossfader, and Split-Cue Headphone Monitoring.
  */
 @Composable
 private fun MixerConsole(
@@ -804,10 +1019,20 @@ private fun MixerConsole(
     curve: CrossfaderCurve,
     isBeatSynced: Boolean,
     isAutoDropping: Boolean,
+    isHamsterMode: Boolean,
+    isSplitCueEnabled: Boolean,
+    deckAPosMs: Long,
+    deckADurationMs: Long,
+    deckAPlaying: Boolean,
     deckABpm: Int,
+    deckBPosMs: Long,
+    deckBDurationMs: Long,
+    deckBPlaying: Boolean,
     deckBBpm: Int,
     onCrossfaderChange: (Float) -> Unit,
     onCurveToggle: () -> Unit,
+    onHamsterToggle: () -> Unit,
+    onSplitCueToggle: () -> Unit,
     onSync: () -> Unit,
     onAutoDrop: () -> Unit,
     onCommit: () -> Unit,
@@ -815,17 +1040,18 @@ private fun MixerConsole(
 ) {
     val haptics = rememberHaptics()
 
+    val effectiveFader = if (isHamsterMode) 1.0f - crossfader else crossfader
     val gainA: Float
     val gainB: Float
     when (curve) {
         CrossfaderCurve.SMOOTH -> {
-            val angle = crossfader * (PI / 2.0).toFloat()
+            val angle = effectiveFader * (PI / 2.0).toFloat()
             gainA = cos(angle)
             gainB = sin(angle)
         }
         CrossfaderCurve.CUT -> {
-            gainA = if (crossfader >= 0.95f) 0.0f else 1.0f
-            gainB = if (crossfader <= 0.05f) 0.0f else 1.0f
+            gainA = if (effectiveFader >= 0.95f) 0.0f else 1.0f
+            gainB = if (effectiveFader <= 0.05f) 0.0f else 1.0f
         }
     }
     val percentA = (gainA * 100f).roundToInt()
@@ -842,9 +1068,9 @@ private fun MixerConsole(
                 .fillMaxWidth()
                 .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // Action Buttons: SYNC, AUTO-DROP, COMMIT, CURVE
+            // Row 1: SYNC, CURVE, HAMSTER, SPLIT CUE
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -853,17 +1079,17 @@ private fun MixerConsole(
                 // BEAT SYNC BUTTON
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(if (isBeatSynced) DeckAThemeColor.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
-                        .border(1.dp, if (isBeatSynced) DeckAThemeColor else Color.White.copy(alpha = 0.20f), RoundedCornerShape(7.dp))
+                        .border(1.dp, if (isBeatSynced) DeckAThemeColor else Color.White.copy(alpha = 0.20f), RoundedCornerShape(6.dp))
                         .clickable(onClick = onSync)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .padding(horizontal = 7.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (isBeatSynced) "SYNCED" else "SYNC",
                         color = if (isBeatSynced) DeckAThemeColor else Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -872,25 +1098,71 @@ private fun MixerConsole(
                 // CURVE MODE SWITCH (SMOOTH vs CUT)
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(Color.White.copy(alpha = 0.08f))
                         .clickable(onClick = onCurveToggle)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (curve == CrossfaderCurve.SMOOTH) "CRV: SMOOTH" else "CRV: CUT",
+                        text = if (curve == CrossfaderCurve.SMOOTH) "CRV:SMOOTH" else "CRV:CUT",
                         color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 9.sp,
+                        fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
                 }
 
+                // HAMSTER REVERSE CROSSFADER
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isHamsterMode) Color(0xFFFFB703).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, if (isHamsterMode) Color(0xFFFFB703) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                        .clickable(onClick = onHamsterToggle)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isHamsterMode) "HAM:REV" else "HAM:NORM",
+                        color = if (isHamsterMode) Color(0xFFFFB703) else Color.White.copy(alpha = 0.70f),
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+
+                // SPLIT-CUE HEADPHONE MONITORING
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSplitCueEnabled) Color(0xFF00E676).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, if (isSplitCueEnabled) Color(0xFF00E676) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                        .clickable(onClick = onSplitCueToggle)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isSplitCueEnabled) "SPLIT:ON" else "SPLIT:OFF",
+                        color = if (isSplitCueEnabled) Color(0xFF00E676) else Color.White.copy(alpha = 0.70f),
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+
+            // Row 2: AUTO-DROP and TAKEOVER
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 // AUTO-DROP BUTTON
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
                         .background(
                             if (isAutoDropping) {
                                 Brush.horizontalGradient(listOf(DeckAThemeColor, DeckBThemeColor))
@@ -898,39 +1170,54 @@ private fun MixerConsole(
                                 Brush.horizontalGradient(listOf(Color(0xFF2E3856), Color(0xFF1E2436)))
                             },
                         )
-                        .border(1.dp, if (isAutoDropping) Color.White else Color.Transparent, RoundedCornerShape(7.dp))
+                        .border(1.dp, if (isAutoDropping) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                         .clickable(enabled = !isAutoDropping, onClick = onAutoDrop)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .padding(vertical = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (isAutoDropping) "DROPPING..." else "AUTO-DROP",
+                        text = if (isAutoDropping) "DROPPING..." else "AUTO-DROP (3.5S)",
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
                 }
 
+                Spacer(Modifier.width(8.dp))
+
                 // COMMIT / DROP TAKEOVER
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
                         .background(DeckBThemeColor.copy(alpha = 0.18f))
-                        .border(1.dp, DeckBThemeColor.copy(alpha = 0.60f), RoundedCornerShape(7.dp))
+                        .border(1.dp, DeckBThemeColor.copy(alpha = 0.60f), RoundedCornerShape(6.dp))
                         .clickable(onClick = onCommit)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(vertical = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "TAKEOVER",
+                        text = "TAKEOVER DECK B",
                         color = DeckBThemeColor,
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
                 }
             }
+
+            // Dual Stacked Waveform Phase Meter
+            StackedPhaseWaveform(
+                deckAPosMs = deckAPosMs,
+                deckADurationMs = deckADurationMs,
+                deckAPlaying = deckAPlaying,
+                deckABpm = deckABpm,
+                deckBPosMs = deckBPosMs,
+                deckBDurationMs = deckBDurationMs,
+                deckBPlaying = deckBPlaying,
+                deckBBpm = deckBBpm,
+            )
 
             // Crossfader Volume Readouts
             Row(
@@ -1106,11 +1393,24 @@ private fun DjTrackPickerModal(
         currentSong?.let { AuraNeuralDjEngine.analyzeSong(it) }
     }
 
-    val harmonicList = remember(currentSong?.videoId, candidates) {
-        if (currentSong != null) {
+    val sortedList = remember(currentSong?.videoId, candidates) {
+        val list = if (currentSong != null) {
             AuraNeuralDjEngine.findHarmonicTransitions(currentSong, candidates)
         } else {
             candidates.map { AuraNeuralDjEngine.analyzeSong(it) }
+        }
+        if (currentProfile != null) {
+            list.sortedBy { profile ->
+                when (currentProfile.key.getRelationship(profile.key)) {
+                    HarmonicRelationship.EXACT -> 0
+                    HarmonicRelationship.RELATIVE -> 1
+                    HarmonicRelationship.ENERGY_UP -> 2
+                    HarmonicRelationship.ENERGY_DOWN -> 3
+                    HarmonicRelationship.CLASH -> 4
+                }
+            }
+        } else {
+            list
         }
     }
 
@@ -1148,7 +1448,7 @@ private fun DjTrackPickerModal(
 
                 Spacer(Modifier.height(8.dp))
 
-                if (harmonicList.isEmpty()) {
+                if (sortedList.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "No other songs in queue",
@@ -1161,9 +1461,13 @@ private fun DjTrackPickerModal(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        items(harmonicList) { profile ->
+                        items(sortedList) { profile ->
                             val s = profile.song
-                            val isCompatible = currentProfile?.key?.isCompatibleWith(profile.key) == true
+                            val relationship = if (currentProfile != null) {
+                                currentProfile.key.getRelationship(profile.key)
+                            } else {
+                                HarmonicRelationship.EXACT
+                            }
 
                             Row(
                                 modifier = Modifier
@@ -1214,13 +1518,39 @@ private fun DjTrackPickerModal(
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
                                     )
-                                    Text(
-                                        text = profile.key.toString(),
-                                        color = if (isCompatible) Color(0xFF00F5D4) else Color.White.copy(alpha = 0.6f),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        fontFamily = FontFamily.Monospace,
-                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = profile.key.toString(),
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        val badgeColor = when (relationship) {
+                                            HarmonicRelationship.EXACT -> Color(0xFF00E676)
+                                            HarmonicRelationship.RELATIVE -> Color(0xFF00F5D4)
+                                            HarmonicRelationship.ENERGY_UP -> Color(0xFFB388FF)
+                                            HarmonicRelationship.ENERGY_DOWN -> Color(0xFF448AFF)
+                                            HarmonicRelationship.CLASH -> Color.White.copy(alpha = 0.35f)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(badgeColor.copy(alpha = 0.18f))
+                                                .border(0.5.dp, badgeColor.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                                        ) {
+                                            Text(
+                                                text = relationship.label,
+                                                color = badgeColor,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

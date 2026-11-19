@@ -69,6 +69,10 @@ class DjAudioEngine(
         DjSessionState.updateDeckALoopBeats(null)
         DjSessionState.updateDeckBLoopBeats(null)
         DjSessionState.updateIsBeatSynced(false)
+        DjSessionState.updateIsHamsterMode(false)
+        DjSessionState.updateIsSplitCueEnabled(false)
+        DjSessionState.updateIsBrakingA(false)
+        DjSessionState.updateIsBrakingB(false)
 
         loopA = null
         loopB = null
@@ -79,7 +83,11 @@ class DjAudioEngine(
 
         // Reset DSP filters
         service.getActiveFilter().open()
+        service.getActiveFilter().leftChannelGain = 1.0f
+        service.getActiveFilter().rightChannelGain = 1.0f
         service.getSpareFilter().open()
+        service.getSpareFilter().leftChannelGain = 1.0f
+        service.getSpareFilter().rightChannelGain = 1.0f
 
         val active = player ?: return
         val currentItem = active.currentMediaItem
@@ -201,7 +209,8 @@ class DjAudioEngine(
     fun applyVolumes() {
         val p = player
         val s = spare
-        val fraction = DjSessionState.crossfader.value
+        val rawFraction = DjSessionState.crossfader.value
+        val fraction = if (DjSessionState.isHamsterMode.value) 1.0f - rawFraction else rawFraction
         val master = service.currentVolumeMultiplier
 
         val gainA: Float
@@ -224,8 +233,88 @@ class DjAudioEngine(
         val killA = if (DjSessionState.lowKillA.value) 0.30f else 1.0f
         val killB = if (DjSessionState.lowKillB.value) 0.30f else 1.0f
 
-        p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
-        s?.volume = (gainB * killB * master).coerceIn(0f, 1f)
+        val splitCue = DjSessionState.isSplitCueEnabled.value
+        if (splitCue) {
+            // Deck A goes 100% to Left (Master audience)
+            service.getActiveFilter().leftChannelGain = 1.0f
+            service.getActiveFilter().rightChannelGain = 0.0f
+            // Deck B goes 100% to Right (Cue headphone)
+            service.getSpareFilter().leftChannelGain = 0.0f
+            service.getSpareFilter().rightChannelGain = 1.0f
+
+            p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
+            val monitorVolume = master.coerceIn(0f, 1f)
+            s?.volume = (monitorVolume * killB).coerceIn(0f, 1f)
+        } else {
+            // Stereo normal
+            service.getActiveFilter().leftChannelGain = 1.0f
+            service.getActiveFilter().rightChannelGain = 1.0f
+            service.getSpareFilter().leftChannelGain = 1.0f
+            service.getSpareFilter().rightChannelGain = 1.0f
+
+            p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
+            s?.volume = (gainB * killB * master).coerceIn(0f, 1f)
+        }
+    }
+
+    override fun toggleHamsterMode() {
+        DjSessionState.updateIsHamsterMode(!DjSessionState.isHamsterMode.value)
+        applyVolumes()
+    }
+
+    override fun toggleSplitCue() {
+        DjSessionState.updateIsSplitCueEnabled(!DjSessionState.isSplitCueEnabled.value)
+        applyVolumes()
+    }
+
+    override fun triggerBrakeA() {
+        val p = player ?: return
+        if (!p.isPlaying || DjSessionState.isBrakingA.value) return
+        nudgeJobA?.cancel()
+        scope.launch(Dispatchers.Main) {
+            DjSessionState.updateIsBrakingA(true)
+            val initialSpeed = DjSessionState.deckASpeed.value
+            val steps = 14
+            val stepDelayMs = 45L
+            for (i in 1..steps) {
+                if (!isActive || !DjSessionState.isDjActive.value) break
+                val factor = (steps - i).toFloat() / steps.toFloat()
+                val currentSpeed = (initialSpeed * factor).coerceAtLeast(0.04f)
+                p.playbackParameters = PlaybackParameters(currentSpeed)
+                DjSessionState.updateDeckASpeed(currentSpeed)
+                delay(stepDelayMs)
+            }
+            p.pause()
+            p.playbackParameters = PlaybackParameters(1.0f)
+            DjSessionState.updateDeckASpeed(1.0f)
+            DjSessionState.updateDeckAPlaying(false)
+            DjSessionState.updateIsBrakingA(false)
+        }
+    }
+
+    override fun triggerBrakeB() {
+        val s = spare ?: return
+        if (!s.isPlaying || DjSessionState.isBrakingB.value) return
+        nudgeJobB?.cancel()
+        scope.launch(Dispatchers.Main) {
+            DjSessionState.updateIsBrakingB(true)
+            val initialSpeed = DjSessionState.deckBSpeed.value
+            val steps = 14
+            val stepDelayMs = 45L
+            for (i in 1..steps) {
+                if (!isActive || !DjSessionState.isDjActive.value) break
+                val factor = (steps - i).toFloat() / steps.toFloat()
+                val currentSpeed = (initialSpeed * factor).coerceAtLeast(0.04f)
+                s.playbackParameters = PlaybackParameters(currentSpeed)
+                DjSessionState.updateDeckBSpeed(currentSpeed)
+                delay(stepDelayMs)
+            }
+            s.pause()
+            s.playbackParameters = PlaybackParameters(1.0f)
+            DjSessionState.updateDeckBSpeed(1.0f)
+            DjSessionState.updateDeckBPlaying(false)
+            DjSessionState.updateIsBrakingB(false)
+        }
     }
 
     override fun scrubDeckA(deltaMs: Long) {
@@ -541,9 +630,17 @@ class DjAudioEngine(
         DjSessionState.updateDeckBLoopBeats(null)
         DjSessionState.updateDeckAFilter(0.0f)
         DjSessionState.updateDeckBFilter(0.0f)
+        DjSessionState.updateIsHamsterMode(false)
+        DjSessionState.updateIsSplitCueEnabled(false)
+        DjSessionState.updateIsBrakingA(false)
+        DjSessionState.updateIsBrakingB(false)
 
         service.getActiveFilter().open()
+        service.getActiveFilter().leftChannelGain = 1.0f
+        service.getActiveFilter().rightChannelGain = 1.0f
         service.getSpareFilter().open()
+        service.getSpareFilter().leftChannelGain = 1.0f
+        service.getSpareFilter().rightChannelGain = 1.0f
 
         val p = player
         val s = spare
