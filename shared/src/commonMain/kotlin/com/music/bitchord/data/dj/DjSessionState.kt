@@ -170,6 +170,10 @@ interface DjAudioController {
     fun nudgePitchB(positive: Boolean)
     fun scrubDeckA(deltaMs: Long)
     fun scrubDeckB(deltaMs: Long)
+    fun seekDeckA(positionMs: Long)
+    fun seekDeckB(positionMs: Long)
+    fun beatJumpA(beats: Int)
+    fun beatJumpB(beats: Int)
     fun setDeckAFilter(amount: Float)
     fun setDeckBFilter(amount: Float)
     fun toggleDeckALoop(beats: Int)
@@ -181,7 +185,10 @@ interface DjAudioController {
     fun syncDeckB()
     fun autoDrop(durationMs: Long = 3500L)
     fun commitTransition()
+    fun selectDeckASong(song: Song)
     fun selectDeckBSong(song: Song)
+    fun reorderQueue(fromIndex: Int, toIndex: Int)
+    fun removeQueueItem(index: Int)
     fun toggleLowKillA()
     fun toggleLowKillB()
     fun toggleHamsterMode()
@@ -208,6 +215,10 @@ object NoOpDjAudioController : DjAudioController {
     override fun nudgePitchB(positive: Boolean) {}
     override fun scrubDeckA(deltaMs: Long) {}
     override fun scrubDeckB(deltaMs: Long) {}
+    override fun seekDeckA(positionMs: Long) {}
+    override fun seekDeckB(positionMs: Long) {}
+    override fun beatJumpA(beats: Int) {}
+    override fun beatJumpB(beats: Int) {}
     override fun setDeckAFilter(amount: Float) {}
     override fun setDeckBFilter(amount: Float) {}
     override fun toggleDeckALoop(beats: Int) {}
@@ -219,7 +230,10 @@ object NoOpDjAudioController : DjAudioController {
     override fun syncDeckB() {}
     override fun autoDrop(durationMs: Long) {}
     override fun commitTransition() {}
+    override fun selectDeckASong(song: Song) {}
     override fun selectDeckBSong(song: Song) {}
+    override fun reorderQueue(fromIndex: Int, toIndex: Int) {}
+    override fun removeQueueItem(index: Int) {}
     override fun toggleLowKillA() {}
     override fun toggleLowKillB() {}
     override fun toggleHamsterMode() {}

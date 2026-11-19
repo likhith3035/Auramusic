@@ -353,6 +353,42 @@ class DjAudioEngine(
         DjSessionState.updateDeckBPosition(newPos)
     }
 
+    override fun seekDeckA(positionMs: Long) {
+        val p = player ?: return
+        val target = positionMs.coerceIn(0L, p.duration.coerceAtLeast(0L))
+        p.seekTo(target)
+        DjSessionState.updateDeckAPosition(target)
+    }
+
+    override fun seekDeckB(positionMs: Long) {
+        val s = spare ?: return
+        val target = positionMs.coerceIn(0L, s.duration.coerceAtLeast(0L))
+        s.seekTo(target)
+        DjSessionState.updateDeckBPosition(target)
+    }
+
+    override fun beatJumpA(beats: Int) {
+        val p = player ?: return
+        val bpm = DjSessionState.deckABpm.value.coerceAtLeast(40)
+        val speed = DjSessionState.deckASpeed.value.coerceAtLeast(0.1f)
+        val msPerBeat = (60_000.0 / (bpm * speed)).toLong()
+        val deltaMs = beats * msPerBeat
+        val target = (p.currentPosition + deltaMs).coerceIn(0L, p.duration.coerceAtLeast(0L))
+        p.seekTo(target)
+        DjSessionState.updateDeckAPosition(target)
+    }
+
+    override fun beatJumpB(beats: Int) {
+        val s = spare ?: return
+        val bpm = DjSessionState.deckBBpm.value.coerceAtLeast(40)
+        val speed = DjSessionState.deckBSpeed.value.coerceAtLeast(0.1f)
+        val msPerBeat = (60_000.0 / (bpm * speed)).toLong()
+        val deltaMs = beats * msPerBeat
+        val target = (s.currentPosition + deltaMs).coerceIn(0L, s.duration.coerceAtLeast(0L))
+        s.seekTo(target)
+        DjSessionState.updateDeckBPosition(target)
+    }
+
     override fun nudgePitchA(positive: Boolean) {
         val p = player ?: return
         nudgeJobA?.cancel()
@@ -647,6 +683,56 @@ class DjAudioEngine(
             standby.playbackParameters = PlaybackParameters.DEFAULT
             standby.prepare()
         }
+    }
+
+    override fun selectDeckASong(song: Song) {
+        val active = player ?: return
+        val count = active.mediaItemCount
+        val idx = (0 until count).indexOfFirst { active.getMediaItemAt(it).mediaId == song.videoId }
+        if (idx != -1) {
+            active.seekToDefaultPosition(idx)
+        } else {
+            val item = song.toMediaItem()
+            active.addMediaItem(item)
+            active.seekToDefaultPosition(active.mediaItemCount - 1)
+        }
+        active.playWhenReady = true
+        DjSessionState.updateDeckASong(song)
+        DjSessionState.updateDeckAPlaying(true)
+        DjSessionState.updateDeckAPosition(0L)
+        DjSessionState.updateDeckADuration(0L)
+        loopA = null
+        DjSessionState.updateDeckALoopBeats(null)
+        hotCuesA.fill(null)
+        DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+
+        val profileA = AuraNeuralDjEngine.analyzeSong(song)
+        DjSessionState.updateDeckABpm(profileA.bpm)
+        DjSessionState.updateDeckAKey(profileA.key.toString())
+        refreshCandidateQueue()
+    }
+
+    override fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        val p = player ?: return
+        if (fromIndex in 0 until p.mediaItemCount && toIndex in 0 until p.mediaItemCount) {
+            p.moveMediaItem(fromIndex, toIndex)
+            refreshCandidateQueue()
+        }
+    }
+
+    override fun removeQueueItem(index: Int) {
+        val p = player ?: return
+        if (index in 0 until p.mediaItemCount) {
+            p.removeMediaItem(index)
+            refreshCandidateQueue()
+        }
+    }
+
+    private fun refreshCandidateQueue() {
+        val active = player ?: return
+        val count = active.mediaItemCount
+        val queue = (0 until count).map { active.getMediaItemAt(it).toSong() }
+        DjSessionState.updateCandidateQueue(queue)
     }
 
     override fun toggleLowKillA() {
