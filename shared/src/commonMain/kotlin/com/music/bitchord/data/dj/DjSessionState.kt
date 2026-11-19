@@ -262,6 +262,9 @@ interface DjAudioController {
     fun togglePflA()
     fun togglePflB()
     fun swapDecks()
+    fun onPlatterTouchDown(deckA: Boolean)
+    fun onPlatterScratch(deckA: Boolean, velocity: Float, isForward: Boolean)
+    fun onPlatterTouchUp(deckA: Boolean)
     fun toggleHamsterMode()
     fun toggleSplitCue()
 }
@@ -322,6 +325,9 @@ object NoOpDjAudioController : DjAudioController {
     override fun togglePflA() {}
     override fun togglePflB() {}
     override fun swapDecks() {}
+    override fun onPlatterTouchDown(deckA: Boolean) {}
+    override fun onPlatterScratch(deckA: Boolean, velocity: Float, isForward: Boolean) {}
+    override fun onPlatterTouchUp(deckA: Boolean) {}
     override fun toggleHamsterMode() {}
     override fun toggleSplitCue() {}
 }

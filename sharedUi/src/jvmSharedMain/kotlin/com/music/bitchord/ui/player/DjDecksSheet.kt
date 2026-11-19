@@ -72,6 +72,9 @@ import com.music.bitchord.ui.utils.containSheetGestures
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.theme.NothingCard
+import com.music.bitchord.ui.theme.NothingGlyphEqualizer
+import com.music.bitchord.ui.theme.NothingGlyphTimer
+import com.music.bitchord.ui.theme.NothingHardwareFader
 import com.music.bitchord.ui.theme.NothingPill
 import com.music.bitchord.ui.theme.NothingThemeTokens
 import dev.chrisbanes.haze.HazeState
@@ -81,6 +84,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -641,7 +646,7 @@ private fun DeckCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Deck Name Pill with Red LED indicator
+                    // Deck Name Pill with Red LED indicator & dancing Glyph Equalizer
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
@@ -663,6 +668,13 @@ private fun DeckCard(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        NothingGlyphEqualizer(
+                            isPlaying = isPlaying,
+                            modifier = Modifier.size(width = 16.dp, height = 10.dp),
+                            barCount = 3,
+                            dotsPerBar = 4,
                         )
                     }
 
@@ -764,11 +776,13 @@ private fun DeckCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Turntable Platter
+                val isDeckA = deckName.contains("A")
                 NothingTurntable(
                     thumbnailUrl = song?.thumbnailUrl,
                     isPlaying = isPlaying,
+                    isDeckA = isDeckA,
                     onScrub = onScrub,
-                    modifier = Modifier.size(68.dp),
+                    modifier = Modifier.size(72.dp),
                 )
 
                 Spacer(Modifier.width(10.dp))
@@ -796,23 +810,46 @@ private fun DeckCard(
                     )
                     Spacer(Modifier.height(4.dp))
 
-                    // Time Readout
+                    // Time Readout using Nothing OS Dot-Matrix Glyphs
                     val posSec = positionMs / 1000L
-                    val durSec = durationMs / 1000L
-                    Text(
-                        text = String.format("%d:%02d / %d:%02d", posSec / 60, posSec % 60, durSec / 60, durSec % 60),
-                        color = NothingThemeTokens.MutedText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Normal,
-                        fontFamily = FontFamily.Monospace,
-                    )
+                    val posText = String.format("%02d:%02d", posSec / 60, posSec % 60)
+                    val remSec = (durationMs - positionMs).coerceAtLeast(0L) / 1000L
+                    val remText = String.format("-%02d:%02d", remSec / 60, remSec % 60)
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        NothingGlyphTimer(
+                            timeText = posText,
+                            dotRadiusDp = 1.0.dp,
+                            spacingDp = 0.8.dp,
+                            charSpacingDp = 1.8.dp,
+                            dotColor = NothingThemeTokens.White,
+                            ghostColor = Color.White.copy(alpha = 0.08f),
+                        )
+                        Text(
+                            text = "/",
+                            color = NothingThemeTokens.MutedText.copy(alpha = 0.35f),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        NothingGlyphTimer(
+                            timeText = remText,
+                            dotRadiusDp = 1.0.dp,
+                            spacingDp = 0.8.dp,
+                            charSpacingDp = 1.8.dp,
+                            dotColor = NothingThemeTokens.Red,
+                            ghostColor = NothingThemeTokens.Red.copy(alpha = 0.08f),
+                        )
+                    }
                 }
 
                 // Channel Level Fader
                 DjChannelVolumeControl(
                     volume = volume,
                     onVolumeChange = onVolumeChange,
-                    modifier = Modifier.width(66.dp),
+                    modifier = Modifier.width(68.dp),
                 )
             }
 
@@ -1019,23 +1056,18 @@ private fun DeckCard(
                     onToggleHi = onToggleHiKill,
                 )
 
-                // Mini Filter Sweep Slider (-1.0f .. +1.0f)
-                Box(modifier = Modifier.width(82.dp)) {
-                    Slider(
+                // Mini Filter Sweep Fader (-1.0f .. +1.0f) with center detent
+                Box(modifier = Modifier.width(84.dp)) {
+                    NothingHardwareFader(
                         value = filterAmount,
-                        onValueChange = { newVal ->
-                            if (kotlin.math.abs(newVal) < 0.08f) {
-                                onFilterChange(0f)
-                            } else {
-                                onFilterChange(newVal)
-                            }
-                        },
+                        onValueChange = onFilterChange,
                         valueRange = -1.0f..1.0f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = if (kotlin.math.abs(filterAmount) > 0.08f) NothingThemeTokens.Red else NothingThemeTokens.MutedText,
-                            activeTrackColor = NothingThemeTokens.Red,
-                            inactiveTrackColor = NothingThemeTokens.Border,
-                        ),
+                        centerDetent = 0.0f,
+                        detentSnapThreshold = 0.08f,
+                        trackHeightDp = 12.dp,
+                        capWidthDp = 16.dp,
+                        capHeightDp = 16.dp,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -1053,7 +1085,6 @@ private fun DjChannelVolumeControl(
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
-    var lastTick by remember { mutableFloatStateOf(volume) }
 
     Column(
         modifier = modifier
@@ -1085,22 +1116,14 @@ private fun DjChannelVolumeControl(
             )
         }
 
-        Slider(
+        NothingHardwareFader(
             value = volume,
-            onValueChange = { newVal ->
-                if (kotlin.math.abs(newVal - lastTick) >= 0.1f) {
-                    haptics.play(Haptic.Tick)
-                    lastTick = newVal
-                }
-                onVolumeChange(newVal)
-            },
+            onValueChange = onVolumeChange,
             valueRange = 0f..1f,
-            colors = SliderDefaults.colors(
-                thumbColor = NothingThemeTokens.White,
-                activeTrackColor = NothingThemeTokens.White,
-                inactiveTrackColor = NothingThemeTokens.Border,
-            ),
-            modifier = Modifier.fillMaxWidth().height(18.dp),
+            trackHeightDp = 12.dp,
+            capWidthDp = 16.dp,
+            capHeightDp = 16.dp,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
         )
     }
 }
@@ -1170,19 +1193,16 @@ private fun DjPitchSlider(
 
         // Continuous Pitch Slider with Center Zero Detent
         Box(modifier = Modifier.weight(1f)) {
-            Slider(
+            NothingHardwareFader(
                 value = pitchPercent,
-                onValueChange = { newVal ->
-                    val snapped = if (kotlin.math.abs(newVal) < 0.005f) 0.0f else newVal
-                    onPitchPercentChange(snapped)
-                },
+                onValueChange = onPitchPercentChange,
                 valueRange = -0.16f..0.16f,
-                colors = SliderDefaults.colors(
-                    thumbColor = if (pitchPercent == 0.0f) NothingThemeTokens.White else NothingThemeTokens.Red,
-                    activeTrackColor = NothingThemeTokens.Red,
-                    inactiveTrackColor = NothingThemeTokens.Border,
-                ),
-                modifier = Modifier.fillMaxWidth().height(18.dp),
+                centerDetent = 0.0f,
+                detentSnapThreshold = 0.012f,
+                trackHeightDp = 14.dp,
+                capWidthDp = 18.dp,
+                capHeightDp = 18.dp,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
 
@@ -1678,32 +1698,21 @@ private fun MixerConsole(
                 )
             }
 
-            // Horizontal Crossfader Slider with Nothing Red Center Detent
-            var lastHapticPos by remember { mutableFloatStateOf(crossfader) }
-
+            // Master Dual-Deck Hardware Crossfader with Nothing Red Center Detent
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp),
             ) {
-                Slider(
+                NothingHardwareFader(
                     value = crossfader,
-                    onValueChange = { newVal ->
-                        if (kotlin.math.abs(newVal - lastHapticPos) >= 0.05f) {
-                            haptics.play(Haptic.Tick)
-                            lastHapticPos = newVal
-                        }
-                        if (kotlin.math.abs(newVal - 0.5f) < 0.02f && kotlin.math.abs(lastHapticPos - 0.5f) >= 0.02f) {
-                            haptics.play(Haptic.Select)
-                        }
-                        onCrossfaderChange(newVal)
-                    },
+                    onValueChange = onCrossfaderChange,
                     valueRange = 0f..1f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = NothingThemeTokens.White,
-                        activeTrackColor = NothingThemeTokens.White,
-                        inactiveTrackColor = NothingThemeTokens.Border,
-                    ),
+                    centerDetent = 0.5f,
+                    detentSnapThreshold = 0.028f,
+                    trackHeightDp = 18.dp,
+                    capWidthDp = 26.dp,
+                    capHeightDp = 22.dp,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1712,20 +1721,27 @@ private fun MixerConsole(
 }
 
 /**
- * Visual Turntable styled in Nothing OS hardware language:
- * Matte vinyl record, subtle micro-grooves, rotating album sleeve label,
- * and Nothing Red center core spindle.
+ * Visual & Acoustic DJ Turntable styled in Nothing OS hardware language:
+ * - Outer machined aluminum rim with precision strobe dots
+ * - Pitch-black matte vinyl disk with micro-grooves
+ * - Center rotating record sleeve label with high-contrast Nothing Red metallic spindle
+ * - Polar angular touch tracking driving real vinyl scratch audio emulation,
+ *   needle friction, forward slip chirps, reverse rubs, and spinbacks.
  */
 @Composable
 private fun NothingTurntable(
     thumbnailUrl: String?,
     isPlaying: Boolean,
+    isDeckA: Boolean,
     onScrub: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
     var rotationAngle by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    var lastAngleRad by remember { mutableFloatStateOf(0f) }
+    var lastEventTimeMs by remember { mutableLongStateOf(0L) }
+    var lastHapticTickAngle by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(isPlaying, isDragging) {
         while (isActive && isPlaying && !isDragging) {
@@ -1737,29 +1753,71 @@ private fun NothingTurntable(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .border(1.dp, NothingThemeTokens.Border, CircleShape)
-            .background(NothingThemeTokens.SurfaceElevated)
-            .pointerInput(Unit) {
+            .border(
+                1.5.dp,
+                if (isDragging) NothingThemeTokens.Red else NothingThemeTokens.Border,
+                CircleShape,
+            )
+            .background(NothingThemeTokens.Black)
+            .pointerInput(isDeckA) {
                 detectDragGestures(
-                    onDragStart = {
+                    onDragStart = { offset ->
                         isDragging = true
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        lastAngleRad = atan2(offset.y - cy, offset.x - cx)
+                        lastEventTimeMs = System.currentTimeMillis()
+                        lastHapticTickAngle = rotationAngle
                         haptics.play(Haptic.Select)
+                        DjBridge.current.onPlatterTouchDown(isDeckA)
                     },
-                    onDragEnd = { isDragging = false },
-                    onDragCancel = { isDragging = false },
-                    onDrag = { change, dragAmount ->
+                    onDragEnd = {
+                        isDragging = false
+                        DjBridge.current.onPlatterTouchUp(isDeckA)
+                    },
+                    onDragCancel = {
+                        isDragging = false
+                        DjBridge.current.onPlatterTouchUp(isDeckA)
+                    },
+                    onDrag = { change, _ ->
                         change.consume()
-                        val delta = dragAmount.x
-                        rotationAngle = (rotationAngle + delta * 1.5f) % 360f
-                        val scrubDeltaMs = (delta * 40L).toLong()
+                        val now = System.currentTimeMillis()
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val currentAngleRad = atan2(change.position.y - cy, change.position.x - cx)
+
+                        var deltaAngleRad = currentAngleRad - lastAngleRad
+                        while (deltaAngleRad > PI) deltaAngleRad -= (2.0 * PI).toFloat()
+                        while (deltaAngleRad < -PI) deltaAngleRad += (2.0 * PI).toFloat()
+
+                        val deltaAngleDeg = (deltaAngleRad * 180.0f / PI.toFloat())
+                        val dtSec = ((now - lastEventTimeMs).coerceAtLeast(1L)).toFloat() / 1000.0f
+                        val velocityDegPerSec = deltaAngleDeg / dtSec
+                        val normalizedVelocity = (velocityDegPerSec / 45.0f).coerceIn(-30.0f, 30.0f)
+                        val isForward = deltaAngleDeg >= 0f
+
+                        rotationAngle = (rotationAngle + deltaAngleDeg) % 360f
+                        lastAngleRad = currentAngleRad
+                        lastEventTimeMs = now
+
+                        // Haptic tick on every 14 degrees of physical rotation
+                        if (abs(rotationAngle - lastHapticTickAngle) >= 14.0f) {
+                            haptics.play(Haptic.Tick)
+                            lastHapticTickAngle = rotationAngle
+                        }
+
+                        // Trigger realistic vinyl scratch sound
+                        DjBridge.current.onPlatterScratch(isDeckA, normalizedVelocity, isForward)
+
+                        // Scrub timeline position
+                        val scrubDeltaMs = (deltaAngleDeg * 18.0f).toLong()
                         onScrub(scrubDeltaMs)
-                        haptics.play(Haptic.Tick)
                     },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
-        // Vinyl micro-grooves canvas
+        // Vinyl micro-grooves and strobe dots canvas
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -1768,13 +1826,37 @@ private fun NothingTurntable(
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = size.minDimension / 2f
 
-            val grooveColor = Color.White.copy(alpha = 0.04f)
-            for (step in 1..4) {
+            // Outer aluminum rim line
+            drawCircle(
+                color = Color.White.copy(alpha = 0.22f),
+                radius = radius - 1.dp.toPx(),
+                center = center,
+                style = Stroke(width = 1.dp.toPx()),
+            )
+
+            // Strobe dots around perimeter (36 dots)
+            val strobeCount = 36
+            val strobeRadius = radius - 3.dp.toPx()
+            val strobeColor = Color.White.copy(alpha = 0.35f)
+            for (i in 0 until strobeCount) {
+                val angle = (i * 2.0 * PI / strobeCount).toFloat()
+                val sx = center.x + strobeRadius * cos(angle)
+                val sy = center.y + strobeRadius * sin(angle)
+                drawCircle(
+                    color = strobeColor,
+                    radius = 0.8.dp.toPx(),
+                    center = Offset(sx, sy),
+                )
+            }
+
+            // Concentric Vinyl Micro-Grooves
+            val grooveColor = Color.White.copy(alpha = 0.05f)
+            for (step in 1..6) {
                 drawCircle(
                     color = grooveColor,
-                    radius = radius * (0.50f + step * 0.10f),
+                    radius = radius * (0.44f + step * 0.08f),
                     center = center,
-                    style = Stroke(width = 1.dp.toPx()),
+                    style = Stroke(width = 0.8.dp.toPx()),
                 )
             }
         }
@@ -1794,14 +1876,22 @@ private fun NothingTurntable(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            // Center red spindle dot
+            // Center spindle metallic disc with Nothing Red core
             Box(
                 modifier = Modifier
-                    .size(5.dp)
+                    .size(7.dp)
                     .clip(CircleShape)
-                    .background(NothingThemeTokens.Red)
-                    .border(0.5.dp, NothingThemeTokens.Black, CircleShape),
-            )
+                    .background(Color(0xFF222228))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(3.dp)
+                        .clip(CircleShape)
+                        .background(NothingThemeTokens.Red),
+                )
+            }
         }
     }
 }
