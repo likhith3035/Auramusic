@@ -589,9 +589,52 @@ class PlaybackService : MediaLibraryService() {
         var wasPlayingBeforeCall = false
         var isDucked = false
             private set
+        private var modeListener: AudioManager.OnModeChangedListener? = null
 
         val duckMultiplier: Float
             get() = if (isDucked) 0.25f else 1.0f
+
+        fun initModeListener() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val mgr = audioManager ?: return
+                if (modeListener != null) return
+                val listener = AudioManager.OnModeChangedListener { mode ->
+                    val isCall = mode == AudioManager.MODE_IN_CALL ||
+                        mode == AudioManager.MODE_IN_COMMUNICATION ||
+                        mode == AudioManager.MODE_RINGTONE
+                    if (isCall) {
+                        if (player?.playWhenReady == true) {
+                            wasPlayingBeforeCall = true
+                            player?.playWhenReady = false
+                            if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                                spare?.playWhenReady = false
+                            }
+                        }
+                    } else if (wasPlayingBeforeCall) {
+                        wasPlayingBeforeCall = false
+                        player?.playWhenReady = true
+                    }
+                }
+                modeListener = listener
+                mgr.addOnModeChangedListener(mainExecutor, listener)
+            }
+        }
+
+        fun removeModeListener() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                modeListener?.let { audioManager?.removeOnModeChangedListener(it) }
+                modeListener = null
+            }
+        }
+
+        fun resetDucking() {
+            isDucked = false
+        }
+
+        fun release() {
+            abandonFocus()
+            removeModeListener()
+        }
 
         fun requestFocus(): Boolean {
             val manager = audioManager ?: return false
@@ -652,8 +695,10 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    isDucked = true
-                    updateActivePlayerVolume()
+                    if (!AppSettings.ignoreAudioFocus.value) {
+                        isDucked = true
+                        updateActivePlayerVolume()
+                    }
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     if (isCallActive()) {
@@ -683,9 +728,10 @@ class PlaybackService : MediaLibraryService() {
                                 spare?.playWhenReady = false
                             }
                         }
+                    } else if (AppSettings.ignoreAudioFocus.value) {
+                        // Party Shield ON: Instagram Reels, TikTok, YouTube Shorts, etc. -> Keep playing continuously!
                     } else {
-                        // Permanent focus loss: a full-length media player started (e.g. Netflix, Amazon Prime, Spotify).
-                        // Pause gracefully so music does not clash with full movies or another music player.
+                        // Normal mode: full player started, pause gracefully
                         player?.playWhenReady = false
                         if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
                             spare?.playWhenReady = false
@@ -1829,6 +1875,7 @@ class PlaybackService : MediaLibraryService() {
         // through, and again at every handoff.
         sparePlayer.audioSessionId = exoPlayer.audioSessionId
         audioManager?.registerAudioDeviceCallback(outputDeviceCallback, null)
+        smartFocusManager.initModeListener()
         applyOutputRoute()
 
         AppSettings.audioSessionId.value = exoPlayer.audioSessionId
@@ -6248,6 +6295,14 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.musicDimmed.drop(1).collect { updateActivePlayerVolume() }
         }
         scope.launch {
+            AppSettings.ignoreAudioFocus.drop(1).collect { ignore ->
+                if (ignore && smartFocusManager.isDucked) {
+                    smartFocusManager.resetDucking()
+                    updateActivePlayerVolume()
+                }
+            }
+        }
+        scope.launch {
             AudioRouting.selectedId.drop(1).collect { requestOutputReconfiguration() }
         }
         scope.launch {
@@ -6828,7 +6883,7 @@ class PlaybackService : MediaLibraryService() {
         CastController.detach(castPlayback)
         castPlayback.release()
         closeAudioEffectSession()
-        smartFocusManager.abandonFocus()
+        smartFocusManager.release()
         bluetoothTracker.stop()
         audioManager?.unregisterAudioDeviceCallback(outputDeviceCallback)
         partySync?.stop()
