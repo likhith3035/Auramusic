@@ -63,6 +63,20 @@ class DjAudioEngine(
         DjSessionState.updateIsAutoDropping(false)
         DjSessionState.updateLowKillA(false)
         DjSessionState.updateLowKillB(false)
+        DjSessionState.updateMidKillA(false)
+        DjSessionState.updateMidKillB(false)
+        DjSessionState.updateHiKillA(false)
+        DjSessionState.updateHiKillB(false)
+        DjSessionState.updateDeckAVolume(1.0f)
+        DjSessionState.updateDeckBVolume(1.0f)
+        DjSessionState.updateDeckATrim(1.0f)
+        DjSessionState.updateDeckBTrim(1.0f)
+        DjSessionState.updateKeyLockA(true)
+        DjSessionState.updateKeyLockB(true)
+        DjSessionState.updateDeckAPitchPercent(0.0f)
+        DjSessionState.updateDeckBPitchPercent(0.0f)
+        DjSessionState.updatePflA(false)
+        DjSessionState.updatePflB(false)
         DjSessionState.updateDeckASpeed(1.0f)
         DjSessionState.updateDeckBSpeed(1.0f)
         DjSessionState.updateDeckAFilter(0.0f)
@@ -252,21 +266,36 @@ class DjAudioEngine(
             }
         }
 
-        val killA = if (DjSessionState.lowKillA.value) 0.30f else 1.0f
-        val killB = if (DjSessionState.lowKillB.value) 0.30f else 1.0f
+        val lowA = if (DjSessionState.lowKillA.value) 0.20f else 1.0f
+        val midA = if (DjSessionState.midKillA.value) 0.20f else 1.0f
+        val hiA = if (DjSessionState.hiKillA.value) 0.20f else 1.0f
+        val killA = lowA * midA * hiA
+
+        val lowB = if (DjSessionState.lowKillB.value) 0.20f else 1.0f
+        val midB = if (DjSessionState.midKillB.value) 0.20f else 1.0f
+        val hiB = if (DjSessionState.hiKillB.value) 0.20f else 1.0f
+        val killB = lowB * midB * hiB
+
+        val faderA = DjSessionState.deckAVolume.value
+        val faderB = DjSessionState.deckBVolume.value
+        val trimA = DjSessionState.deckATrim.value
+        val trimB = DjSessionState.deckBTrim.value
 
         val splitCue = DjSessionState.isSplitCueEnabled.value
-        if (splitCue) {
-            // Deck A goes 100% to Left (Master audience)
-            service.getActiveFilter().leftChannelGain = 1.0f
-            service.getActiveFilter().rightChannelGain = 0.0f
-            // Deck B goes 100% to Right (Cue headphone)
-            service.getSpareFilter().leftChannelGain = 0.0f
-            service.getSpareFilter().rightChannelGain = 1.0f
+        val pflA = DjSessionState.pflA.value
+        val pflB = DjSessionState.pflB.value
 
-            p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
-            val monitorVolume = master.coerceIn(0f, 1f)
-            s?.volume = (monitorVolume * killB).coerceIn(0f, 1f)
+        if (splitCue) {
+            // Deck A goes to Left (Master audience) and also to Right if PFL A is active
+            service.getActiveFilter().leftChannelGain = 1.0f
+            service.getActiveFilter().rightChannelGain = if (pflA) 1.0f else 0.0f
+            // Deck B goes 100% to Right (Cue headphone) when PFL B is active or crossfader moves
+            service.getSpareFilter().leftChannelGain = 0.0f
+            service.getSpareFilter().rightChannelGain = if (pflB || fraction > 0.04f) 1.0f else 0.0f
+
+            p?.volume = (gainA * faderA * killA * trimA * master).coerceIn(0f, 1f)
+            val cueVol = if (pflB) (faderB * killB * trimB * master) else (gainB * faderB * killB * trimB * master)
+            s?.volume = cueVol.coerceIn(0f, 1f)
         } else {
             // Stereo normal
             service.getActiveFilter().leftChannelGain = 1.0f
@@ -274,8 +303,8 @@ class DjAudioEngine(
             service.getSpareFilter().leftChannelGain = 1.0f
             service.getSpareFilter().rightChannelGain = 1.0f
 
-            p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
-            s?.volume = (gainB * killB * master).coerceIn(0f, 1f)
+            p?.volume = (gainA * faderA * killA * trimA * master).coerceIn(0f, 1f)
+            s?.volume = (gainB * faderB * killB * trimB * master).coerceIn(0f, 1f)
         }
     }
 
@@ -394,11 +423,13 @@ class DjAudioEngine(
         nudgeJobA?.cancel()
         val baseSpeed = DjSessionState.deckASpeed.value
         val bump = if (positive) 1.04f else 0.96f
-        p.playbackParameters = PlaybackParameters(baseSpeed * bump)
+        val pitch = if (DjSessionState.keyLockA.value) 1.0f else (baseSpeed * bump)
+        p.playbackParameters = PlaybackParameters(baseSpeed * bump, pitch)
 
         nudgeJobA = scope.launch(Dispatchers.Main) {
             delay(320L)
-            p.playbackParameters = PlaybackParameters(baseSpeed)
+            val normalPitch = if (DjSessionState.keyLockA.value) 1.0f else baseSpeed
+            p.playbackParameters = PlaybackParameters(baseSpeed, normalPitch)
         }
     }
 
@@ -407,11 +438,13 @@ class DjAudioEngine(
         nudgeJobB?.cancel()
         val baseSpeed = DjSessionState.deckBSpeed.value
         val bump = if (positive) 1.04f else 0.96f
-        s.playbackParameters = PlaybackParameters(baseSpeed * bump)
+        val pitch = if (DjSessionState.keyLockB.value) 1.0f else (baseSpeed * bump)
+        s.playbackParameters = PlaybackParameters(baseSpeed * bump, pitch)
 
         nudgeJobB = scope.launch(Dispatchers.Main) {
             delay(320L)
-            s.playbackParameters = PlaybackParameters(baseSpeed)
+            val normalPitch = if (DjSessionState.keyLockB.value) 1.0f else baseSpeed
+            s.playbackParameters = PlaybackParameters(baseSpeed, normalPitch)
         }
     }
 
@@ -550,15 +583,19 @@ class DjAudioEngine(
     }
 
     override fun setDeckASpeed(speed: Float) {
-        val clamped = speed.coerceIn(0.85f, 1.15f)
-        player?.playbackParameters = PlaybackParameters(clamped)
+        val clamped = speed.coerceIn(0.84f, 1.16f)
+        val pitch = if (DjSessionState.keyLockA.value) 1.0f else clamped
+        player?.playbackParameters = PlaybackParameters(clamped, pitch)
         DjSessionState.updateDeckASpeed(clamped)
+        DjSessionState.updateDeckAPitchPercent(clamped - 1.0f)
     }
 
     override fun setDeckBSpeed(speed: Float) {
-        val clamped = speed.coerceIn(0.85f, 1.15f)
-        spare?.playbackParameters = PlaybackParameters(clamped)
+        val clamped = speed.coerceIn(0.84f, 1.16f)
+        val pitch = if (DjSessionState.keyLockB.value) 1.0f else clamped
+        spare?.playbackParameters = PlaybackParameters(clamped, pitch)
         DjSessionState.updateDeckBSpeed(clamped)
+        DjSessionState.updateDeckBPitchPercent(clamped - 1.0f)
         DjSessionState.updateIsBeatSynced(false)
     }
 
@@ -745,6 +782,208 @@ class DjAudioEngine(
         applyVolumes()
     }
 
+    override fun toggleMidKillA() {
+        DjSessionState.updateMidKillA(!DjSessionState.midKillA.value)
+        applyVolumes()
+    }
+
+    override fun toggleHiKillA() {
+        DjSessionState.updateHiKillA(!DjSessionState.hiKillA.value)
+        applyVolumes()
+    }
+
+    override fun toggleMidKillB() {
+        DjSessionState.updateMidKillB(!DjSessionState.midKillB.value)
+        applyVolumes()
+    }
+
+    override fun toggleHiKillB() {
+        DjSessionState.updateHiKillB(!DjSessionState.hiKillB.value)
+        applyVolumes()
+    }
+
+    override fun setDeckAVolume(volume: Float) {
+        DjSessionState.updateDeckAVolume(volume)
+        applyVolumes()
+    }
+
+    override fun setDeckBVolume(volume: Float) {
+        DjSessionState.updateDeckBVolume(volume)
+        applyVolumes()
+    }
+
+    override fun setDeckATrim(trim: Float) {
+        DjSessionState.updateDeckATrim(trim)
+        applyVolumes()
+    }
+
+    override fun setDeckBTrim(trim: Float) {
+        DjSessionState.updateDeckBTrim(trim)
+        applyVolumes()
+    }
+
+    override fun toggleKeyLockA() {
+        val next = !DjSessionState.keyLockA.value
+        DjSessionState.updateKeyLockA(next)
+        val speed = DjSessionState.deckASpeed.value
+        val pitch = if (next) 1.0f else speed
+        player?.playbackParameters = PlaybackParameters(speed, pitch)
+    }
+
+    override fun toggleKeyLockB() {
+        val next = !DjSessionState.keyLockB.value
+        DjSessionState.updateKeyLockB(next)
+        val speed = DjSessionState.deckBSpeed.value
+        val pitch = if (next) 1.0f else speed
+        spare?.playbackParameters = PlaybackParameters(speed, pitch)
+    }
+
+    override fun setDeckAPitchPercent(percent: Float) {
+        val clamped = percent.coerceIn(-0.16f, 0.16f)
+        val effective = if (kotlin.math.abs(clamped) < 0.005f) 0.0f else clamped
+        DjSessionState.updateDeckAPitchPercent(effective)
+        val speed = (1.0f + effective).coerceIn(0.5f, 2.0f)
+        DjSessionState.updateDeckASpeed(speed)
+        val pitch = if (DjSessionState.keyLockA.value) 1.0f else speed
+        player?.playbackParameters = PlaybackParameters(speed, pitch)
+    }
+
+    override fun setDeckBPitchPercent(percent: Float) {
+        val clamped = percent.coerceIn(-0.16f, 0.16f)
+        val effective = if (kotlin.math.abs(clamped) < 0.005f) 0.0f else clamped
+        DjSessionState.updateDeckBPitchPercent(effective)
+        val speed = (1.0f + effective).coerceIn(0.5f, 2.0f)
+        DjSessionState.updateDeckBSpeed(speed)
+        val pitch = if (DjSessionState.keyLockB.value) 1.0f else speed
+        spare?.playbackParameters = PlaybackParameters(speed, pitch)
+        DjSessionState.updateIsBeatSynced(false)
+    }
+
+    override fun togglePflA() {
+        DjSessionState.updatePflA(!DjSessionState.pflA.value)
+        applyVolumes()
+    }
+
+    override fun togglePflB() {
+        DjSessionState.updatePflB(!DjSessionState.pflB.value)
+        applyVolumes()
+    }
+
+    override fun swapDecks() {
+        val p = player ?: return
+        val s = spare ?: return
+
+        // Invert crossfader position so physical audio balance is maintained
+        val oldCrossfader = DjSessionState.crossfader.value
+        val newCrossfader = 1.0f - oldCrossfader
+        DjSessionState.updateCrossfader(newCrossfader)
+
+        // Adopt players on service: player becomes spare, spare becomes player
+        service.adoptPlayerForDj(outgoing = p, incoming = s)
+
+        // Swap state flows
+        val songA = DjSessionState.deckASong.value
+        val songB = DjSessionState.deckBSong.value
+        DjSessionState.updateDeckASong(songB)
+        DjSessionState.updateDeckBSong(songA)
+
+        val playingA = DjSessionState.deckAPlaying.value
+        val playingB = DjSessionState.deckBPlaying.value
+        DjSessionState.updateDeckAPlaying(playingB)
+        DjSessionState.updateDeckBPlaying(playingA)
+
+        val posA = DjSessionState.deckAPositionMs.value
+        val posB = DjSessionState.deckBPositionMs.value
+        DjSessionState.updateDeckAPosition(posB)
+        DjSessionState.updateDeckBPosition(posA)
+
+        val durA = DjSessionState.deckADurationMs.value
+        val durB = DjSessionState.deckBDurationMs.value
+        DjSessionState.updateDeckADuration(durB)
+        DjSessionState.updateDeckBDuration(durA)
+
+        val bpmA = DjSessionState.deckABpm.value
+        val bpmB = DjSessionState.deckBBpm.value
+        DjSessionState.updateDeckABpm(bpmB)
+        DjSessionState.updateDeckBBpm(bpmA)
+
+        val keyA = DjSessionState.deckAKey.value
+        val keyB = DjSessionState.deckBKey.value
+        DjSessionState.updateDeckAKey(keyB)
+        DjSessionState.updateDeckBKey(keyA)
+
+        val speedA = DjSessionState.deckASpeed.value
+        val speedB = DjSessionState.deckBSpeed.value
+        DjSessionState.updateDeckASpeed(speedB)
+        DjSessionState.updateDeckBSpeed(speedA)
+
+        val pitchPctA = DjSessionState.deckAPitchPercent.value
+        val pitchPctB = DjSessionState.deckBPitchPercent.value
+        DjSessionState.updateDeckAPitchPercent(pitchPctB)
+        DjSessionState.updateDeckBPitchPercent(pitchPctA)
+
+        val volA = DjSessionState.deckAVolume.value
+        val volB = DjSessionState.deckBVolume.value
+        DjSessionState.updateDeckAVolume(volB)
+        DjSessionState.updateDeckBVolume(volA)
+
+        val trimA = DjSessionState.deckATrim.value
+        val trimB = DjSessionState.deckBTrim.value
+        DjSessionState.updateDeckATrim(trimB)
+        DjSessionState.updateDeckBTrim(trimA)
+
+        val filterA = DjSessionState.deckAFilter.value
+        val filterB = DjSessionState.deckBFilter.value
+        DjSessionState.updateDeckAFilter(filterB)
+        DjSessionState.updateDeckBFilter(filterA)
+
+        // Swap loops and hot cues
+        val tempLoop = loopA
+        loopA = loopB
+        loopB = tempLoop
+        val loopBeatsA = DjSessionState.deckALoopBeats.value
+        val loopBeatsB = DjSessionState.deckBLoopBeats.value
+        DjSessionState.updateDeckALoopBeats(loopBeatsB)
+        DjSessionState.updateDeckBLoopBeats(loopBeatsA)
+
+        val tempHotA = hotCuesA.toList()
+        val tempHotB = hotCuesB.toList()
+        hotCuesA.clear()
+        hotCuesA.addAll(tempHotB)
+        hotCuesB.clear()
+        hotCuesB.addAll(tempHotA)
+        DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+        DjSessionState.updateDeckBHotCues(hotCuesB.toList())
+
+        // Swap Kills & KeyLock
+        val lowKillA = DjSessionState.lowKillA.value
+        val lowKillB = DjSessionState.lowKillB.value
+        DjSessionState.updateLowKillA(lowKillB)
+        DjSessionState.updateLowKillB(lowKillA)
+
+        val midKillA = DjSessionState.midKillA.value
+        val midKillB = DjSessionState.midKillB.value
+        DjSessionState.updateMidKillA(midKillB)
+        DjSessionState.updateMidKillB(midKillA)
+
+        val hiKillA = DjSessionState.hiKillA.value
+        val hiKillB = DjSessionState.hiKillB.value
+        DjSessionState.updateHiKillA(hiKillB)
+        DjSessionState.updateHiKillB(hiKillA)
+
+        val lockA = DjSessionState.keyLockA.value
+        val lockB = DjSessionState.keyLockB.value
+        DjSessionState.updateKeyLockA(lockB)
+        DjSessionState.updateKeyLockB(lockA)
+
+        val pflA = DjSessionState.pflA.value
+        val pflB = DjSessionState.pflB.value
+        DjSessionState.updatePflA(pflB)
+        DjSessionState.updatePflB(pflA)
+
+        applyVolumes()
+    }
+
     override fun exitDjMode() {
         autoDropJob?.cancel()
         pollJob?.cancel()
@@ -763,6 +1002,20 @@ class DjAudioEngine(
         DjSessionState.updateIsSplitCueEnabled(false)
         DjSessionState.updateIsBrakingA(false)
         DjSessionState.updateIsBrakingB(false)
+        DjSessionState.updateLowKillA(false)
+        DjSessionState.updateLowKillB(false)
+        DjSessionState.updateMidKillA(false)
+        DjSessionState.updateMidKillB(false)
+        DjSessionState.updateHiKillA(false)
+        DjSessionState.updateHiKillB(false)
+        DjSessionState.updateDeckAVolume(1.0f)
+        DjSessionState.updateDeckBVolume(1.0f)
+        DjSessionState.updateDeckATrim(1.0f)
+        DjSessionState.updateDeckBTrim(1.0f)
+        DjSessionState.updatePflA(false)
+        DjSessionState.updatePflB(false)
+        DjSessionState.updateDeckAPitchPercent(0.0f)
+        DjSessionState.updateDeckBPitchPercent(0.0f)
 
         service.getActiveFilter().open()
         service.getActiveFilter().leftChannelGain = 1.0f

@@ -147,6 +147,18 @@ fun DjDecksSheet(
     val isAutoDropping by DjSessionState.isAutoDropping.collectAsStateWithLifecycle()
     val lowKillA by DjSessionState.lowKillA.collectAsStateWithLifecycle()
     val lowKillB by DjSessionState.lowKillB.collectAsStateWithLifecycle()
+    val midKillA by DjSessionState.midKillA.collectAsStateWithLifecycle()
+    val midKillB by DjSessionState.midKillB.collectAsStateWithLifecycle()
+    val hiKillA by DjSessionState.hiKillA.collectAsStateWithLifecycle()
+    val hiKillB by DjSessionState.hiKillB.collectAsStateWithLifecycle()
+    val deckAVolume by DjSessionState.deckAVolume.collectAsStateWithLifecycle()
+    val deckBVolume by DjSessionState.deckBVolume.collectAsStateWithLifecycle()
+    val keyLockA by DjSessionState.keyLockA.collectAsStateWithLifecycle()
+    val keyLockB by DjSessionState.keyLockB.collectAsStateWithLifecycle()
+    val deckAPitchPercent by DjSessionState.deckAPitchPercent.collectAsStateWithLifecycle()
+    val deckBPitchPercent by DjSessionState.deckBPitchPercent.collectAsStateWithLifecycle()
+    val pflA by DjSessionState.pflA.collectAsStateWithLifecycle()
+    val pflB by DjSessionState.pflB.collectAsStateWithLifecycle()
     val candidateQueue by DjSessionState.candidateQueue.collectAsStateWithLifecycle()
 
     Box(
@@ -226,10 +238,16 @@ fun DjDecksSheet(
                             bpm = deckABpm,
                             musicalKey = deckAKey,
                             speed = deckASpeed,
+                            pitchPercent = deckAPitchPercent,
+                            volume = deckAVolume,
+                            keyLocked = keyLockA,
                             filterAmount = deckAFilter,
                             loopBeats = deckALoopBeats,
                             hotCues = deckAHotCues,
                             lowKill = lowKillA,
+                            midKill = midKillA,
+                            hiKill = hiKillA,
+                            isPflActive = pflA,
                             onPlayPause = { DjBridge.current.toggleDeckAPlayPause() },
                             onCue = {
                                 haptics.play(Haptic.Select)
@@ -240,6 +258,12 @@ fun DjDecksSheet(
                                 DjBridge.current.triggerBrakeA()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
+                            onToggleMidKill = { DjBridge.current.toggleMidKillA() },
+                            onToggleHiKill = { DjBridge.current.toggleHiKillA() },
+                            onTogglePfl = { DjBridge.current.togglePflA() },
+                            onVolumeChange = { DjBridge.current.setDeckAVolume(it) },
+                            onPitchPercentChange = { DjBridge.current.setDeckAPitchPercent(it) },
+                            onToggleKeyLock = { DjBridge.current.toggleKeyLockA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
                             onPitchNudge = { pos -> DjBridge.current.nudgePitchA(pos) },
                             onFilterChange = { DjBridge.current.setDeckAFilter(it) },
@@ -298,6 +322,10 @@ fun DjDecksSheet(
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.commitTransition()
                             },
+                            onSwapDecks = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.swapDecks()
+                            },
                             modifier = Modifier.width(230.dp).fillMaxHeight(),
                         )
 
@@ -311,10 +339,16 @@ fun DjDecksSheet(
                             bpm = deckBBpm,
                             musicalKey = deckBKey,
                             speed = deckBSpeed,
+                            pitchPercent = deckBPitchPercent,
+                            volume = deckBVolume,
+                            keyLocked = keyLockB,
                             filterAmount = deckBFilter,
                             loopBeats = deckBLoopBeats,
                             hotCues = deckBHotCues,
                             lowKill = lowKillB,
+                            midKill = midKillB,
+                            hiKill = hiKillB,
+                            isPflActive = pflB,
                             onPlayPause = { DjBridge.current.toggleDeckBPlayPause() },
                             onCue = {
                                 haptics.play(Haptic.Select)
@@ -325,6 +359,12 @@ fun DjDecksSheet(
                                 DjBridge.current.triggerBrakeB()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
+                            onToggleMidKill = { DjBridge.current.toggleMidKillB() },
+                            onToggleHiKill = { DjBridge.current.toggleHiKillB() },
+                            onTogglePfl = { DjBridge.current.togglePflB() },
+                            onVolumeChange = { DjBridge.current.setDeckBVolume(it) },
+                            onPitchPercentChange = { DjBridge.current.setDeckBPitchPercent(it) },
+                            onToggleKeyLock = { DjBridge.current.toggleKeyLockB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
                             onPitchNudge = { pos -> DjBridge.current.nudgePitchB(pos) },
                             onFilterChange = { DjBridge.current.setDeckBFilter(it) },
@@ -357,10 +397,16 @@ fun DjDecksSheet(
                             bpm = deckABpm,
                             musicalKey = deckAKey,
                             speed = deckASpeed,
+                            pitchPercent = deckAPitchPercent,
+                            volume = deckAVolume,
+                            keyLocked = keyLockA,
                             filterAmount = deckAFilter,
                             loopBeats = deckALoopBeats,
                             hotCues = deckAHotCues,
                             lowKill = lowKillA,
+                            midKill = midKillA,
+                            hiKill = hiKillA,
+                            isPflActive = pflA,
                             onPlayPause = { DjBridge.current.toggleDeckAPlayPause() },
                             onCue = {
                                 haptics.play(Haptic.Select)
@@ -371,6 +417,12 @@ fun DjDecksSheet(
                                 DjBridge.current.triggerBrakeA()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
+                            onToggleMidKill = { DjBridge.current.toggleMidKillA() },
+                            onToggleHiKill = { DjBridge.current.toggleHiKillA() },
+                            onTogglePfl = { DjBridge.current.togglePflA() },
+                            onVolumeChange = { DjBridge.current.setDeckAVolume(it) },
+                            onPitchPercentChange = { DjBridge.current.setDeckAPitchPercent(it) },
+                            onToggleKeyLock = { DjBridge.current.toggleKeyLockA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
                             onPitchNudge = { pos -> DjBridge.current.nudgePitchA(pos) },
                             onFilterChange = { DjBridge.current.setDeckAFilter(it) },
@@ -429,6 +481,10 @@ fun DjDecksSheet(
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.commitTransition()
                             },
+                            onSwapDecks = {
+                                haptics.play(Haptic.Select)
+                                DjBridge.current.swapDecks()
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
 
@@ -442,10 +498,16 @@ fun DjDecksSheet(
                             bpm = deckBBpm,
                             musicalKey = deckBKey,
                             speed = deckBSpeed,
+                            pitchPercent = deckBPitchPercent,
+                            volume = deckBVolume,
+                            keyLocked = keyLockB,
                             filterAmount = deckBFilter,
                             loopBeats = deckBLoopBeats,
                             hotCues = deckBHotCues,
                             lowKill = lowKillB,
+                            midKill = midKillB,
+                            hiKill = hiKillB,
+                            isPflActive = pflB,
                             onPlayPause = { DjBridge.current.toggleDeckBPlayPause() },
                             onCue = {
                                 haptics.play(Haptic.Select)
@@ -456,6 +518,12 @@ fun DjDecksSheet(
                                 DjBridge.current.triggerBrakeB()
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
+                            onToggleMidKill = { DjBridge.current.toggleMidKillB() },
+                            onToggleHiKill = { DjBridge.current.toggleHiKillB() },
+                            onTogglePfl = { DjBridge.current.togglePflB() },
+                            onVolumeChange = { DjBridge.current.setDeckBVolume(it) },
+                            onPitchPercentChange = { DjBridge.current.setDeckBPitchPercent(it) },
+                            onToggleKeyLock = { DjBridge.current.toggleKeyLockB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
                             onPitchNudge = { pos -> DjBridge.current.nudgePitchB(pos) },
                             onFilterChange = { DjBridge.current.setDeckBFilter(it) },
@@ -520,14 +588,26 @@ private fun DeckCard(
     bpm: Int,
     musicalKey: String,
     speed: Float,
+    pitchPercent: Float,
+    volume: Float,
+    keyLocked: Boolean,
     filterAmount: Float,
     loopBeats: Int?,
     hotCues: List<Long?>,
     lowKill: Boolean,
+    midKill: Boolean,
+    hiKill: Boolean,
+    isPflActive: Boolean,
     onPlayPause: () -> Unit,
     onCue: () -> Unit,
     onBrake: () -> Unit,
     onToggleLowKill: () -> Unit,
+    onToggleMidKill: () -> Unit,
+    onToggleHiKill: () -> Unit,
+    onTogglePfl: () -> Unit,
+    onVolumeChange: (Float) -> Unit,
+    onPitchPercentChange: (Float) -> Unit,
+    onToggleKeyLock: () -> Unit,
     onSpeedChange: (Float) -> Unit,
     onPitchNudge: (Boolean) -> Unit,
     onFilterChange: (Float) -> Unit,
@@ -619,6 +699,38 @@ private fun DeckCard(
                             fontFamily = FontFamily.Monospace,
                         )
                     }
+
+                    // PFL Headphone Cue Pill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (isPflActive) NothingThemeTokens.Red.copy(alpha = 0.22f) else NothingThemeTokens.SurfaceElevated)
+                            .border(1.dp, if (isPflActive) NothingThemeTokens.Red else NothingThemeTokens.BorderSubtle, RoundedCornerShape(50))
+                            .clickable {
+                                haptics.play(Haptic.Select)
+                                onTogglePfl()
+                            }
+                            .padding(horizontal = 7.dp, vertical = 3.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isPflActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(4.dp)
+                                        .clip(CircleShape)
+                                        .background(NothingThemeTokens.Red),
+                                )
+                                Spacer(Modifier.width(3.dp))
+                            }
+                            Text(
+                                text = "PFL",
+                                color = if (isPflActive) NothingThemeTokens.Red else NothingThemeTokens.MutedText,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp,
+                            )
+                        }
+                    }
                 }
 
                 if (onChangeSong != null) {
@@ -696,52 +808,25 @@ private fun DeckCard(
                     )
                 }
 
-                // Pitch Nudge and Speed Slider
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    // Momentary Nudge +
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(NothingThemeTokens.SurfaceElevated)
-                            .border(1.dp, NothingThemeTokens.Border, CircleShape)
-                            .clickable {
-                                haptics.play(Haptic.Tick)
-                                onPitchNudge(true)
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("+", color = NothingThemeTokens.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Text(
-                        text = String.format("%.2fx", speed),
-                        color = if (speed != 1.0f) NothingThemeTokens.Red else NothingThemeTokens.MutedText,
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                    )
-
-                    // Momentary Nudge -
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(NothingThemeTokens.SurfaceElevated)
-                            .border(1.dp, NothingThemeTokens.Border, CircleShape)
-                            .clickable {
-                                haptics.play(Haptic.Tick)
-                                onPitchNudge(false)
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("-", color = NothingThemeTokens.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
+                // Channel Level Fader
+                DjChannelVolumeControl(
+                    volume = volume,
+                    onVolumeChange = onVolumeChange,
+                    modifier = Modifier.width(66.dp),
+                )
             }
+
+            // Precision Pitch Slider with Detent & Key Lock
+            DjPitchSlider(
+                speed = speed,
+                pitchPercent = pitchPercent,
+                keyLocked = keyLocked,
+                baseBpm = bpm,
+                onPitchPercentChange = onPitchPercentChange,
+                onNudge = onPitchNudge,
+                onToggleKeyLock = onToggleKeyLock,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+            )
 
             // Interactive Timeline Scrubber with Hot Cue Pins and Loop Region
             DjTimelineScrubber(
@@ -924,24 +1009,15 @@ private fun DeckCard(
                     )
                 }
 
-                // LOW KILL (Bass Cut) Button
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (lowKill) NothingThemeTokens.Red.copy(alpha = 0.20f) else NothingThemeTokens.SurfaceElevated)
-                        .border(1.dp, if (lowKill) NothingThemeTokens.Red else NothingThemeTokens.BorderSubtle, RoundedCornerShape(8.dp))
-                        .clickable(onClick = onToggleLowKill)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "LOW KILL",
-                        color = if (lowKill) NothingThemeTokens.Red else NothingThemeTokens.MutedText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                    )
-                }
+                // 3-Band Frequency Kill Cluster (LOW, MID, HI)
+                DjEqKillsCluster(
+                    lowKill = lowKill,
+                    midKill = midKill,
+                    hiKill = hiKill,
+                    onToggleLow = onToggleLowKill,
+                    onToggleMid = onToggleMidKill,
+                    onToggleHi = onToggleHiKill,
+                )
 
                 // Mini Filter Sweep Slider (-1.0f .. +1.0f)
                 Box(modifier = Modifier.width(82.dp)) {
@@ -960,6 +1036,231 @@ private fun DeckCard(
                             activeTrackColor = NothingThemeTokens.Red,
                             inactiveTrackColor = NothingThemeTokens.Border,
                         ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Channel volume level fader styled in Nothing OS hardware language.
+ */
+@Composable
+private fun DjChannelVolumeControl(
+    volume: Float,
+    onVolumeChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    var lastTick by remember { mutableFloatStateOf(volume) }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(NothingThemeTokens.SurfaceElevated)
+            .border(1.dp, NothingThemeTokens.BorderSubtle, RoundedCornerShape(8.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "VOL",
+                color = NothingThemeTokens.MutedText,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                text = if (volume <= 0.01f) "0%" else "${(volume * 100f).roundToInt()}%",
+                color = if (volume > 0.01f) NothingThemeTokens.White else NothingThemeTokens.MutedText,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+
+        Slider(
+            value = volume,
+            onValueChange = { newVal ->
+                if (kotlin.math.abs(newVal - lastTick) >= 0.1f) {
+                    haptics.play(Haptic.Tick)
+                    lastTick = newVal
+                }
+                onVolumeChange(newVal)
+            },
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(
+                thumbColor = NothingThemeTokens.White,
+                activeTrackColor = NothingThemeTokens.White,
+                inactiveTrackColor = NothingThemeTokens.Border,
+            ),
+            modifier = Modifier.fillMaxWidth().height(18.dp),
+        )
+    }
+}
+
+/**
+ * Precision Pitch / Tempo Slider with Center Detent and Key Lock.
+ */
+@Composable
+private fun DjPitchSlider(
+    speed: Float,
+    pitchPercent: Float,
+    keyLocked: Boolean,
+    baseBpm: Int,
+    onPitchPercentChange: (Float) -> Unit,
+    onNudge: (Boolean) -> Unit,
+    onToggleKeyLock: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    val dynamicBpm = (baseBpm * speed).roundToInt()
+    val pctVal = pitchPercent * 100f
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(NothingThemeTokens.SurfaceElevated)
+            .border(1.dp, NothingThemeTokens.BorderSubtle, RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // Key Lock Toggle Pill
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(if (keyLocked) NothingThemeTokens.Surface else NothingThemeTokens.Red.copy(alpha = 0.22f))
+                .border(1.dp, if (keyLocked) NothingThemeTokens.BorderSubtle else NothingThemeTokens.Red, RoundedCornerShape(4.dp))
+                .clickable {
+                    haptics.play(Haptic.Select)
+                    onToggleKeyLock()
+                }
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text = if (keyLocked) "KEY LOCK" else "PITCH",
+                color = if (keyLocked) NothingThemeTokens.White else NothingThemeTokens.Red,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // Momentary Nudge -
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(NothingThemeTokens.Surface)
+                .border(1.dp, NothingThemeTokens.Border, CircleShape)
+                .clickable {
+                    haptics.play(Haptic.Tick)
+                    onNudge(false)
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("-", color = NothingThemeTokens.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+
+        // Continuous Pitch Slider with Center Zero Detent
+        Box(modifier = Modifier.weight(1f)) {
+            Slider(
+                value = pitchPercent,
+                onValueChange = { newVal ->
+                    val snapped = if (kotlin.math.abs(newVal) < 0.005f) 0.0f else newVal
+                    onPitchPercentChange(snapped)
+                },
+                valueRange = -0.16f..0.16f,
+                colors = SliderDefaults.colors(
+                    thumbColor = if (pitchPercent == 0.0f) NothingThemeTokens.White else NothingThemeTokens.Red,
+                    activeTrackColor = NothingThemeTokens.Red,
+                    inactiveTrackColor = NothingThemeTokens.Border,
+                ),
+                modifier = Modifier.fillMaxWidth().height(18.dp),
+            )
+        }
+
+        // Momentary Nudge +
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(NothingThemeTokens.Surface)
+                .border(1.dp, NothingThemeTokens.Border, CircleShape)
+                .clickable {
+                    haptics.play(Haptic.Tick)
+                    onNudge(true)
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("+", color = NothingThemeTokens.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+
+        // Real-time BPM and pitch percent readout
+        Text(
+            text = String.format("%+.1f%% (%d)", pctVal, dynamicBpm),
+            color = if (pitchPercent != 0.0f) NothingThemeTokens.Red else NothingThemeTokens.MutedText,
+            fontSize = 7.5.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+}
+
+/**
+ * 3-Band Frequency Kill Cluster (LOW, MID, HI) styled in Nothing OS hardware language.
+ */
+@Composable
+private fun DjEqKillsCluster(
+    lowKill: Boolean,
+    midKill: Boolean,
+    hiKill: Boolean,
+    onToggleLow: () -> Unit,
+    onToggleMid: () -> Unit,
+    onToggleHi: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(
+            Triple("LOW", lowKill, onToggleLow),
+            Triple("MID", midKill, onToggleMid),
+            Triple("HI", hiKill, onToggleHi),
+        ).forEach { (label, isActive, onClick) ->
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (isActive) NothingThemeTokens.Red.copy(alpha = 0.22f) else NothingThemeTokens.SurfaceElevated)
+                    .border(1.dp, if (isActive) NothingThemeTokens.Red else NothingThemeTokens.BorderSubtle, RoundedCornerShape(6.dp))
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        onClick()
+                    }
+                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isActive) {
+                        Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(NothingThemeTokens.Red))
+                        Spacer(Modifier.width(3.dp))
+                    }
+                    Text(
+                        text = label,
+                        color = if (isActive) NothingThemeTokens.Red else NothingThemeTokens.White,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
                     )
                 }
             }
@@ -1129,6 +1430,7 @@ private fun MixerConsole(
     onSync: () -> Unit,
     onAutoDrop: () -> Unit,
     onCommit: () -> Unit,
+    onSwapDecks: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
@@ -1268,16 +1570,16 @@ private fun MixerConsole(
                 }
             }
 
-            // Row 2: AUTO-DROP and TAKEOVER
+            // Row 2: AUTO-DROP, SWAP A <-> B, and TAKEOVER
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // AUTO-DROP BUTTON
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.1f)
                         .clip(RoundedCornerShape(8.dp))
                         .background(NothingThemeTokens.SurfaceElevated)
                         .border(1.dp, if (isAutoDropping) NothingThemeTokens.Red else NothingThemeTokens.Border, RoundedCornerShape(8.dp))
@@ -1286,20 +1588,38 @@ private fun MixerConsole(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (isAutoDropping) "TRANSITIONING..." else "AUTO-DROP (3.5S)",
+                        text = if (isAutoDropping) "DROPPING..." else "AUTO-DROP",
                         color = if (isAutoDropping) NothingThemeTokens.Red else NothingThemeTokens.White,
-                        fontSize = 9.5.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                     )
                 }
 
-                Spacer(Modifier.width(8.dp))
+                // SWAP A <-> B BUTTON
+                Box(
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NothingThemeTokens.SurfaceElevated)
+                        .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(8.dp))
+                        .clickable(onClick = onSwapDecks)
+                        .padding(vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "SWAP A <-> B",
+                        color = NothingThemeTokens.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    )
+                }
 
                 // COMMIT / DROP TAKEOVER
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.1f)
                         .clip(RoundedCornerShape(8.dp))
                         .background(NothingThemeTokens.SurfaceElevated)
                         .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(8.dp))
@@ -1308,9 +1628,9 @@ private fun MixerConsole(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "TAKEOVER DECK B",
+                        text = "TAKEOVER",
                         color = NothingThemeTokens.White,
-                        fontSize = 9.5.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                     )

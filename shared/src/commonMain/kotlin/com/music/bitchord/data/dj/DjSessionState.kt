@@ -110,8 +110,50 @@ object DjSessionState {
     private val _lowKillA = MutableStateFlow(false)
     val lowKillA: StateFlow<Boolean> = _lowKillA.asStateFlow()
 
+    private val _midKillA = MutableStateFlow(false)
+    val midKillA: StateFlow<Boolean> = _midKillA.asStateFlow()
+
+    private val _hiKillA = MutableStateFlow(false)
+    val hiKillA: StateFlow<Boolean> = _hiKillA.asStateFlow()
+
     private val _lowKillB = MutableStateFlow(false)
     val lowKillB: StateFlow<Boolean> = _lowKillB.asStateFlow()
+
+    private val _midKillB = MutableStateFlow(false)
+    val midKillB: StateFlow<Boolean> = _midKillB.asStateFlow()
+
+    private val _hiKillB = MutableStateFlow(false)
+    val hiKillB: StateFlow<Boolean> = _hiKillB.asStateFlow()
+
+    private val _deckAVolume = MutableStateFlow(1.0f)
+    val deckAVolume: StateFlow<Float> = _deckAVolume.asStateFlow()
+
+    private val _deckBVolume = MutableStateFlow(1.0f)
+    val deckBVolume: StateFlow<Float> = _deckBVolume.asStateFlow()
+
+    private val _deckATrim = MutableStateFlow(1.0f)
+    val deckATrim: StateFlow<Float> = _deckATrim.asStateFlow()
+
+    private val _deckBTrim = MutableStateFlow(1.0f)
+    val deckBTrim: StateFlow<Float> = _deckBTrim.asStateFlow()
+
+    private val _keyLockA = MutableStateFlow(true)
+    val keyLockA: StateFlow<Boolean> = _keyLockA.asStateFlow()
+
+    private val _keyLockB = MutableStateFlow(true)
+    val keyLockB: StateFlow<Boolean> = _keyLockB.asStateFlow()
+
+    private val _deckAPitchPercent = MutableStateFlow(0.0f)
+    val deckAPitchPercent: StateFlow<Float> = _deckAPitchPercent.asStateFlow()
+
+    private val _deckBPitchPercent = MutableStateFlow(0.0f)
+    val deckBPitchPercent: StateFlow<Float> = _deckBPitchPercent.asStateFlow()
+
+    private val _pflA = MutableStateFlow(false)
+    val pflA: StateFlow<Boolean> = _pflA.asStateFlow()
+
+    private val _pflB = MutableStateFlow(false)
+    val pflB: StateFlow<Boolean> = _pflB.asStateFlow()
 
     private val _candidateQueue = MutableStateFlow<List<Song>>(emptyList())
     val candidateQueue: StateFlow<List<Song>> = _candidateQueue.asStateFlow()
@@ -146,7 +188,21 @@ object DjSessionState {
     fun updateIsBrakingB(braking: Boolean) { _isBrakingB.value = braking }
     fun updateIsAutoDropping(dropping: Boolean) { _isAutoDropping.value = dropping }
     fun updateLowKillA(kill: Boolean) { _lowKillA.value = kill }
+    fun updateMidKillA(kill: Boolean) { _midKillA.value = kill }
+    fun updateHiKillA(kill: Boolean) { _hiKillA.value = kill }
     fun updateLowKillB(kill: Boolean) { _lowKillB.value = kill }
+    fun updateMidKillB(kill: Boolean) { _midKillB.value = kill }
+    fun updateHiKillB(kill: Boolean) { _hiKillB.value = kill }
+    fun updateDeckAVolume(volume: Float) { _deckAVolume.value = volume.coerceIn(0f, 1f) }
+    fun updateDeckBVolume(volume: Float) { _deckBVolume.value = volume.coerceIn(0f, 1f) }
+    fun updateDeckATrim(trim: Float) { _deckATrim.value = trim.coerceIn(0.5f, 2.0f) }
+    fun updateDeckBTrim(trim: Float) { _deckBTrim.value = trim.coerceIn(0.5f, 2.0f) }
+    fun updateKeyLockA(locked: Boolean) { _keyLockA.value = locked }
+    fun updateKeyLockB(locked: Boolean) { _keyLockB.value = locked }
+    fun updateDeckAPitchPercent(percent: Float) { _deckAPitchPercent.value = percent.coerceIn(-0.16f, 0.16f) }
+    fun updateDeckBPitchPercent(percent: Float) { _deckBPitchPercent.value = percent.coerceIn(-0.16f, 0.16f) }
+    fun updatePflA(pfl: Boolean) { _pflA.value = pfl }
+    fun updatePflB(pfl: Boolean) { _pflB.value = pfl }
     fun updateCandidateQueue(queue: List<Song>) { _candidateQueue.value = queue }
 }
 
@@ -191,6 +247,21 @@ interface DjAudioController {
     fun removeQueueItem(index: Int)
     fun toggleLowKillA()
     fun toggleLowKillB()
+    fun toggleMidKillA()
+    fun toggleHiKillA()
+    fun toggleMidKillB()
+    fun toggleHiKillB()
+    fun setDeckAVolume(volume: Float)
+    fun setDeckBVolume(volume: Float)
+    fun setDeckATrim(trim: Float)
+    fun setDeckBTrim(trim: Float)
+    fun toggleKeyLockA()
+    fun toggleKeyLockB()
+    fun setDeckAPitchPercent(percent: Float)
+    fun setDeckBPitchPercent(percent: Float)
+    fun togglePflA()
+    fun togglePflB()
+    fun swapDecks()
     fun toggleHamsterMode()
     fun toggleSplitCue()
 }
@@ -236,6 +307,21 @@ object NoOpDjAudioController : DjAudioController {
     override fun removeQueueItem(index: Int) {}
     override fun toggleLowKillA() {}
     override fun toggleLowKillB() {}
+    override fun toggleMidKillA() {}
+    override fun toggleHiKillA() {}
+    override fun toggleMidKillB() {}
+    override fun toggleHiKillB() {}
+    override fun setDeckAVolume(volume: Float) {}
+    override fun setDeckBVolume(volume: Float) {}
+    override fun setDeckATrim(trim: Float) {}
+    override fun setDeckBTrim(trim: Float) {}
+    override fun toggleKeyLockA() {}
+    override fun toggleKeyLockB() {}
+    override fun setDeckAPitchPercent(percent: Float) {}
+    override fun setDeckBPitchPercent(percent: Float) {}
+    override fun togglePflA() {}
+    override fun togglePflB() {}
+    override fun swapDecks() {}
     override fun toggleHamsterMode() {}
     override fun toggleSplitCue() {}
 }
