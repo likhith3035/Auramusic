@@ -30,7 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +62,8 @@ fun AuraNeuralDjSheet(
     modifier: Modifier = Modifier,
 ) {
     if (currentSong == null) return
+
+    var showLiveDjDecks by remember { mutableStateOf(false) }
 
     val currentProfile = remember(currentSong.videoId) {
         AuraNeuralDjEngine.analyzeSong(currentSong)
@@ -188,6 +193,24 @@ fun AuraNeuralDjSheet(
                 }
             }
 
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { showLiveDjDecks = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Rounded.DiscFull, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "LAUNCH DUAL-DECK CONSOLE",
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+
             Spacer(Modifier.height(18.dp))
 
             Text(
@@ -290,6 +313,17 @@ fun AuraNeuralDjSheet(
                 }
             }
         }
+    }
+
+    if (showLiveDjDecks) {
+        com.music.bitchord.ui.player.DjDecksSheet(
+            visible = showLiveDjDecks,
+            hazeState = remember { dev.chrisbanes.haze.HazeState() },
+            onClose = {
+                showLiveDjDecks = false
+                com.music.bitchord.data.dj.DjBridge.current.exitDjMode()
+            },
+        )
     }
 }
 

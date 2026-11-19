@@ -530,11 +530,30 @@ class PlaybackService : MediaLibraryService() {
     private val smartFocusManager by lazy { SmartFocusManager() }
     private var sleepTimerVolumeMultiplier: Float = 1.0f
     private var volumeAnimator: android.animation.ValueAnimator? = null
+    private var djAudioEngine: com.music.bitchord.playback.dj.DjAudioEngine? = null
+
+    internal fun getActivePlayer(): ExoPlayer? = player
+    internal fun getSparePlayer(): ExoPlayer? = spare
+
+    internal val currentVolumeMultiplier: Float
+        get() = sleepTimerVolumeMultiplier * smartFocusManager.duckMultiplier * (if (AppSettings.musicDimmed.value) 0.20f else 1.0f)
+
+    internal fun adoptPlayerForDj(outgoing: ExoPlayer, incoming: ExoPlayer) {
+        adoptPlayer(outgoing, incoming)
+    }
 
     private fun updateActivePlayerVolume(animated: Boolean = true) {
         val duck = smartFocusManager.duckMultiplier
         val dim = if (AppSettings.musicDimmed.value) 0.20f else 1.0f
         val targetMult = sleepTimerVolumeMultiplier * duck * dim
+
+        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+            volumeAnimator?.cancel()
+            volumeAnimator = null
+            djAudioEngine?.applyVolumes()
+            return
+        }
+
         val currentVolume = player?.volume ?: 1.0f
 
         if (!animated || kotlin.math.abs(currentVolume - targetMult) < 0.01f) {
@@ -1800,6 +1819,7 @@ class PlaybackService : MediaLibraryService() {
         observeScrobbling()
         observeDiscord()
         watchSleepTimer()
+        djAudioEngine = com.music.bitchord.playback.dj.DjAudioEngine(this, scope).apply { attach() }
         val restored = if (PartyPersonalQueueStash.hasStash()) {
             val stashed = PartyPersonalQueueStash.load()
             PartyPersonalQueueStash.clear()
@@ -6856,6 +6876,8 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.cancel()
+        djAudioEngine?.exitDjMode()
+        djAudioEngine = null
         crossfade?.release()
         crossfade = null
         mediaSession?.release()

@@ -84,7 +84,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.DiscFull
 import androidx.compose.material.icons.rounded.Close
+import com.music.bitchord.data.dj.DjBridge
+import com.music.bitchord.data.dj.DjSessionState
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Icon
@@ -856,6 +859,7 @@ fun NowPlayingScreen(
     var showLyricsProviders by remember { mutableStateOf(false) }
     var showAddSongs by remember { mutableStateOf(false) }
     var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showDjDecks by remember { mutableStateOf(false) }
     val sleepTimerStatus by SmartSleepTimer.status.collectAsStateWithLifecycle()
     val sleepTimerMode by SmartSleepTimer.mode.collectAsStateWithLifecycle()
     val sleepTimerRemainingSongs by SmartSleepTimer.remainingSongs.collectAsStateWithLifecycle()
@@ -1161,6 +1165,10 @@ fun NowPlayingScreen(
     PlayerBackHandler(enabled = showLyricsProviders) { showLyricsProviders = false }
     PlayerBackHandler(enabled = showAddSongs) { showAddSongs = false }
     PlayerBackHandler(enabled = showSleepTimerSheet) { showSleepTimerSheet = false }
+    PlayerBackHandler(enabled = showDjDecks) {
+        showDjDecks = false
+        DjBridge.current.exitDjMode()
+    }
 
     PlayerBackHandler(enabled = showListenTogetherMembers) { showListenTogetherMembers = false }
 
@@ -1789,6 +1797,16 @@ fun NowPlayingScreen(
             SmartSleepTimerSheet(
                 hazeState = playerHaze,
                 onDismiss = { showSleepTimerSheet = false },
+            )
+        }
+        if (showDjDecks) {
+            DjDecksSheet(
+                visible = showDjDecks,
+                hazeState = playerHaze,
+                onClose = {
+                    showDjDecks = false
+                    DjBridge.current.exitDjMode()
+                },
             )
         }
         if (showAudioPipeline) {
@@ -3898,6 +3916,14 @@ fun NowPlayingScreen(
                                 contentDescription = stringResource(Res.string.sleep_timer),
                                 onClick = { showSleepTimerSheet = true },
                                 active = sleepTimerStatus != SleepTimerStatus.OFF,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            val isDjConsoleActive by DjSessionState.isDjActive.collectAsStateWithLifecycle()
+                            CircleGlyph(
+                                icon = Icons.Rounded.DiscFull,
+                                contentDescription = "Dual-Deck DJ Mode",
+                                onClick = { showDjDecks = true },
+                                active = isDjConsoleActive || showDjDecks,
                             )
                             Spacer(Modifier.width(8.dp))
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&

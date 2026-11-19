@@ -761,6 +761,7 @@ class CrossfadeController(
         // same item, so the transition window and mix flag it would have
         // armed still describe the next track correctly once the swap lets go.
         if (versionSwapActive()) return
+        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) return
         // Not while listening together. A blend starts the next track early, by
         // a length this device decides for itself from its own copy of the
         // audio — so in a party every member would begin the next song at a
