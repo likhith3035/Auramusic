@@ -4,6 +4,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.music.bitchord.data.ai.AuraNeuralDjEngine
+import com.music.bitchord.data.dj.CrossfaderCurve
 import com.music.bitchord.data.dj.DjAudioController
 import com.music.bitchord.data.dj.DjBridge
 import com.music.bitchord.data.dj.DjSessionState
@@ -23,7 +24,8 @@ import kotlin.math.sin
 /**
  * Android playback implementation of the Dual-Deck DJ Engine.
  * Blends real audio between the primary session player (Deck A) and the
- * standby ExoPlayer (Deck B) using equal-power trigonometry.
+ * standby ExoPlayer (Deck B) using equal-power trigonometry and cut curves,
+ * real 24dB state-variable DSP filters, beat looping, hot cues, and pitch bending.
  */
 class DjAudioEngine(
     private val service: PlaybackService,
@@ -32,6 +34,16 @@ class DjAudioEngine(
 
     private var pollJob: Job? = null
     private var autoDropJob: Job? = null
+    private var nudgeJobA: Job? = null
+    private var nudgeJobB: Job? = null
+
+    // Beat loop boundaries (startMs, endMs)
+    private var loopA: Pair<Long, Long>? = null
+    private var loopB: Pair<Long, Long>? = null
+
+    // Hot cues
+    private val hotCuesA = mutableListOf<Long?>(null, null, null)
+    private val hotCuesB = mutableListOf<Long?>(null, null, null)
 
     private val player: ExoPlayer?
         get() = service.getActivePlayer()
@@ -46,12 +58,28 @@ class DjAudioEngine(
     override fun startDjMode() {
         DjSessionState.updateIsActive(true)
         DjSessionState.updateCrossfader(0.0f)
+        DjSessionState.updateCrossfaderCurve(CrossfaderCurve.SMOOTH)
         DjSessionState.updateIsAutoDropping(false)
         DjSessionState.updateLowKillA(false)
         DjSessionState.updateLowKillB(false)
         DjSessionState.updateDeckASpeed(1.0f)
         DjSessionState.updateDeckBSpeed(1.0f)
+        DjSessionState.updateDeckAFilter(0.0f)
+        DjSessionState.updateDeckBFilter(0.0f)
+        DjSessionState.updateDeckALoopBeats(null)
+        DjSessionState.updateDeckBLoopBeats(null)
         DjSessionState.updateIsBeatSynced(false)
+
+        loopA = null
+        loopB = null
+        hotCuesA.fill(null)
+        hotCuesB.fill(null)
+        DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+        DjSessionState.updateDeckBHotCues(hotCuesB.toList())
+
+        // Reset DSP filters
+        service.getActiveFilter().open()
+        service.getSpareFilter().open()
 
         val active = player ?: return
         val currentItem = active.currentMediaItem
@@ -99,6 +127,10 @@ class DjAudioEngine(
         DjSessionState.updateDeckBPlaying(false)
         DjSessionState.updateDeckBPosition(0L)
         DjSessionState.updateDeckBDuration(0L)
+        loopB = null
+        DjSessionState.updateDeckBLoopBeats(null)
+        hotCuesB.fill(null)
+        DjSessionState.updateDeckBHotCues(hotCuesB.toList())
 
         val profileB = AuraNeuralDjEngine.analyzeSong(songB)
         DjSessionState.updateDeckBBpm(profileB.bpm)
@@ -117,19 +149,33 @@ class DjAudioEngine(
             while (isActive && DjSessionState.isDjActive.value) {
                 val p = player
                 if (p != null) {
-                    DjSessionState.updateDeckAPosition(p.currentPosition)
+                    val currentA = p.currentPosition
+                    DjSessionState.updateDeckAPosition(currentA)
                     DjSessionState.updateDeckADuration(p.duration)
                     DjSessionState.updateDeckAPlaying(p.isPlaying)
+
+                    // Check Beat Loop for Deck A
+                    val activeLoopA = loopA
+                    if (activeLoopA != null && p.isPlaying && currentA >= activeLoopA.second) {
+                        p.seekTo(activeLoopA.first)
+                    }
                 }
 
                 val s = spare
                 if (s != null) {
-                    DjSessionState.updateDeckBPosition(s.currentPosition)
+                    val currentB = s.currentPosition
+                    DjSessionState.updateDeckBPosition(currentB)
                     DjSessionState.updateDeckBDuration(s.duration)
                     DjSessionState.updateDeckBPlaying(s.isPlaying)
+
+                    // Check Beat Loop for Deck B
+                    val activeLoopB = loopB
+                    if (activeLoopB != null && s.isPlaying && currentB >= activeLoopB.second) {
+                        s.seekTo(activeLoopB.first)
+                    }
                 }
 
-                delay(100L)
+                delay(50L) // 50ms polling for responsive looping & position tracking
             }
         }
     }
@@ -138,12 +184,17 @@ class DjAudioEngine(
         val clamped = fraction.coerceIn(0f, 1f)
         DjSessionState.updateCrossfader(clamped)
 
-        // If Deck B volume starts rising and Deck B is not playing, start Deck B
+        // If Deck B volume starts rising and Deck B is not playing, auto-start Deck B
         val standby = spare
         if (standby != null && clamped > 0.04f && !standby.isPlaying && !standby.playWhenReady) {
             standby.playWhenReady = true
         }
 
+        applyVolumes()
+    }
+
+    override fun setCrossfaderCurve(curve: CrossfaderCurve) {
+        DjSessionState.updateCrossfaderCurve(curve)
         applyVolumes()
     }
 
@@ -153,16 +204,180 @@ class DjAudioEngine(
         val fraction = DjSessionState.crossfader.value
         val master = service.currentVolumeMultiplier
 
-        // Equal-power crossfade curve: cos(x * pi/2) and sin(x * pi/2)
-        val angle = fraction * (PI / 2.0).toFloat()
-        val gainA = cos(angle)
-        val gainB = sin(angle)
+        val gainA: Float
+        val gainB: Float
+
+        when (DjSessionState.crossfaderCurve.value) {
+            CrossfaderCurve.SMOOTH -> {
+                // Equal-power crossfade curve: cos(x * pi/2) and sin(x * pi/2)
+                val angle = fraction * (PI / 2.0).toFloat()
+                gainA = cos(angle)
+                gainB = sin(angle)
+            }
+            CrossfaderCurve.CUT -> {
+                // Scratch curve: full power on either deck as soon as moved 5% from extreme
+                gainA = if (fraction >= 0.95f) 0.0f else 1.0f
+                gainB = if (fraction <= 0.05f) 0.0f else 1.0f
+            }
+        }
 
         val killA = if (DjSessionState.lowKillA.value) 0.30f else 1.0f
         val killB = if (DjSessionState.lowKillB.value) 0.30f else 1.0f
 
         p?.volume = (gainA * killA * master).coerceIn(0f, 1f)
         s?.volume = (gainB * killB * master).coerceIn(0f, 1f)
+    }
+
+    override fun scrubDeckA(deltaMs: Long) {
+        val p = player ?: return
+        val newPos = (p.currentPosition + deltaMs).coerceIn(0L, p.duration.coerceAtLeast(0L))
+        p.seekTo(newPos)
+        DjSessionState.updateDeckAPosition(newPos)
+    }
+
+    override fun scrubDeckB(deltaMs: Long) {
+        val s = spare ?: return
+        val newPos = (s.currentPosition + deltaMs).coerceIn(0L, s.duration.coerceAtLeast(0L))
+        s.seekTo(newPos)
+        DjSessionState.updateDeckBPosition(newPos)
+    }
+
+    override fun nudgePitchA(positive: Boolean) {
+        val p = player ?: return
+        nudgeJobA?.cancel()
+        val baseSpeed = DjSessionState.deckASpeed.value
+        val bump = if (positive) 1.04f else 0.96f
+        p.playbackParameters = PlaybackParameters(baseSpeed * bump)
+
+        nudgeJobA = scope.launch(Dispatchers.Main) {
+            delay(320L)
+            p.playbackParameters = PlaybackParameters(baseSpeed)
+        }
+    }
+
+    override fun nudgePitchB(positive: Boolean) {
+        val s = spare ?: return
+        nudgeJobB?.cancel()
+        val baseSpeed = DjSessionState.deckBSpeed.value
+        val bump = if (positive) 1.04f else 0.96f
+        s.playbackParameters = PlaybackParameters(baseSpeed * bump)
+
+        nudgeJobB = scope.launch(Dispatchers.Main) {
+            delay(320L)
+            s.playbackParameters = PlaybackParameters(baseSpeed)
+        }
+    }
+
+    override fun setDeckAFilter(amount: Float) {
+        val clamped = amount.coerceIn(-1.0f, 1.0f)
+        DjSessionState.updateDeckAFilter(clamped)
+        val filter = service.getActiveFilter()
+
+        if (clamped < -0.02f) {
+            // Low-Pass filter sweep (turning left): sweeps cutoff from 20000Hz down to 250Hz
+            val factor = kotlin.math.abs(clamped)
+            val lowPass = (20000f * kotlin.math.exp(-factor * 4.38f)).coerceIn(250f, 20000f)
+            filter.setCutoffs(lowPassHz = lowPass, highPassHz = 20f)
+        } else if (clamped > 0.02f) {
+            // High-Pass filter sweep (turning right): sweeps cutoff from 20Hz up to 4500Hz
+            val highPass = (20f + 4480f * (clamped * clamped)).coerceIn(20f, 4500f)
+            filter.setCutoffs(lowPassHz = 20000f, highPassHz = highPass)
+        } else {
+            filter.open()
+        }
+    }
+
+    override fun setDeckBFilter(amount: Float) {
+        val clamped = amount.coerceIn(-1.0f, 1.0f)
+        DjSessionState.updateDeckBFilter(clamped)
+        val filter = service.getSpareFilter()
+
+        if (clamped < -0.02f) {
+            val factor = kotlin.math.abs(clamped)
+            val lowPass = (20000f * kotlin.math.exp(-factor * 4.38f)).coerceIn(250f, 20000f)
+            filter.setCutoffs(lowPassHz = lowPass, highPassHz = 20f)
+        } else if (clamped > 0.02f) {
+            val highPass = (20f + 4480f * (clamped * clamped)).coerceIn(20f, 4500f)
+            filter.setCutoffs(lowPassHz = 20000f, highPassHz = highPass)
+        } else {
+            filter.open()
+        }
+    }
+
+    override fun toggleDeckALoop(beats: Int) {
+        val p = player ?: return
+        if (DjSessionState.deckALoopBeats.value == beats) {
+            // Toggle off
+            loopA = null
+            DjSessionState.updateDeckALoopBeats(null)
+        } else {
+            val bpm = DjSessionState.deckABpm.value.coerceAtLeast(60)
+            val beatMs = (60_000.0 / bpm).toLong()
+            val loopDuration = beats * beatMs
+            val start = p.currentPosition
+            loopA = Pair(start, start + loopDuration)
+            DjSessionState.updateDeckALoopBeats(beats)
+        }
+    }
+
+    override fun toggleDeckBLoop(beats: Int) {
+        val s = spare ?: return
+        if (DjSessionState.deckBLoopBeats.value == beats) {
+            // Toggle off
+            loopB = null
+            DjSessionState.updateDeckBLoopBeats(null)
+        } else {
+            val bpm = DjSessionState.deckBBpm.value.coerceAtLeast(60)
+            val beatMs = (60_000.0 / bpm).toLong()
+            val loopDuration = beats * beatMs
+            val start = s.currentPosition
+            loopB = Pair(start, start + loopDuration)
+            DjSessionState.updateDeckBLoopBeats(beats)
+        }
+    }
+
+    override fun triggerHotCueA(index: Int) {
+        if (index !in 0..2) return
+        val p = player ?: return
+        val existing = hotCuesA[index]
+        if (existing == null) {
+            // Set hot cue at current position
+            val cur = p.currentPosition
+            hotCuesA[index] = cur
+            DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+        } else {
+            // Jump to cue and play
+            p.seekTo(existing)
+            if (!p.isPlaying) p.play()
+            DjSessionState.updateDeckAPlaying(true)
+        }
+    }
+
+    override fun clearHotCueA(index: Int) {
+        if (index !in 0..2) return
+        hotCuesA[index] = null
+        DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+    }
+
+    override fun triggerHotCueB(index: Int) {
+        if (index !in 0..2) return
+        val s = spare ?: return
+        val existing = hotCuesB[index]
+        if (existing == null) {
+            val cur = s.currentPosition
+            hotCuesB[index] = cur
+            DjSessionState.updateDeckBHotCues(hotCuesB.toList())
+        } else {
+            s.seekTo(existing)
+            if (!s.isPlaying) s.play()
+            DjSessionState.updateDeckBPlaying(true)
+        }
+    }
+
+    override fun clearHotCueB(index: Int) {
+        if (index !in 0..2) return
+        hotCuesB[index] = null
+        DjSessionState.updateDeckBHotCues(hotCuesB.toList())
     }
 
     override fun toggleDeckAPlayPause() {
@@ -252,7 +467,21 @@ class DjAudioEngine(
         DjSessionState.updateLowKillB(false)
         DjSessionState.updateDeckASpeed(1.0f)
         DjSessionState.updateDeckBSpeed(1.0f)
+        DjSessionState.updateDeckAFilter(0.0f)
+        DjSessionState.updateDeckBFilter(0.0f)
+        DjSessionState.updateDeckALoopBeats(null)
+        DjSessionState.updateDeckBLoopBeats(null)
         DjSessionState.updateIsBeatSynced(false)
+
+        loopA = null
+        loopB = null
+        hotCuesA.fill(null)
+        hotCuesB.fill(null)
+        DjSessionState.updateDeckAHotCues(hotCuesA.toList())
+        DjSessionState.updateDeckBHotCues(hotCuesB.toList())
+
+        service.getActiveFilter().open()
+        service.getSpareFilter().open()
 
         // Update Deck A with newly current song
         val newCurrentSong = incoming.currentMediaItem?.toSong()
@@ -301,8 +530,20 @@ class DjAudioEngine(
     override fun exitDjMode() {
         autoDropJob?.cancel()
         pollJob?.cancel()
+        nudgeJobA?.cancel()
+        nudgeJobB?.cancel()
+        loopA = null
+        loopB = null
+
         DjSessionState.updateIsActive(false)
         DjSessionState.updateIsAutoDropping(false)
+        DjSessionState.updateDeckALoopBeats(null)
+        DjSessionState.updateDeckBLoopBeats(null)
+        DjSessionState.updateDeckAFilter(0.0f)
+        DjSessionState.updateDeckBFilter(0.0f)
+
+        service.getActiveFilter().open()
+        service.getSpareFilter().open()
 
         val p = player
         val s = spare

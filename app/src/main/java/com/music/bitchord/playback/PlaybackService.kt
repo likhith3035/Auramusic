@@ -534,6 +534,8 @@ class PlaybackService : MediaLibraryService() {
 
     internal fun getActivePlayer(): ExoPlayer? = player
     internal fun getSparePlayer(): ExoPlayer? = spare
+    internal fun getActiveFilter(): TransitionFilterProcessor = activeFilter
+    internal fun getSpareFilter(): TransitionFilterProcessor = spareFilter
 
     internal val currentVolumeMultiplier: Float
         get() = sleepTimerVolumeMultiplier * smartFocusManager.duckMultiplier * (if (AppSettings.musicDimmed.value) 0.20f else 1.0f)

@@ -9,8 +9,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -80,6 +82,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.ai.AuraNeuralDjEngine
+import com.music.bitchord.data.dj.CrossfaderCurve
 import com.music.bitchord.data.dj.DjBridge
 import com.music.bitchord.data.dj.DjSessionState
 import com.music.bitchord.data.model.Song
@@ -100,12 +103,11 @@ import kotlin.math.sin
 private val DeckAThemeColor = Color(0xFF00F5D4) // Neon Mint / Cyan
 private val DeckBThemeColor = Color(0xFFFFB703) // Neon Amber / Warm Gold
 private val MixerSurfaceColor = Color(0xFF0C0F17)
-private val CardBorderColor = Color.White.copy(alpha = 0.12f)
 
 /**
- * Fullscreen modal displaying the Dual-Deck DJ Console in AuraMusic.
- * Features Deck A, Deck B, equal-power horizontal crossfader,
- * tempo-preserving BPM Sync, auto-drop transition, cue points, and vinyl turntables.
+ * Fullscreen modal displaying the Pro Dual-Deck DJ Console in AuraMusic.
+ * Features Deck A, Deck B, equal-power / scratch crossfader, touch vinyl scratching,
+ * tempo-preserving BPM Sync, 24dB DSP Filter sweeps, beat loops, hot cues, and automated transitions.
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -129,6 +131,7 @@ fun DjDecksSheet(
 
     val isDjActive by DjSessionState.isDjActive.collectAsStateWithLifecycle()
     val crossfader by DjSessionState.crossfader.collectAsStateWithLifecycle()
+    val crossfaderCurve by DjSessionState.crossfaderCurve.collectAsStateWithLifecycle()
     val deckASong by DjSessionState.deckASong.collectAsStateWithLifecycle()
     val deckBSong by DjSessionState.deckBSong.collectAsStateWithLifecycle()
     val deckAPlaying by DjSessionState.deckAPlaying.collectAsStateWithLifecycle()
@@ -143,6 +146,12 @@ fun DjDecksSheet(
     val deckBKey by DjSessionState.deckBKey.collectAsStateWithLifecycle()
     val deckASpeed by DjSessionState.deckASpeed.collectAsStateWithLifecycle()
     val deckBSpeed by DjSessionState.deckBSpeed.collectAsStateWithLifecycle()
+    val deckAFilter by DjSessionState.deckAFilter.collectAsStateWithLifecycle()
+    val deckBFilter by DjSessionState.deckBFilter.collectAsStateWithLifecycle()
+    val deckALoopBeats by DjSessionState.deckALoopBeats.collectAsStateWithLifecycle()
+    val deckBLoopBeats by DjSessionState.deckBLoopBeats.collectAsStateWithLifecycle()
+    val deckAHotCues by DjSessionState.deckAHotCues.collectAsStateWithLifecycle()
+    val deckBHotCues by DjSessionState.deckBHotCues.collectAsStateWithLifecycle()
     val isBeatSynced by DjSessionState.isBeatSynced.collectAsStateWithLifecycle()
     val isAutoDropping by DjSessionState.isAutoDropping.collectAsStateWithLifecycle()
     val lowKillA by DjSessionState.lowKillA.collectAsStateWithLifecycle()
@@ -153,20 +162,20 @@ fun DjDecksSheet(
         modifier = modifier
             .fillMaxSize()
             .containSheetGestures()
-            .background(Color.Black.copy(alpha = 0.90f))
+            .background(Color.Black.copy(alpha = 0.92f))
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            // Header
+            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
+                    .padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -179,9 +188,9 @@ fun DjDecksSheet(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "AURA DUAL-DECK DJ",
+                        text = "AURA PRO DUAL-DECK DJ",
                         color = Color.White,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.2.sp,
@@ -193,13 +202,13 @@ fun DjDecksSheet(
                         DjBridge.current.exitDjMode()
                         onClose()
                     },
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(34.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close DJ Console",
                         tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -211,9 +220,8 @@ fun DjDecksSheet(
                     // Landscape / Tablet layout: Deck A on left, Mixer center, Deck B on right
                     Row(
                         modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Deck A
                         DeckCard(
                             deckName = "DECK A",
                             themeColor = DeckAThemeColor,
@@ -224,6 +232,9 @@ fun DjDecksSheet(
                             bpm = deckABpm,
                             musicalKey = deckAKey,
                             speed = deckASpeed,
+                            filterAmount = deckAFilter,
+                            loopBeats = deckALoopBeats,
+                            hotCues = deckAHotCues,
                             lowKill = lowKillA,
                             onPlayPause = { DjBridge.current.toggleDeckAPlayPause() },
                             onCue = {
@@ -232,19 +243,29 @@ fun DjDecksSheet(
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
+                            onPitchNudge = { pos -> DjBridge.current.nudgePitchA(pos) },
+                            onFilterChange = { DjBridge.current.setDeckAFilter(it) },
+                            onToggleLoop = { DjBridge.current.toggleDeckALoop(it) },
+                            onTriggerHotCue = { DjBridge.current.triggerHotCueA(it) },
+                            onClearHotCue = { DjBridge.current.clearHotCueA(it) },
+                            onScrub = { DjBridge.current.scrubDeckA(it) },
                             onChangeSong = null,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
 
-                        // Center Mixer
                         MixerConsole(
                             crossfader = crossfader,
+                            curve = crossfaderCurve,
                             isBeatSynced = isBeatSynced,
                             isAutoDropping = isAutoDropping,
                             deckABpm = deckABpm,
                             deckBBpm = deckBBpm,
                             onCrossfaderChange = { fraction ->
                                 DjBridge.current.setCrossfader(fraction)
+                            },
+                            onCurveToggle = {
+                                val next = if (crossfaderCurve == CrossfaderCurve.SMOOTH) CrossfaderCurve.CUT else CrossfaderCurve.SMOOTH
+                                DjBridge.current.setCrossfaderCurve(next)
                             },
                             onSync = {
                                 haptics.play(Haptic.Select)
@@ -258,10 +279,9 @@ fun DjDecksSheet(
                                 haptics.play(Haptic.Select)
                                 DjBridge.current.commitTransition()
                             },
-                            modifier = Modifier.width(200.dp).fillMaxHeight(),
+                            modifier = Modifier.width(220.dp).fillMaxHeight(),
                         )
 
-                        // Deck B
                         DeckCard(
                             deckName = "DECK B",
                             themeColor = DeckBThemeColor,
@@ -272,6 +292,9 @@ fun DjDecksSheet(
                             bpm = deckBBpm,
                             musicalKey = deckBKey,
                             speed = deckBSpeed,
+                            filterAmount = deckBFilter,
+                            loopBeats = deckBLoopBeats,
+                            hotCues = deckBHotCues,
                             lowKill = lowKillB,
                             onPlayPause = { DjBridge.current.toggleDeckBPlayPause() },
                             onCue = {
@@ -280,6 +303,12 @@ fun DjDecksSheet(
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
+                            onPitchNudge = { pos -> DjBridge.current.nudgePitchB(pos) },
+                            onFilterChange = { DjBridge.current.setDeckBFilter(it) },
+                            onToggleLoop = { DjBridge.current.toggleDeckBLoop(it) },
+                            onTriggerHotCue = { DjBridge.current.triggerHotCueB(it) },
+                            onClearHotCue = { DjBridge.current.clearHotCueB(it) },
+                            onScrub = { DjBridge.current.scrubDeckB(it) },
                             onChangeSong = { showTrackPicker = true },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
@@ -288,9 +317,8 @@ fun DjDecksSheet(
                     // Portrait Phone layout: Deck A (top), Mixer (middle), Deck B (bottom)
                     Column(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        // Deck A Card
                         DeckCard(
                             deckName = "DECK A",
                             themeColor = DeckAThemeColor,
@@ -301,6 +329,9 @@ fun DjDecksSheet(
                             bpm = deckABpm,
                             musicalKey = deckAKey,
                             speed = deckASpeed,
+                            filterAmount = deckAFilter,
+                            loopBeats = deckALoopBeats,
+                            hotCues = deckAHotCues,
                             lowKill = lowKillA,
                             onPlayPause = { DjBridge.current.toggleDeckAPlayPause() },
                             onCue = {
@@ -309,19 +340,29 @@ fun DjDecksSheet(
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillA() },
                             onSpeedChange = { DjBridge.current.setDeckASpeed(it) },
+                            onPitchNudge = { pos -> DjBridge.current.nudgePitchA(pos) },
+                            onFilterChange = { DjBridge.current.setDeckAFilter(it) },
+                            onToggleLoop = { DjBridge.current.toggleDeckALoop(it) },
+                            onTriggerHotCue = { DjBridge.current.triggerHotCueA(it) },
+                            onClearHotCue = { DjBridge.current.clearHotCueA(it) },
+                            onScrub = { DjBridge.current.scrubDeckA(it) },
                             onChangeSong = null,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
 
-                        // Center Mixer
                         MixerConsole(
                             crossfader = crossfader,
+                            curve = crossfaderCurve,
                             isBeatSynced = isBeatSynced,
                             isAutoDropping = isAutoDropping,
                             deckABpm = deckABpm,
                             deckBBpm = deckBBpm,
                             onCrossfaderChange = { fraction ->
                                 DjBridge.current.setCrossfader(fraction)
+                            },
+                            onCurveToggle = {
+                                val next = if (crossfaderCurve == CrossfaderCurve.SMOOTH) CrossfaderCurve.CUT else CrossfaderCurve.SMOOTH
+                                DjBridge.current.setCrossfaderCurve(next)
                             },
                             onSync = {
                                 haptics.play(Haptic.Select)
@@ -338,7 +379,6 @@ fun DjDecksSheet(
                             modifier = Modifier.fillMaxWidth(),
                         )
 
-                        // Deck B Card
                         DeckCard(
                             deckName = "DECK B",
                             themeColor = DeckBThemeColor,
@@ -349,6 +389,9 @@ fun DjDecksSheet(
                             bpm = deckBBpm,
                             musicalKey = deckBKey,
                             speed = deckBSpeed,
+                            filterAmount = deckBFilter,
+                            loopBeats = deckBLoopBeats,
+                            hotCues = deckBHotCues,
                             lowKill = lowKillB,
                             onPlayPause = { DjBridge.current.toggleDeckBPlayPause() },
                             onCue = {
@@ -357,6 +400,12 @@ fun DjDecksSheet(
                             },
                             onToggleLowKill = { DjBridge.current.toggleLowKillB() },
                             onSpeedChange = { DjBridge.current.setDeckBSpeed(it) },
+                            onPitchNudge = { pos -> DjBridge.current.nudgePitchB(pos) },
+                            onFilterChange = { DjBridge.current.setDeckBFilter(it) },
+                            onToggleLoop = { DjBridge.current.toggleDeckBLoop(it) },
+                            onTriggerHotCue = { DjBridge.current.triggerHotCueB(it) },
+                            onClearHotCue = { DjBridge.current.clearHotCueB(it) },
+                            onScrub = { DjBridge.current.scrubDeckB(it) },
                             onChangeSong = { showTrackPicker = true },
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
@@ -380,9 +429,10 @@ fun DjDecksSheet(
 }
 
 /**
- * Deck console card holding the spinning turntable, BPM/Key pills, track metadata,
- * tactile CUE / PLAY controls, and tempo adjustment.
+ * Deck console card holding the touch-scratch turntable, BPM/Key pills, track metadata,
+ * tactile CUE / PLAY controls, filter sweeps, beat loops, hot cues, and pitch nudge buttons.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DeckCard(
     deckName: String,
@@ -394,14 +444,25 @@ private fun DeckCard(
     bpm: Int,
     musicalKey: String,
     speed: Float,
+    filterAmount: Float,
+    loopBeats: Int?,
+    hotCues: List<Long?>,
     lowKill: Boolean,
     onPlayPause: () -> Unit,
     onCue: () -> Unit,
     onToggleLowKill: () -> Unit,
     onSpeedChange: (Float) -> Unit,
+    onPitchNudge: (Boolean) -> Unit,
+    onFilterChange: (Float) -> Unit,
+    onToggleLoop: (Int) -> Unit,
+    onTriggerHotCue: (Int) -> Unit,
+    onClearHotCue: (Int) -> Unit,
+    onScrub: (Long) -> Unit,
     onChangeSong: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberHaptics()
+
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MixerSurfaceColor,
@@ -411,7 +472,7 @@ private fun DeckCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(8.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             // Deck Header
@@ -437,7 +498,6 @@ private fun DeckCard(
                         )
                     }
                     Spacer(Modifier.width(6.dp))
-                    // BPM Badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -453,7 +513,6 @@ private fun DeckCard(
                         )
                     }
                     Spacer(Modifier.width(6.dp))
-                    // Musical Key Badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -476,7 +535,7 @@ private fun DeckCard(
                             .clip(RoundedCornerShape(6.dp))
                             .background(themeColor.copy(alpha = 0.15f))
                             .clickable(onClick = onChangeSong)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
                             text = "CHANGE",
@@ -492,38 +551,38 @@ private fun DeckCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Vinyl Turntable
+                // Vinyl Turntable with interactive touch-scratch gesture
                 VinylTurntable(
                     thumbnailUrl = song?.thumbnailUrl,
                     isPlaying = isPlaying,
                     themeColor = themeColor,
-                    modifier = Modifier.size(86.dp),
+                    onScrub = onScrub,
+                    modifier = Modifier.size(76.dp),
                 )
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = song?.title ?: "No track loaded",
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(1.dp))
                     Text(
                         text = song?.artist ?: "Unknown artist",
                         color = Color.White.copy(alpha = 0.65f),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(6.dp))
-                    // Time indicator
+                    Spacer(Modifier.height(4.dp))
                     val posSec = positionMs / 1000L
                     val durSec = durationMs / 1000L
                     Text(
@@ -534,9 +593,124 @@ private fun DeckCard(
                         fontWeight = FontWeight.Medium,
                     )
                 }
+
+                // Filter & Pitch Nudge Vertical Bar
+                Column(horizontalAlignment = Alignment.End) {
+                    // Filter readout
+                    val filterLabel = when {
+                        filterAmount < -0.05f -> "LPF ${kotlin.math.abs((filterAmount * 100).roundToInt())}%"
+                        filterAmount > 0.05f -> "HPF ${(filterAmount * 100).roundToInt()}%"
+                        else -> "FLTR OFF"
+                    }
+                    Text(
+                        text = filterLabel,
+                        color = if (kotlin.math.abs(filterAmount) > 0.05f) themeColor else Color.White.copy(alpha = 0.45f),
+                        fontSize = 9.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    // Nudge buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    haptics.play(Haptic.Tick)
+                                    onPitchNudge(false)
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Text("-", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .clickable {
+                                    haptics.play(Haptic.Tick)
+                                    onPitchNudge(true)
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Text("+", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
-            // Transport Controls: CUE, PLAY/PAUSE, LOW KILL, TEMPO
+            // Pro Rows: Loops & Hot Cues
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Beat Loops
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(2, 4, 8).forEach { beats ->
+                        val active = loopBeats == beats
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(if (active) themeColor else Color.White.copy(alpha = 0.07f))
+                                .clickable {
+                                    haptics.play(Haptic.Select)
+                                    onToggleLoop(beats)
+                                }
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = "${beats}B",
+                                color = if (active) Color.Black else Color.White.copy(alpha = 0.75f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                }
+
+                // Hot Cues (1, 2, 3)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (i in 0..2) {
+                        val cuePos = hotCues.getOrNull(i)
+                        val isSet = cuePos != null
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(if (isSet) themeColor.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f))
+                                .border(1.dp, if (isSet) themeColor else Color.White.copy(alpha = 0.15f), RoundedCornerShape(5.dp))
+                                .combinedClickable(
+                                    onClick = {
+                                        haptics.play(Haptic.Select)
+                                        onTriggerHotCue(i)
+                                    },
+                                    onLongClick = {
+                                        haptics.play(Haptic.Tick)
+                                        onClearHotCue(i)
+                                    },
+                                )
+                                .padding(horizontal = 7.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = if (isSet) {
+                                    val sec = (cuePos!! / 1000L)
+                                    String.format("%d:%02d", sec / 60, sec % 60)
+                                } else {
+                                    "H${i + 1}"
+                                },
+                                color = if (isSet) themeColor else Color.White.copy(alpha = 0.5f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Transport Row: CUE, PLAY/PAUSE, LOW KILL, Filter Slider
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -549,13 +723,13 @@ private fun DeckCard(
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                         .clickable(onClick = onCue)
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "CUE",
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -564,7 +738,7 @@ private fun DeckCard(
                 // PLAY/PAUSE Button
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(themeColor)
                         .clickable(onClick = onPlayPause),
@@ -574,7 +748,7 @@ private fun DeckCard(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = Color.Black,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
 
@@ -585,7 +759,7 @@ private fun DeckCard(
                         .background(if (lowKill) Color(0xFFFF4D4D).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.06f))
                         .border(1.dp, if (lowKill) Color(0xFFFF4D4D) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                         .clickable(onClick = onToggleLowKill)
-                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -597,29 +771,43 @@ private fun DeckCard(
                     )
                 }
 
-                // Pitch Speed readout
-                Text(
-                    text = String.format("%.2fx", speed),
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
+                // Mini Filter Sweep Slider (-1.0f .. +1.0f)
+                Box(modifier = Modifier.width(90.dp)) {
+                    Slider(
+                        value = filterAmount,
+                        onValueChange = { newVal ->
+                            if (kotlin.math.abs(newVal) < 0.08f) {
+                                onFilterChange(0f)
+                            } else {
+                                onFilterChange(newVal)
+                            }
+                        },
+                        valueRange = -1.0f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = if (kotlin.math.abs(filterAmount) > 0.08f) themeColor else Color.Gray,
+                            activeTrackColor = themeColor,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.15f),
+                        ),
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Center DJ Mixer Console with the Equal-Power Crossfader, Beat SYNC, Auto-Drop, and Commit button.
+ * Center DJ Mixer Console with the Equal-Power / Cut Crossfader, Curve Selector, Beat SYNC, Auto-Drop, and Takeover.
  */
 @Composable
 private fun MixerConsole(
     crossfader: Float,
+    curve: CrossfaderCurve,
     isBeatSynced: Boolean,
     isAutoDropping: Boolean,
     deckABpm: Int,
     deckBBpm: Int,
     onCrossfaderChange: (Float) -> Unit,
+    onCurveToggle: () -> Unit,
     onSync: () -> Unit,
     onAutoDrop: () -> Unit,
     onCommit: () -> Unit,
@@ -627,10 +815,19 @@ private fun MixerConsole(
 ) {
     val haptics = rememberHaptics()
 
-    // Equal-power law calculations
-    val angle = crossfader * (PI / 2.0).toFloat()
-    val gainA = cos(angle)
-    val gainB = sin(angle)
+    val gainA: Float
+    val gainB: Float
+    when (curve) {
+        CrossfaderCurve.SMOOTH -> {
+            val angle = crossfader * (PI / 2.0).toFloat()
+            gainA = cos(angle)
+            gainB = sin(angle)
+        }
+        CrossfaderCurve.CUT -> {
+            gainA = if (crossfader >= 0.95f) 0.0f else 1.0f
+            gainB = if (crossfader <= 0.05f) 0.0f else 1.0f
+        }
+    }
     val percentA = (gainA * 100f).roundToInt()
     val percentB = (gainB * 100f).roundToInt()
 
@@ -643,30 +840,48 @@ private fun MixerConsole(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Action Buttons: SYNC, AUTO-DROP, COMMIT
+            // Action Buttons: SYNC, AUTO-DROP, COMMIT, CURVE
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // BEAT SYNC BUTTON
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(7.dp))
                         .background(if (isBeatSynced) DeckAThemeColor.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
-                        .border(1.dp, if (isBeatSynced) DeckAThemeColor else Color.White.copy(alpha = 0.20f), RoundedCornerShape(8.dp))
+                        .border(1.dp, if (isBeatSynced) DeckAThemeColor else Color.White.copy(alpha = 0.20f), RoundedCornerShape(7.dp))
                         .clickable(onClick = onSync)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (isBeatSynced) "SYNCED" else "SYNC",
                         color = if (isBeatSynced) DeckAThemeColor else Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+
+                // CURVE MODE SWITCH (SMOOTH vs CUT)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable(onClick = onCurveToggle)
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (curve == CrossfaderCurve.SMOOTH) "CRV: SMOOTH" else "CRV: CUT",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -675,7 +890,7 @@ private fun MixerConsole(
                 // AUTO-DROP BUTTON
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(7.dp))
                         .background(
                             if (isAutoDropping) {
                                 Brush.horizontalGradient(listOf(DeckAThemeColor, DeckBThemeColor))
@@ -683,15 +898,15 @@ private fun MixerConsole(
                                 Brush.horizontalGradient(listOf(Color(0xFF2E3856), Color(0xFF1E2436)))
                             },
                         )
-                        .border(1.dp, if (isAutoDropping) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
+                        .border(1.dp, if (isAutoDropping) Color.White else Color.Transparent, RoundedCornerShape(7.dp))
                         .clickable(enabled = !isAutoDropping, onClick = onAutoDrop)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (isAutoDropping) "DROPPING..." else "AUTO-DROP",
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -700,17 +915,17 @@ private fun MixerConsole(
                 // COMMIT / DROP TAKEOVER
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(7.dp))
                         .background(DeckBThemeColor.copy(alpha = 0.18f))
-                        .border(1.dp, DeckBThemeColor.copy(alpha = 0.60f), RoundedCornerShape(8.dp))
+                        .border(1.dp, DeckBThemeColor.copy(alpha = 0.60f), RoundedCornerShape(7.dp))
                         .clickable(onClick = onCommit)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "TAKEOVER",
                         color = DeckBThemeColor,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -732,7 +947,7 @@ private fun MixerConsole(
                     fontFamily = FontFamily.Monospace,
                 )
                 Text(
-                    text = "EQUAL POWER",
+                    text = if (curve == CrossfaderCurve.SMOOTH) "EQUAL POWER" else "SCRATCH CUT",
                     color = Color.White.copy(alpha = 0.45f),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
@@ -746,13 +961,13 @@ private fun MixerConsole(
                 )
             }
 
-            // Horizontal Equal-Power Crossfader Slider
+            // Horizontal Crossfader Slider with tactile detents
             var lastHapticPos by remember { mutableFloatStateOf(crossfader) }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp),
+                    .padding(horizontal = 4.dp),
             ) {
                 Slider(
                     value = crossfader,
@@ -779,19 +994,23 @@ private fun MixerConsole(
 }
 
 /**
- * Visual Turntable with realistic concentric vinyl grooves and rotating album art.
+ * Visual Turntable with realistic concentric vinyl grooves, rotating album art,
+ * and touch-scratch drag gesture support.
  */
 @Composable
 private fun VinylTurntable(
     thumbnailUrl: String?,
     isPlaying: Boolean,
     themeColor: Color,
+    onScrub: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberHaptics()
     var rotationAngle by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isPlaying) {
-        while (isActive && isPlaying) {
+    LaunchedEffect(isPlaying, isDragging) {
+        while (isActive && isPlaying && !isDragging) {
             rotationAngle = (rotationAngle + 2.4f) % 360f
             delay(16L) // ~60 FPS
         }
@@ -801,7 +1020,25 @@ private fun VinylTurntable(
         modifier = modifier
             .clip(CircleShape)
             .border(2.dp, themeColor.copy(alpha = 0.40f), CircleShape)
-            .background(Color(0xFF0F121B)),
+            .background(Color(0xFF0F121B))
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                        haptics.play(Haptic.Select)
+                    },
+                    onDragEnd = { isDragging = false },
+                    onDragCancel = { isDragging = false },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val delta = dragAmount.x
+                        rotationAngle = (rotationAngle + delta * 1.8f) % 360f
+                        val scrubDeltaMs = (delta * 40L).toLong()
+                        onScrub(scrubDeltaMs)
+                        haptics.play(Haptic.Tick)
+                    },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         // Vinyl grooves canvas
@@ -828,7 +1065,7 @@ private fun VinylTurntable(
         // Center Album Art Record Label
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(38.dp)
                 .clip(CircleShape)
                 .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
                 .graphicsLayer { rotationZ = rotationAngle },
