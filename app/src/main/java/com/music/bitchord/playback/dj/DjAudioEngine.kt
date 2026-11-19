@@ -10,6 +10,7 @@ import com.music.bitchord.data.dj.DjBridge
 import com.music.bitchord.data.dj.DjSessionState
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.PlaybackService
+import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.playback.toSong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -154,6 +155,7 @@ class DjAudioEngine(
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = scope.launch(Dispatchers.Main) {
+            var lastMediaIdA: String? = player?.currentMediaItem?.mediaId
             while (isActive && DjSessionState.isDjActive.value) {
                 val p = player
                 if (p != null) {
@@ -161,6 +163,18 @@ class DjAudioEngine(
                     DjSessionState.updateDeckAPosition(currentA)
                     DjSessionState.updateDeckADuration(p.duration)
                     DjSessionState.updateDeckAPlaying(p.isPlaying)
+
+                    val curIdA = p.currentMediaItem?.mediaId
+                    if (curIdA != null && curIdA != lastMediaIdA) {
+                        lastMediaIdA = curIdA
+                        val newSongA = p.currentMediaItem?.toSong()
+                        DjSessionState.updateDeckASong(newSongA)
+                        if (newSongA != null) {
+                            val profA = AuraNeuralDjEngine.analyzeSong(newSongA)
+                            DjSessionState.updateDeckABpm(profA.bpm)
+                            DjSessionState.updateDeckAKey(profA.key.toString())
+                        }
+                    }
 
                     // Check Beat Loop for Deck A
                     val activeLoopA = loopA
@@ -175,6 +189,14 @@ class DjAudioEngine(
                     DjSessionState.updateDeckBPosition(currentB)
                     DjSessionState.updateDeckBDuration(s.duration)
                     DjSessionState.updateDeckBPlaying(s.isPlaying)
+
+                    // Auto-cue to beginning if Deck B finishes
+                    if (s.playbackState == Player.STATE_ENDED) {
+                        s.seekTo(0L)
+                        s.pause()
+                        DjSessionState.updateDeckBPosition(0L)
+                        DjSessionState.updateDeckBPlaying(false)
+                    }
 
                     // Check Beat Loop for Deck B
                     val activeLoopB = loopB
@@ -603,6 +625,27 @@ class DjAudioEngine(
         val idx = (0 until count).indexOfFirst { active.getMediaItemAt(it).mediaId == song.videoId }
         if (idx != -1) {
             prepareDeckB(idx)
+        } else {
+            val standby = spare ?: return
+            val item = song.toMediaItem()
+            DjSessionState.updateDeckBSong(song)
+            DjSessionState.updateDeckBPlaying(false)
+            DjSessionState.updateDeckBPosition(0L)
+            DjSessionState.updateDeckBDuration(0L)
+            loopB = null
+            DjSessionState.updateDeckBLoopBeats(null)
+            hotCuesB.fill(null)
+            DjSessionState.updateDeckBHotCues(hotCuesB.toList())
+
+            val profileB = AuraNeuralDjEngine.analyzeSong(song)
+            DjSessionState.updateDeckBBpm(profileB.bpm)
+            DjSessionState.updateDeckBKey(profileB.key.toString())
+
+            standby.setMediaItem(item, 0L)
+            standby.volume = 0f
+            standby.playWhenReady = false
+            standby.playbackParameters = PlaybackParameters.DEFAULT
+            standby.prepare()
         }
     }
 

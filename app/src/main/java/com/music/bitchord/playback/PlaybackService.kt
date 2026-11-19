@@ -660,11 +660,17 @@ class PlaybackService : MediaLibraryService() {
                         wasPlayingBeforeCall = player?.playWhenReady == true
                         if (wasPlayingBeforeCall) {
                             player?.playWhenReady = false
+                            if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                                spare?.playWhenReady = false
+                            }
                         }
                     } else if (AppSettings.ignoreAudioFocus.value) {
                         // Party Shield ON: Instagram Reels, TikTok, YouTube Shorts -> Keep playing at full volume!
                     } else {
                         player?.playWhenReady = false
+                        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                            spare?.playWhenReady = false
+                        }
                     }
                 }
                 AudioManager.AUDIOFOCUS_LOSS -> {
@@ -673,11 +679,17 @@ class PlaybackService : MediaLibraryService() {
                         wasPlayingBeforeCall = player?.playWhenReady == true
                         if (wasPlayingBeforeCall) {
                             player?.playWhenReady = false
+                            if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                                spare?.playWhenReady = false
+                            }
                         }
                     } else {
                         // Permanent focus loss: a full-length media player started (e.g. Netflix, Amazon Prime, Spotify).
                         // Pause gracefully so music does not clash with full movies or another music player.
                         player?.playWhenReady = false
+                        if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                            spare?.playWhenReady = false
+                        }
                     }
                 }
             }
@@ -1087,6 +1099,11 @@ class PlaybackService : MediaLibraryService() {
                 smartFocusManager.requestFocus()
             } else if (!smartFocusManager.wasPlayingBeforeCall) {
                 smartFocusManager.abandonFocus()
+            }
+            if (!playWhenReady && (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY || !smartFocusManager.wasPlayingBeforeCall)) {
+                if (com.music.bitchord.data.dj.DjSessionState.isDjActive.value) {
+                    spare?.playWhenReady = false
+                }
             }
             publishWidgetState(playing = playWhenReady)
             // The only place the *reason* can be read. A party has to tell a
