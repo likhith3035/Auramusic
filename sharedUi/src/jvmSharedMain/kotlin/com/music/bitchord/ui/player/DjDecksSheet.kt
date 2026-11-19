@@ -72,8 +72,6 @@ import com.music.bitchord.ui.utils.containSheetGestures
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.theme.NothingCard
-import com.music.bitchord.ui.theme.NothingGlyphEqualizer
-import com.music.bitchord.ui.theme.NothingGlyphTimer
 import com.music.bitchord.ui.theme.NothingHardwareFader
 import com.music.bitchord.ui.theme.NothingPill
 import com.music.bitchord.ui.theme.NothingThemeTokens
@@ -646,7 +644,7 @@ private fun DeckCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Deck Name Pill with Red LED indicator & dancing Glyph Equalizer
+                    // Deck Name Pill with Red LED indicator
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
@@ -668,13 +666,6 @@ private fun DeckCard(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        NothingGlyphEqualizer(
-                            isPlaying = isPlaying,
-                            modifier = Modifier.size(width = 16.dp, height = 10.dp),
-                            barCount = 3,
-                            dotsPerBar = 4,
                         )
                     }
 
@@ -810,7 +801,7 @@ private fun DeckCard(
                     )
                     Spacer(Modifier.height(4.dp))
 
-                    // Time Readout using Nothing OS Dot-Matrix Glyphs
+                    // Sleek Modern Monospace Time Readout
                     val posSec = positionMs / 1000L
                     val posText = String.format("%02d:%02d", posSec / 60, posSec % 60)
                     val remSec = (durationMs - positionMs).coerceAtLeast(0L) / 1000L
@@ -818,29 +809,27 @@ private fun DeckCard(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        NothingGlyphTimer(
-                            timeText = posText,
-                            dotRadiusDp = 1.0.dp,
-                            spacingDp = 0.8.dp,
-                            charSpacingDp = 1.8.dp,
-                            dotColor = NothingThemeTokens.White,
-                            ghostColor = Color.White.copy(alpha = 0.08f),
+                        Text(
+                            text = posText,
+                            color = NothingThemeTokens.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
                         )
                         Text(
                             text = "/",
-                            color = NothingThemeTokens.MutedText.copy(alpha = 0.35f),
-                            fontSize = 9.sp,
+                            color = NothingThemeTokens.MutedText.copy(alpha = 0.40f),
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                         )
-                        NothingGlyphTimer(
-                            timeText = remText,
-                            dotRadiusDp = 1.0.dp,
-                            spacingDp = 0.8.dp,
-                            charSpacingDp = 1.8.dp,
-                            dotColor = NothingThemeTokens.Red,
-                            ghostColor = NothingThemeTokens.Red.copy(alpha = 0.08f),
+                        Text(
+                            text = remText,
+                            color = NothingThemeTokens.MutedText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
                         )
                     }
                 }
@@ -1722,11 +1711,10 @@ private fun MixerConsole(
 
 /**
  * Visual & Acoustic DJ Turntable styled in Nothing OS hardware language:
- * - Outer machined aluminum rim with precision strobe dots
+ * - Outer machined aluminum rim with dual precision chamfer rings
  * - Pitch-black matte vinyl disk with micro-grooves
  * - Center rotating record sleeve label with high-contrast Nothing Red metallic spindle
- * - Polar angular touch tracking driving real vinyl scratch audio emulation,
- *   needle friction, forward slip chirps, reverse rubs, and spinbacks.
+ * - Polar angular touch tracking driving smooth, silent timeline scrubbing.
  */
 @Composable
 private fun NothingTurntable(
@@ -1817,7 +1805,7 @@ private fun NothingTurntable(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // Vinyl micro-grooves and strobe dots canvas
+        // Vinyl micro-grooves and rim chamfer canvas
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -1834,20 +1822,13 @@ private fun NothingTurntable(
                 style = Stroke(width = 1.dp.toPx()),
             )
 
-            // Strobe dots around perimeter (36 dots)
-            val strobeCount = 36
-            val strobeRadius = radius - 3.dp.toPx()
-            val strobeColor = Color.White.copy(alpha = 0.35f)
-            for (i in 0 until strobeCount) {
-                val angle = (i * 2.0 * PI / strobeCount).toFloat()
-                val sx = center.x + strobeRadius * cos(angle)
-                val sy = center.y + strobeRadius * sin(angle)
-                drawCircle(
-                    color = strobeColor,
-                    radius = 0.8.dp.toPx(),
-                    center = Offset(sx, sy),
-                )
-            }
+            // Inner rim chamfer ring
+            drawCircle(
+                color = Color.White.copy(alpha = 0.10f),
+                radius = radius - 3.5.dp.toPx(),
+                center = center,
+                style = Stroke(width = 0.8.dp.toPx()),
+            )
 
             // Concentric Vinyl Micro-Grooves
             val grooveColor = Color.White.copy(alpha = 0.05f)

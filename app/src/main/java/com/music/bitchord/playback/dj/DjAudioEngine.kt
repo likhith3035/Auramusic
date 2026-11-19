@@ -37,13 +37,9 @@ class DjAudioEngine(
     private var autoDropJob: Job? = null
     private var nudgeJobA: Job? = null
     private var nudgeJobB: Job? = null
-    private var motorPickupJobA: Job? = null
-    private var motorPickupJobB: Job? = null
 
     private var wasPlayingAOnTouch = false
     private var wasPlayingBOnTouch = false
-
-    private val scratchAudio by lazy { DjScratchAudio(service) }
 
     // Beat loop boundaries (startMs, endMs)
     private var loopA: Pair<Long, Long>? = null
@@ -993,14 +989,12 @@ class DjAudioEngine(
 
     override fun onPlatterTouchDown(deckA: Boolean) {
         if (deckA) {
-            motorPickupJobA?.cancel()
             val p = player ?: return
             wasPlayingAOnTouch = p.isPlaying
             if (wasPlayingAOnTouch) {
                 p.pause()
             }
         } else {
-            motorPickupJobB?.cancel()
             val s = spare ?: return
             wasPlayingBOnTouch = s.isPlaying
             if (wasPlayingBOnTouch) {
@@ -1010,10 +1004,7 @@ class DjAudioEngine(
     }
 
     override fun onPlatterScratch(deckA: Boolean, velocity: Float, isForward: Boolean) {
-        // Trigger realistic zero-latency vinyl scratch audio emulation
-        scratchAudio.playScratch(isForward = isForward, velocity = velocity)
-
-        // Scrub playback position proportionally to rotation velocity
+        // Scrub playback position smoothly and cleanly without synthesized sound effects
         val deltaMs = (velocity * 26.0f).toLong()
         if (deckA) {
             val p = player ?: return
@@ -1029,53 +1020,22 @@ class DjAudioEngine(
     }
 
     override fun onPlatterTouchUp(deckA: Boolean) {
-        scratchAudio.stopScratch()
         if (deckA) {
             if (wasPlayingAOnTouch) {
-                triggerMotorPickupA()
+                val p = player ?: return
+                val speed = DjSessionState.deckASpeed.value.coerceAtLeast(0.1f)
+                val pitch = if (DjSessionState.keyLockA.value) 1.0f else speed
+                p.playbackParameters = PlaybackParameters(speed, pitch)
+                p.play()
             }
         } else {
             if (wasPlayingBOnTouch) {
-                triggerMotorPickupB()
-            }
-        }
-    }
-
-    private fun triggerMotorPickupA() {
-        motorPickupJobA?.cancel()
-        val p = player ?: return
-        val targetSpeed = DjSessionState.deckASpeed.value.coerceAtLeast(0.1f)
-        motorPickupJobA = scope.launch(Dispatchers.Main) {
-            p.play()
-            val ramp = floatArrayOf(0.20f, 0.48f, 0.74f, 0.92f, 1.0f)
-            for (f in ramp) {
-                if (!isActive || !DjSessionState.isDjActive.value) break
-                val s = targetSpeed * f
-                val pitch = if (DjSessionState.keyLockA.value) 1.0f else s
-                p.playbackParameters = PlaybackParameters(s, pitch)
-                delay(18L)
-            }
-            val finalPitch = if (DjSessionState.keyLockA.value) 1.0f else targetSpeed
-            p.playbackParameters = PlaybackParameters(targetSpeed, finalPitch)
-        }
-    }
-
-    private fun triggerMotorPickupB() {
-        motorPickupJobB?.cancel()
-        val s = spare ?: return
-        val targetSpeed = DjSessionState.deckBSpeed.value.coerceAtLeast(0.1f)
-        motorPickupJobB = scope.launch(Dispatchers.Main) {
-            s.play()
-            val ramp = floatArrayOf(0.20f, 0.48f, 0.74f, 0.92f, 1.0f)
-            for (f in ramp) {
-                if (!isActive || !DjSessionState.isDjActive.value) break
-                val speed = targetSpeed * f
+                val s = spare ?: return
+                val speed = DjSessionState.deckBSpeed.value.coerceAtLeast(0.1f)
                 val pitch = if (DjSessionState.keyLockB.value) 1.0f else speed
                 s.playbackParameters = PlaybackParameters(speed, pitch)
-                delay(18L)
+                s.play()
             }
-            val finalPitch = if (DjSessionState.keyLockB.value) 1.0f else targetSpeed
-            s.playbackParameters = PlaybackParameters(targetSpeed, finalPitch)
         }
     }
 
@@ -1084,9 +1044,6 @@ class DjAudioEngine(
         pollJob?.cancel()
         nudgeJobA?.cancel()
         nudgeJobB?.cancel()
-        motorPickupJobA?.cancel()
-        motorPickupJobB?.cancel()
-        scratchAudio.release()
         loopA = null
         loopB = null
 
