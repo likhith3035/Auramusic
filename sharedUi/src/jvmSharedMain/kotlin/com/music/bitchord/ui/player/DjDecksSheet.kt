@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -740,21 +741,31 @@ private fun DeckCard(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(NothingThemeTokens.SurfaceElevated)
-                            .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(50))
+                            .background(NothingThemeTokens.White)
                             .clickable {
                                 haptics.play(Haptic.Select)
                                 onChangeSong()
                             }
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                            .padding(horizontal = 9.dp, vertical = 3.5.dp),
                     ) {
-                        Text(
-                            text = "SELECT",
-                            color = NothingThemeTokens.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = "Change Track",
+                                tint = NothingThemeTokens.Black,
+                                modifier = Modifier.size(11.dp),
+                            )
+                            Text(
+                                text = "CHANGE",
+                                color = NothingThemeTokens.Black,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.5.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -1605,24 +1616,35 @@ private fun MixerConsole(
                     )
                 }
 
-                // SWAP A <-> B BUTTON
+                // SWAP A <-> B BUTTON (Prominently Highlighted)
                 Box(
                     modifier = Modifier
-                        .weight(1.2f)
+                        .weight(1.3f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(NothingThemeTokens.SurfaceElevated)
-                        .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(8.dp))
+                        .background(NothingThemeTokens.Red.copy(alpha = 0.18f))
+                        .border(1.5.dp, NothingThemeTokens.Red, RoundedCornerShape(8.dp))
                         .clickable(onClick = onSwapDecks)
                         .padding(vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "SWAP A <-> B",
-                        color = NothingThemeTokens.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Sync,
+                            contentDescription = "Swap Decks",
+                            tint = NothingThemeTokens.Red,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            text = "SWAP A <-> B",
+                            color = NothingThemeTokens.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp,
+                        )
+                    }
                 }
 
                 // COMMIT / DROP TAKEOVER
