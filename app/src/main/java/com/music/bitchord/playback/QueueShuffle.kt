@@ -131,6 +131,7 @@ object QueueShuffle {
         val scope = coroutineScope ?: CoroutineScope(Dispatchers.Main)
         val from = player.currentMediaItemIndex + 1
         val currentIndex = player.currentMediaItemIndex
+        val initialCount = player.mediaItemCount
         val items = player.queueItems()
         if (items.isEmpty() || from >= items.size) return
 
@@ -139,12 +140,10 @@ object QueueShuffle {
             val enriched = withContext(Dispatchers.IO) {
                 SmartShuffleEngine.enrichQueue(songs, currentIndex)
             }
-            if (enriched.size > songs.size && player.mediaItemCount == items.size) {
-                val newUpcoming = enriched.drop(from).map { it.toMediaItem() }
-                withContext(Dispatchers.Main) {
-                    if (player.mediaItemCount == items.size && player.currentMediaItemIndex == currentIndex) {
-                        player.replaceMediaItems(from, items.size, newUpcoming)
-                    }
+            withContext(Dispatchers.Main) {
+                if (enriched.size > songs.size && player.mediaItemCount == initialCount && player.currentMediaItemIndex == currentIndex) {
+                    val newUpcoming = enriched.drop(from).map { it.toMediaItem() }
+                    player.replaceMediaItems(from, initialCount, newUpcoming)
                 }
             }
         }
