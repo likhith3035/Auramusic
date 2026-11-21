@@ -62,6 +62,11 @@ data class AuraPlaybackState(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val volume: Float = 1.0f,
+    val isMuted: Boolean = false,
+    val repeatMode: String = "OFF",
+    val shuffleMode: String = "OFF",
+    val eqPreset: String = "FLAT",
+    val audioQuality: String = "320 kbps AAC",
     val track: ConnectTrack? = null,
     val queue: List<ConnectTrack> = emptyList(),
     val queueIndex: Int = -1,
@@ -92,6 +97,10 @@ data class AuraCommandRequest(
     val positionMs: Long? = null,
     val volume: Float? = null,
     val index: Int? = null,
+    val repeatMode: String? = null,
+    val shuffleMode: String? = null,
+    val eqPreset: String? = null,
+    val isMuted: Boolean? = null,
     val session: AuraTransferSession? = null,
 )
 

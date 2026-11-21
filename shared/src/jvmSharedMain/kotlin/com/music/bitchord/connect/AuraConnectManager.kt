@@ -203,6 +203,9 @@ object AuraConnectManager {
         positionMs: Long? = null,
         volume: Float? = null,
         index: Int? = null,
+        repeatMode: String? = null,
+        shuffleMode: String? = null,
+        eqPreset: String? = null,
         session: AuraTransferSession? = null,
     ) {
         val device = _connectedDevice.value ?: return
@@ -221,6 +224,9 @@ object AuraConnectManager {
                     positionMs = positionMs,
                     volume = volume,
                     index = index,
+                    repeatMode = repeatMode,
+                    shuffleMode = shuffleMode,
+                    eqPreset = eqPreset,
                     session = session,
                 )
                 val body = json.encodeToString(AuraCommandRequest.serializer(), cmd)
@@ -235,6 +241,38 @@ object AuraConnectManager {
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    fun seekTo(positionMs: Long) {
+        sendCommand("SEEK", positionMs = positionMs)
+    }
+
+    fun setVolume(volume: Float) {
+        sendCommand("SET_VOLUME", volume = volume.coerceIn(0f, 1f))
+    }
+
+    fun toggleMute() {
+        sendCommand("TOGGLE_MUTE")
+    }
+
+    fun playIndex(index: Int) {
+        sendCommand("PLAY_INDEX", index = index)
+    }
+
+    fun removeIndex(index: Int) {
+        sendCommand("REMOVE_INDEX", index = index)
+    }
+
+    fun toggleShuffle() {
+        sendCommand("TOGGLE_SHUFFLE")
+    }
+
+    fun toggleRepeat() {
+        sendCommand("TOGGLE_REPEAT")
+    }
+
+    fun setEqPreset(preset: String) {
+        sendCommand("SET_EQ_PRESET", eqPreset = preset)
     }
 
     /**

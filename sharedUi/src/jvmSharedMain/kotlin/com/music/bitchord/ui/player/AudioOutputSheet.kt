@@ -23,9 +23,13 @@ import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.CastConnected
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Usb
@@ -36,12 +40,20 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.connect.AuraConnectManager
 import com.music.bitchord.data.connect.AuraConnectDevice
 import com.music.bitchord.data.connect.AuraDeviceType
 import com.music.bitchord.data.connect.AuraPlaybackState
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.NothingThemeTokens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -598,6 +610,14 @@ private fun AuraConnectDeviceRow(
     }
 }
 
+private fun formatAuraTime(ms: Long): String {
+    if (ms <= 0) return "0:00"
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "$minutes:${if (seconds < 10) "0$seconds" else "$seconds"}"
+}
+
 @Composable
 private fun AuraRemoteControlCard(
     device: AuraConnectDevice,
@@ -609,13 +629,37 @@ private fun AuraRemoteControlCard(
     onTransferPlayback: () -> Unit,
 ) {
     val haptics = rememberHaptics()
+
+    // Smooth timeline interpolation: advance 100ms periodically between network status polls
+    var scrubbingPosition by remember { mutableStateOf<Float?>(null) }
+    var localPosition by remember(playback.positionMs, playback.updatedAtMs) { mutableStateOf(playback.positionMs) }
+    LaunchedEffect(playback.isPlaying, playback.positionMs) {
+        if (!playback.isPlaying) return@LaunchedEffect
+        val start = playback.positionMs
+        val startTime = System.currentTimeMillis()
+        while (true) {
+            delay(100)
+            val elapsed = System.currentTimeMillis() - startTime
+            val maxDur = if (playback.durationMs > 0) playback.durationMs else Long.MAX_VALUE
+            localPosition = (start + elapsed).coerceAtMost(maxDur)
+        }
+    }
+
+    var localVolume by remember { mutableStateOf<Float?>(null) }
+    var queueExpanded by remember { mutableStateOf(false) }
+
+    val duration = maxOf(playback.durationMs, 1L)
+    val effectivePos = scrubbingPosition?.toLong() ?: localPosition.coerceIn(0L, duration)
+    val remainingMs = (duration - effectivePos).coerceAtLeast(0L)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .padding(14.dp),
     ) {
+        // 1. Device and Active Track Info
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -624,87 +668,429 @@ private fun AuraRemoteControlCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = playback.track?.title?.takeIf { it.isNotBlank() } ?: "No Track Playing",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (!playback.track?.artist.isNullOrBlank()) {
-                    Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = playback.track?.artist.orEmpty(),
+                        text = playback.track?.artist?.takeIf { it.isNotBlank() } ?: device.name,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = Color.White.copy(alpha = 0.65f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = playback.audioQuality,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = NothingThemeTokens.Red,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
 
-            // Transport controls
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // Remote Volume Mute Indicator Icon
+            val isMuted = playback.isMuted || (localVolume ?: playback.volume) <= 0.01f
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (isMuted) NothingThemeTokens.Red.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.1f))
+                    .clickable {
+                        haptics.play(Haptic.ToggleOn)
+                        AuraConnectManager.toggleMute()
+                    },
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .clickable {
-                            haptics.play(Haptic.Tap)
-                            onPrevious()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.SkipPrevious,
-                        contentDescription = "Previous",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                Icon(
+                    imageVector = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                    contentDescription = "Mute",
+                    tint = if (isMuted) NothingThemeTokens.Red else Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
 
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(NothingThemeTokens.Red)
-                        .clickable {
-                            haptics.play(Haptic.ToggleOn)
-                            onTogglePlayPause()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (playback.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
+        Spacer(Modifier.height(12.dp))
 
+        // 2. Interactive Song Timeline & Scrubber
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Slider(
+                value = effectivePos.toFloat().coerceIn(0f, duration.toFloat()),
+                onValueChange = { scrubbingPosition = it },
+                onValueChangeFinished = {
+                    scrubbingPosition?.let { AuraConnectManager.seekTo(it.toLong()) }
+                    scrubbingPosition = null
+                },
+                valueRange = 0f..duration.toFloat(),
+                colors = SliderDefaults.colors(
+                    thumbColor = NothingThemeTokens.Red,
+                    activeTrackColor = NothingThemeTokens.Red,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = formatAuraTime(effectivePos),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Text(
+                    text = "-${formatAuraTime(remainingMs)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // 3. Playback Mode & Transport Controls Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            // Shuffle Button
+            val isSmartShuffle = playback.shuffleMode.equals("SMART", ignoreCase = true)
+            val isShuffleOn = playback.shuffleMode.equals("STANDARD", ignoreCase = true) || isSmartShuffle
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (isSmartShuffle) NothingThemeTokens.Red.copy(alpha = 0.25f) else Color.Transparent)
+                    .clickable {
+                        haptics.play(Haptic.Tap)
+                        AuraConnectManager.toggleShuffle()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = BitChordIcons.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (isSmartShuffle) NothingThemeTokens.Red else if (isShuffleOn) Color.White else Color.White.copy(alpha = 0.4f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            // Previous Button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .clickable {
+                        haptics.play(Haptic.Tap)
+                        onPrevious()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SkipPrevious,
+                    contentDescription = "Previous",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            // Big Play/Pause Button
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(NothingThemeTokens.Red)
+                    .clickable {
+                        haptics.play(Haptic.ToggleOn)
+                        onTogglePlayPause()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = if (playback.isPlaying) "Pause" else "Play",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            // Next Button
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .clickable {
+                        haptics.play(Haptic.Tap)
+                        onNext()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SkipNext,
+                    contentDescription = "Next",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            // Repeat Button
+            val isRepeatOn = !playback.repeatMode.equals("OFF", ignoreCase = true)
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (isRepeatOn) Color.White.copy(alpha = 0.15f) else Color.Transparent)
+                    .clickable {
+                        haptics.play(Haptic.Tap)
+                        AuraConnectManager.toggleRepeat()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = BitChordIcons.Repeat,
+                    contentDescription = "Repeat",
+                    tint = if (isRepeatOn) NothingThemeTokens.Red else Color.White.copy(alpha = 0.4f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // 4. Remote Volume Control Row
+        val currentVol = localVolume ?: playback.volume
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.VolumeDown,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp),
+            )
+            Slider(
+                value = currentVol.coerceIn(0f, 1f),
+                onValueChange = { localVolume = it },
+                onValueChangeFinished = {
+                    localVolume?.let { AuraConnectManager.setVolume(it) }
+                    localVolume = null
+                },
+                valueRange = 0f..1f,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.White.copy(alpha = 0.85f),
+                    inactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+                    .height(24.dp),
+            )
+            Text(
+                text = "${(currentVol * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = Color.White.copy(alpha = 0.75f),
+                modifier = Modifier.width(36.dp),
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // 5. Remote Equalizer / Sound Presets Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val presets = listOf(
+                "FLAT" to "Flat",
+                "BASS_BOOST" to "Bass Boost",
+                "VOCAL" to "Vocal",
+                "ELECTRONIC" to "Club",
+                "ROCK" to "Rock",
+            )
+            presets.forEach { (presetKey, label) ->
+                val selected = playback.eqPreset.equals(presetKey, ignoreCase = true)
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (selected) NothingThemeTokens.Red.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f))
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) NothingThemeTokens.Red else Color.Transparent,
+                            shape = RoundedCornerShape(20.dp),
+                        )
                         .clickable {
-                            haptics.play(Haptic.Tap)
-                            onNext()
-                        },
-                    contentAlignment = Alignment.Center,
+                            haptics.play(Haptic.Select)
+                            AuraConnectManager.setEqPreset(presetKey)
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.SkipNext,
-                        contentDescription = "Next",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium),
+                        color = if (selected) NothingThemeTokens.Red else Color.White.copy(alpha = 0.75f),
                     )
                 }
             }
         }
 
+        // 6. Expandable Up Next Queue Drawer
+        val upcomingQueue = remember(playback.queue, playback.queueIndex) {
+            val idx = playback.queueIndex
+            if (idx >= 0 && idx + 1 < playback.queue.size) {
+                playback.queue.subList(idx + 1, playback.queue.size)
+            } else {
+                emptyList()
+            }
+        }
+
+        if (upcomingQueue.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        queueExpanded = !queueExpanded
+                    }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.QueueMusic,
+                        contentDescription = null,
+                        tint = NothingThemeTokens.Red,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Up Next on Laptop (${upcomingQueue.size})",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color.White,
+                    )
+                }
+                Icon(
+                    imageVector = if (queueExpanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            if (queueExpanded) {
+                Spacer(Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    upcomingQueue.take(15).forEachIndexed { offset, track ->
+                        val globalIndex = playback.queueIndex + 1 + offset
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .clickable {
+                                    haptics.play(Haptic.Select)
+                                    AuraConnectManager.playIndex(globalIndex)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${offset + 1}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.45f),
+                                modifier = Modifier.width(22.dp),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = track.title,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    if (track.isSmartRecommendation) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(NothingThemeTokens.Red.copy(alpha = 0.25f))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                                        ) {
+                                            Text(
+                                                text = "SMART",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                                color = NothingThemeTokens.Red,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (track.artist.isNotBlank()) {
+                                    Text(
+                                        text = track.artist,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.55f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        haptics.play(Haptic.Tap)
+                                        AuraConnectManager.removeIndex(globalIndex)
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteOutline,
+                                    contentDescription = "Remove",
+                                    tint = Color.White.copy(alpha = 0.45f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. Playback Handoff Button
         if (canTransfer) {
             Spacer(Modifier.height(12.dp))
             Row(

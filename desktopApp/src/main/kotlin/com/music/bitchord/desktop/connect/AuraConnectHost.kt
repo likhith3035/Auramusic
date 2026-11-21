@@ -66,7 +66,12 @@ object AuraConnectHost {
     var onPrevious: () -> Unit = {}
     var onSeek: (Long) -> Unit = {}
     var onSetVolume: (Float) -> Unit = {}
+    var onToggleMute: () -> Unit = {}
     var onPlayIndex: (Int) -> Unit = {}
+    var onRemoveIndex: (Int) -> Unit = {}
+    var onToggleShuffle: () -> Unit = {}
+    var onToggleRepeat: () -> Unit = {}
+    var onSetEqPreset: (String) -> Unit = {}
     var onTransferSession: (AuraTransferSession) -> Unit = {}
 
     /**
@@ -151,7 +156,12 @@ object AuraConnectHost {
                     "PREVIOUS" -> onPrevious()
                     "SEEK" -> cmd.positionMs?.let { onSeek(it) }
                     "SET_VOLUME" -> cmd.volume?.let { onSetVolume(it) }
+                    "TOGGLE_MUTE" -> onToggleMute()
                     "PLAY_INDEX" -> cmd.index?.let { onPlayIndex(it) }
+                    "REMOVE_INDEX" -> cmd.index?.let { onRemoveIndex(it) }
+                    "TOGGLE_SHUFFLE" -> onToggleShuffle()
+                    "TOGGLE_REPEAT" -> onToggleRepeat()
+                    "SET_EQ_PRESET" -> cmd.eqPreset?.let { onSetEqPreset(it) }
                     "TRANSFER_SESSION" -> cmd.session?.let { onTransferSession(it) }
                 }
 

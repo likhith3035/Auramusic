@@ -362,8 +362,8 @@ private fun sleepTimerLabel(minutes: Int?, afterTrack: Boolean): String = when {
 @Composable
 private fun DesktopMenuSurface(
     onDismiss: () -> Unit,
-    minWidth: Dp = 232.dp,
-    maxWidth: Dp = 300.dp,
+    minWidth: Dp = 250.dp,
+    maxWidth: Dp = 320.dp,
     maxHeight: Dp = 460.dp,
     scrollable: Boolean = true,
     content: @Composable () -> Unit,
@@ -393,8 +393,6 @@ private fun DesktopMenuSurface(
 /** Where a menu hangs relative to the button that opened it. */
 private class DesktopMenuPosition : PopupPositionProvider {
 
-    private var above: Boolean? = null
-
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
@@ -402,29 +400,43 @@ private class DesktopMenuPosition : PopupPositionProvider {
         popupContentSize: IntSize,
     ): IntOffset {
         val margin = MENU_MARGIN
-        val below = anchorBounds.bottom + margin
-        val above = anchorBounds.top - popupContentSize.height - margin
-        val fitsBelow = below + popupContentSize.height + margin <= windowSize.height
-        val fitsAbove = above >= margin
-        val placeAbove = this.above ?: (!fitsBelow && fitsAbove)
-        if (this.above == null) this.above = placeAbove
-        val y = when {
-            placeAbove && fitsAbove -> above
-            fitsBelow -> below
-            // Neither side has room, so it is as tall as the window allows and sits between the
-            // margins.
+        val taskbarSafeBottom = TASKBAR_SAFE_MARGIN
+
+        // Horizontal positioning:
+        // If anchor is in the right half of the window, bloom leftward by aligning right edges
+        // so the menu does not overflow off the right edge of the monitor.
+        val desiredX = if (anchorBounds.left + anchorBounds.width / 2 > windowSize.width / 2) {
+            anchorBounds.right - popupContentSize.width
+        } else {
+            anchorBounds.left
+        }
+        val maxX = (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)
+        val x = desiredX.coerceIn(margin, maxX)
+
+        // Vertical positioning:
+        // If anchor is in the bottom half of the window (like the player bar), always open ABOVE
+        // the anchor to stay well clear of the player bar and the Windows taskbar.
+        val fitsAbove = anchorBounds.top - popupContentSize.height - margin >= margin
+        val fitsBelow = anchorBounds.bottom + margin + popupContentSize.height + taskbarSafeBottom <= windowSize.height
+        val isBottomHalf = anchorBounds.top + anchorBounds.height / 2 > windowSize.height / 2
+
+        val desiredY = when {
+            isBottomHalf && fitsAbove -> anchorBounds.top - popupContentSize.height - margin
+            !isBottomHalf && fitsBelow -> anchorBounds.bottom + margin
+            fitsAbove -> anchorBounds.top - popupContentSize.height - margin
+            fitsBelow -> anchorBounds.bottom + margin
             else -> margin
         }
-        val x = anchorBounds.left.coerceIn(
-            margin,
-            (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin),
-        )
-        return IntOffset(x, y.coerceAtMost((windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin)))
+        val maxY = (windowSize.height - popupContentSize.height - taskbarSafeBottom).coerceAtLeast(margin)
+        val y = desiredY.coerceIn(margin, maxY)
+
+        return IntOffset(x, y)
     }
 }
 
 /** Air kept between a menu and the window's edges. */
-private const val MENU_MARGIN = 12
+private const val MENU_MARGIN = 14
+private const val TASKBAR_SAFE_MARGIN = 40
 
 /** A submenu's title, and the way back out of it. */
 @Composable

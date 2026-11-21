@@ -1617,13 +1617,24 @@ fun BitChordDesktopApp() {
     }
 
     DisposableEffect(playbackEngine) {
+        var previousUnmutedVolume = 1.0f
         AuraConnectHost.getState = {
             val engineState = playbackEngine.state.value
+            val currentEqPreset = if (DesktopEqualizerSettings.enabled.value) {
+                DesktopEqualizerSettings.preset.value.name
+            } else {
+                "FLAT"
+            }
             AuraPlaybackState(
                 isPlaying = engineState.isPlaying,
                 positionMs = engineState.positionMs,
                 durationMs = engineState.durationMs,
                 volume = volume,
+                isMuted = volume <= 0.001f,
+                repeatMode = repeatMode.name,
+                shuffleMode = if (shuffle) "STANDARD" else "OFF",
+                eqPreset = currentEqPreset,
+                audioQuality = "320 kbps AAC",
                 track = liveQueue.current?.toConnectTrack(engineState.durationMs),
                 queue = liveQueue.songs.map { it.toConnectTrack() },
                 queueIndex = liveQueue.index,
@@ -1641,7 +1652,51 @@ fun BitChordDesktopApp() {
             volume = v
             playbackEngine.setVolume(v)
         }
+        AuraConnectHost.onToggleMute = {
+            if (volume > 0.001f) {
+                previousUnmutedVolume = volume
+                volume = 0f
+                playbackEngine.setVolume(0f)
+            } else {
+                val restored = if (previousUnmutedVolume > 0.05f) previousUnmutedVolume else 0.5f
+                volume = restored
+                playbackEngine.setVolume(restored)
+            }
+        }
         AuraConnectHost.onPlayIndex = ::playQueueIndex
+        AuraConnectHost.onRemoveIndex = { at ->
+            if (!DesktopListenTogether.state.value.controlsLocked) {
+                val edited = liveQueue.removeAt(at)
+                if (edited !== liveQueue) {
+                    liveQueue = edited
+                    saveQueue()
+                }
+            }
+        }
+        AuraConnectHost.onToggleShuffle = {
+            setShuffle(!shuffle)
+        }
+        AuraConnectHost.onToggleRepeat = {
+            repeatMode = when (repeatMode) {
+                DesktopRepeatMode.OFF -> DesktopRepeatMode.ALL
+                DesktopRepeatMode.ALL -> DesktopRepeatMode.ONE
+                DesktopRepeatMode.ONE -> DesktopRepeatMode.OFF
+            }
+            persistence.saveString("repeat_mode", repeatMode.name)
+        }
+        AuraConnectHost.onSetEqPreset = { presetName ->
+            runCatching { com.music.bitchord.playback.EqualizerPreset.valueOf(presetName.uppercase()) }.getOrNull()?.let { preset ->
+                val enable = preset != com.music.bitchord.playback.EqualizerPreset.FLAT
+                DesktopEqualizerSettings.setEnabled(enable)
+                DesktopEqualizerSettings.setMode(DesktopEqualizerMode.MANUAL)
+                DesktopEqualizerSettings.setPreset(preset)
+                playbackEngine.setEqualizer(
+                    DesktopEqualizerSettings.enabled.value,
+                    DesktopEqualizerSettings.curve(),
+                    DesktopEqualizerSettings.balance.value,
+                )
+            }
+        }
         AuraConnectHost.onTransferSession = { session ->
             val incomingSongs = session.queue.map { it.toSong() }
             if (incomingSongs.isNotEmpty()) {

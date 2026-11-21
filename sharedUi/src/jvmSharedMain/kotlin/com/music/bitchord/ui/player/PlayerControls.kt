@@ -7,6 +7,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
+import com.music.bitchord.connect.AuraConnectManager
+import androidx.compose.material.icons.rounded.Computer
 import com.music.bitchord.data.model.ArtistCredit
 import com.music.bitchord.data.model.CreditSegment
 import com.music.bitchord.data.model.ShuffleMode
@@ -1257,7 +1259,14 @@ internal fun OutputCaption(
         ?.let { stringResource(Res.string.listen_together_jam, it) }
         ?: stringResource(Res.string.listen_together_jam_unnamed)
 
-    val labelText = if (badge.inParty) jamName else outputName
+    val connectedAuraDevice by AuraConnectManager.connectedDevice.collectAsStateWithLifecycle()
+    val isAuraConnected = connectedAuraDevice != null
+
+    val labelText = when {
+        isAuraConnected -> "Listening on ${connectedAuraDevice!!.name}"
+        badge.inParty -> jamName
+        else -> outputName
+    }
     val outputs = rememberAudioOutputs()
     val activeDevice = outputs.firstOrNull { it.isActive }
     val deviceKind = activeDevice?.kind
@@ -1265,6 +1274,7 @@ internal fun OutputCaption(
     Surface(
         shape = RoundedCornerShape(percent = 50),
         color = when {
+            isAuraConnected -> NothingThemeTokens.Red.copy(alpha = 0.20f)
             badge.inParty -> Color(0xFFFF007F).copy(alpha = 0.22f)
             isHiResOutput -> Color(0xFF00C6FF).copy(alpha = 0.18f)
             else -> Color.White.copy(alpha = 0.10f)
@@ -1272,6 +1282,7 @@ internal fun OutputCaption(
         border = BorderStroke(
             1.dp,
             when {
+                isAuraConnected -> NothingThemeTokens.Red.copy(alpha = 0.50f)
                 badge.inParty -> Color(0xFFFF007F).copy(alpha = 0.45f)
                 isHiResOutput -> Color(0xFF00C6FF).copy(alpha = 0.40f)
                 else -> Color.White.copy(alpha = 0.15f)
@@ -1279,7 +1290,7 @@ internal fun OutputCaption(
         ),
         modifier = Modifier
             .clip(RoundedCornerShape(percent = 50))
-            .clickable { if (badge.inParty) onOpenMembers() else onOpenOutput() },
+            .clickable { if (badge.inParty && !isAuraConnected) onOpenMembers() else onOpenOutput() },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1287,6 +1298,7 @@ internal fun OutputCaption(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
         ) {
             val icon = when {
+                isAuraConnected -> Icons.Rounded.Computer
                 badge.inParty -> Icons.Rounded.Headphones
                 deviceKind == AudioOutputKind.BLUETOOTH || deviceKind == AudioOutputKind.WIRED || deviceKind == AudioOutputKind.USB -> Icons.Rounded.Headphones
                 else -> Icons.AutoMirrored.Rounded.VolumeUp
@@ -1295,6 +1307,7 @@ internal fun OutputCaption(
                 imageVector = icon,
                 contentDescription = null,
                 tint = when {
+                    isAuraConnected -> NothingThemeTokens.Red
                     badge.inParty -> Color(0xFFFF007F)
                     isHiResOutput -> Color(0xFF00D2FF)
                     else -> Color.White.copy(alpha = 0.85f)
@@ -1302,7 +1315,7 @@ internal fun OutputCaption(
                 modifier = Modifier.size(13.dp),
             )
             Spacer(Modifier.width(6.dp))
-            if (!badge.inParty && isHiResOutput) {
+            if (!badge.inParty && !isAuraConnected && isHiResOutput) {
                 ShimmerText(
                     text = labelText,
                     style = MaterialTheme.typography.labelSmall.copy(
@@ -1315,9 +1328,9 @@ internal fun OutputCaption(
                     text = labelText,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = if (isAuraConnected) FontWeight.SemiBold else FontWeight.Medium,
                     ),
-                    color = Color.White.copy(alpha = 0.90f),
+                    color = if (isAuraConnected) NothingThemeTokens.Red else Color.White.copy(alpha = 0.90f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1326,7 +1339,7 @@ internal fun OutputCaption(
             Icon(
                 imageVector = BitChordIcons.ChevronRight,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.45f),
+                tint = if (isAuraConnected) NothingThemeTokens.Red.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.45f),
                 modifier = Modifier.size(11.dp),
             )
         }
