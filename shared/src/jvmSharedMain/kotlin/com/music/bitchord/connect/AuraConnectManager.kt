@@ -203,6 +203,10 @@ object AuraConnectManager {
         positionMs: Long? = null,
         volume: Float? = null,
         index: Int? = null,
+        fromIndex: Int? = null,
+        toIndex: Int? = null,
+        track: com.music.bitchord.data.connect.ConnectTrack? = null,
+        playNext: Boolean? = null,
         repeatMode: String? = null,
         shuffleMode: String? = null,
         eqPreset: String? = null,
@@ -224,6 +228,10 @@ object AuraConnectManager {
                     positionMs = positionMs,
                     volume = volume,
                     index = index,
+                    fromIndex = fromIndex,
+                    toIndex = toIndex,
+                    track = track,
+                    playNext = playNext,
                     repeatMode = repeatMode,
                     shuffleMode = shuffleMode,
                     eqPreset = eqPreset,
@@ -261,6 +269,18 @@ object AuraConnectManager {
 
     fun removeIndex(index: Int) {
         sendCommand("REMOVE_INDEX", index = index)
+    }
+
+    fun moveIndex(from: Int, to: Int) {
+        sendCommand("MOVE_INDEX", fromIndex = from, toIndex = to)
+    }
+
+    fun addTrack(song: Song, playNext: Boolean = false) {
+        sendCommand("ADD_TRACK", track = song.toConnectTrack(), playNext = playNext)
+    }
+
+    fun clearQueue() {
+        sendCommand("CLEAR_QUEUE")
     }
 
     fun toggleShuffle() {

@@ -1227,6 +1227,7 @@ internal fun OutputCaption(
     onOpenOutput: () -> Unit,
     /** Who's in it, before the settings page — see [ListenTogetherMembersSheet]. */
     onOpenMembers: () -> Unit,
+    onOpenRemoteStudio: (() -> Unit)? = null,
 ) {
     val badge = rememberPartyBadge()
     val outputName = rememberAudioOutputName(accountName)
@@ -1290,7 +1291,13 @@ internal fun OutputCaption(
         ),
         modifier = Modifier
             .clip(RoundedCornerShape(percent = 50))
-            .clickable { if (badge.inParty && !isAuraConnected) onOpenMembers() else onOpenOutput() },
+            .clickable {
+                when {
+                    isAuraConnected && onOpenRemoteStudio != null -> onOpenRemoteStudio()
+                    badge.inParty && !isAuraConnected -> onOpenMembers()
+                    else -> onOpenOutput()
+                }
+            },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

@@ -1673,6 +1673,29 @@ fun BitChordDesktopApp() {
                 }
             }
         }
+        AuraConnectHost.onMoveIndex = { from, to ->
+            if (!DesktopListenTogether.state.value.controlsLocked) {
+                val edited = liveQueue.move(from, to)
+                if (edited !== liveQueue) {
+                    liveQueue = edited
+                    saveQueue()
+                }
+            }
+        }
+        AuraConnectHost.onAddTrack = { song, playNext ->
+            if (!DesktopListenTogether.state.value.controlsLocked) {
+                enqueue(song, next = playNext)
+            }
+        }
+        AuraConnectHost.onClearQueue = {
+            if (!DesktopListenTogether.state.value.controlsLocked) {
+                val curr = liveQueue.current
+                if (curr != null) {
+                    liveQueue = DesktopQueue(listOf(curr), index = 0)
+                    saveQueue()
+                }
+            }
+        }
         AuraConnectHost.onToggleShuffle = {
             setShuffle(!shuffle)
         }

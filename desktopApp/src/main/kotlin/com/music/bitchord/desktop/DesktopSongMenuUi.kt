@@ -204,9 +204,9 @@ internal fun DesktopSongMenu(
 
     DesktopMenuSurface(
         onDismiss = onDismiss,
-        minWidth = if (showingDetails) 380.dp else 232.dp,
-        maxWidth = if (showingDetails) 480.dp else 300.dp,
-        maxHeight = if (showingDetails) 580.dp else 460.dp,
+        minWidth = if (showingDetails) 380.dp else 268.dp,
+        maxWidth = if (showingDetails) 480.dp else 340.dp,
+        maxHeight = if (showingDetails) 580.dp else 450.dp,
         scrollable = true,
     ) {
         if (showingDetails) {
@@ -362,9 +362,9 @@ private fun sleepTimerLabel(minutes: Int?, afterTrack: Boolean): String = when {
 @Composable
 private fun DesktopMenuSurface(
     onDismiss: () -> Unit,
-    minWidth: Dp = 250.dp,
-    maxWidth: Dp = 320.dp,
-    maxHeight: Dp = 460.dp,
+    minWidth: Dp = 268.dp,
+    maxWidth: Dp = 340.dp,
+    maxHeight: Dp = 450.dp,
     scrollable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
@@ -436,7 +436,7 @@ private class DesktopMenuPosition : PopupPositionProvider {
 
 /** Air kept between a menu and the window's edges. */
 private const val MENU_MARGIN = 14
-private const val TASKBAR_SAFE_MARGIN = 40
+private const val TASKBAR_SAFE_MARGIN = 64
 
 /** A submenu's title, and the way back out of it. */
 @Composable

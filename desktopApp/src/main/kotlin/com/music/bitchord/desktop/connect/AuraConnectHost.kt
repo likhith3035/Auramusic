@@ -69,6 +69,9 @@ object AuraConnectHost {
     var onToggleMute: () -> Unit = {}
     var onPlayIndex: (Int) -> Unit = {}
     var onRemoveIndex: (Int) -> Unit = {}
+    var onMoveIndex: (from: Int, to: Int) -> Unit = { _, _ -> }
+    var onAddTrack: (track: com.music.bitchord.data.model.Song, playNext: Boolean) -> Unit = { _, _ -> }
+    var onClearQueue: () -> Unit = {}
     var onToggleShuffle: () -> Unit = {}
     var onToggleRepeat: () -> Unit = {}
     var onSetEqPreset: (String) -> Unit = {}
@@ -159,6 +162,9 @@ object AuraConnectHost {
                     "TOGGLE_MUTE" -> onToggleMute()
                     "PLAY_INDEX" -> cmd.index?.let { onPlayIndex(it) }
                     "REMOVE_INDEX" -> cmd.index?.let { onRemoveIndex(it) }
+                    "MOVE_INDEX" -> cmd.fromIndex?.let { from -> cmd.toIndex?.let { to -> onMoveIndex(from, to) } }
+                    "ADD_TRACK" -> cmd.track?.let { onAddTrack(it.toSong(), cmd.playNext == true) }
+                    "CLEAR_QUEUE" -> onClearQueue()
                     "TOGGLE_SHUFFLE" -> onToggleShuffle()
                     "TOGGLE_REPEAT" -> onToggleRepeat()
                     "SET_EQ_PRESET" -> cmd.eqPreset?.let { onSetEqPreset(it) }

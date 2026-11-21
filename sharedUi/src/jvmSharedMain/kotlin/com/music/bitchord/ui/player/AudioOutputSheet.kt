@@ -113,6 +113,7 @@ internal fun AudioOutputSheet(
     onDismiss: () -> Unit,
     onOpenPipeline: () -> Unit,
     onOpenCast: () -> Unit,
+    onOpenRemoteStudio: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     currentSong: Song? = null,
     currentPositionMs: Long = 0L,
@@ -199,6 +200,12 @@ internal fun AudioOutputSheet(
                     device = connectedDevice!!,
                     playback = remotePlayback!!,
                     canTransfer = currentSong != null,
+                    onOpenRemoteStudio = onOpenRemoteStudio?.let { openStudio ->
+                        {
+                            onDismiss()
+                            openStudio()
+                        }
+                    },
                     onTogglePlayPause = { AuraConnectManager.sendCommand("PLAY_PAUSE") },
                     onPrevious = { AuraConnectManager.sendCommand("PREVIOUS") },
                     onNext = { AuraConnectManager.sendCommand("NEXT") },
@@ -623,6 +630,7 @@ private fun AuraRemoteControlCard(
     device: AuraConnectDevice,
     playback: AuraPlaybackState,
     canTransfer: Boolean,
+    onOpenRemoteStudio: (() -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -1090,7 +1098,41 @@ private fun AuraRemoteControlCard(
             }
         }
 
-        // 7. Playback Handoff Button
+        // 7. Open Full Remote Studio Button
+        if (onOpenRemoteStudio != null) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(NothingThemeTokens.Red)
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        onOpenRemoteStudio()
+                    }
+                    .padding(vertical = 10.dp, horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Computer,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "OPEN FULL REMOTE STUDIO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                    ),
+                    color = Color.White,
+                )
+            }
+        }
+
+        // 8. Playback Handoff Button
         if (canTransfer) {
             Spacer(Modifier.height(12.dp))
             Row(

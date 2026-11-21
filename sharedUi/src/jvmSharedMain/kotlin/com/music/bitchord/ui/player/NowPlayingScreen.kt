@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.player
 
+import com.music.bitchord.connect.AuraConnectManager
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.rounded.Bedtime
@@ -854,6 +855,9 @@ fun NowPlayingScreen(
     var showAudioPipeline by remember { mutableStateOf(false) }
     var showCast by remember { mutableStateOf(false) }
     var showAudioOutput by remember { mutableStateOf(false) }
+    var showRemoteStudio by remember { mutableStateOf(false) }
+    val connectedAuraDevice by AuraConnectManager.connectedDevice.collectAsStateWithLifecycle()
+    val remotePlaybackState by AuraConnectManager.remotePlaybackState.collectAsStateWithLifecycle()
     var showVideoQuality by remember { mutableStateOf(false) }
     var showBandwidthDialog by remember { mutableStateOf(false) }
     val networkQuality by AuraNetworkMonitor.quality.collectAsStateWithLifecycle()
@@ -1661,6 +1665,7 @@ fun NowPlayingScreen(
                 accountName = accountName,
                 onOpenOutput = openAudioOutput,
                 onOpenMembers = openListenTogetherMembers,
+                onOpenRemoteStudio = { showRemoteStudio = true },
             )
         }
     }
@@ -1776,12 +1781,28 @@ fun NowPlayingScreen(
                 onDismiss = { showAudioOutput = false },
                 onOpenPipeline = { showAudioPipeline = true },
                 onOpenCast = { showCast = true },
+                onOpenRemoteStudio = {
+                    showAudioOutput = false
+                    showRemoteStudio = true
+                },
                 currentSong = song,
                 currentPositionMs = position.positionMs,
                 queue = queue,
                 queueIndex = queueIndex,
                 isPlaying = isPlaying,
                 onPauseLocal = { if (isPlaying) onPlayPause() },
+            )
+        }
+        if (showRemoteStudio && connectedAuraDevice != null) {
+            AuraRemoteStudioScreen(
+                device = connectedAuraDevice!!,
+                playbackState = remotePlaybackState,
+                hazeState = playerHaze,
+                onDismiss = { showRemoteStudio = false },
+                onDisconnect = {
+                    AuraConnectManager.disconnect()
+                    showRemoteStudio = false
+                },
             )
         }
         if (showLyricsProviders) {
