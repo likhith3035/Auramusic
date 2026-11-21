@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
 import com.music.bitchord.data.model.ArtistCredit
 import com.music.bitchord.data.model.CreditSegment
+import com.music.bitchord.data.model.ShuffleMode
 import com.music.bitchord.data.model.creditSegments
 import com.music.bitchord.sharedui.resources.*
 import com.music.bitchord.ui.theme.NothingGlyphTimer
@@ -718,6 +719,7 @@ internal fun PlayerActionRow(
     onListenTogether: () -> Unit,
     /** Opens [ListenTogetherMembersSheet] rather than settings directly. */
     onOpenListenTogetherMembers: () -> Unit,
+    shuffleMode: ShuffleMode = if (shuffleEnabled) ShuffleMode.STANDARD else ShuffleMode.OFF,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Sized for the wider of the two capsules — the three-up one — in both
@@ -753,15 +755,21 @@ internal fun PlayerActionRow(
                     // Always three-up, unlike the output/party capsule — so it
                     // always takes the narrower spacing. See
                     // [PILL_SEGMENT_WIDTH_TRIPLE].
+                    val isSmart = shuffleMode == ShuffleMode.SMART
+                    val isShuffled = shuffleMode != ShuffleMode.OFF || shuffleEnabled
                     Pill {
                         PillSegment(
                             icon = BitChordIcons.Shuffle,
-                            contentDescription = stringResource(
-                                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
-                            ),
+                            trailingLabel = if (isSmart) "+" else null,
+                            customActiveColor = if (isSmart) NothingThemeTokens.Red else null,
+                            contentDescription = when (shuffleMode) {
+                                ShuffleMode.SMART -> "Smart Shuffle on"
+                                ShuffleMode.STANDARD -> stringResource(Res.string.shuffle_on)
+                                ShuffleMode.OFF -> stringResource(Res.string.shuffle_off)
+                            },
                             onClick = onToggleShuffle,
-                            highlighted = shuffleEnabled,
-                            haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                            highlighted = isShuffled,
+                            haptic = if (isShuffled) Haptic.ToggleOff else Haptic.ToggleOn,
                             tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
                             width = PILL_SEGMENT_WIDTH_TRIPLE,
                         )
@@ -1118,6 +1126,7 @@ private fun PillSegment(
     label: String? = null,
     trailingLabel: String? = null,
     highlighted: Boolean = false,
+    customActiveColor: Color? = null,
     haptic: Haptic = Haptic.Tap,
     loading: Boolean = false,
     /** See [BottomGlyph], where the same window means the same thing. */
@@ -1128,8 +1137,10 @@ private fun PillSegment(
     val haptics = rememberHaptics()
     val lastTap = remember { mutableLongStateOf(-tapWindowMs) }
     val nothingOsMode by PlayerSettings.nothingOsMode.collectAsStateWithLifecycle()
-    val activeBg = if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.14f)
-    val activeTint = if (nothingOsMode) NothingThemeTokens.Red else Color.White
+    val activeBg = customActiveColor?.copy(alpha = 0.22f)
+        ?: if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.14f)
+    val activeTint = customActiveColor
+        ?: if (nothingOsMode) NothingThemeTokens.Red else Color.White
     Box(
         modifier = Modifier
             .width(width)

@@ -9,6 +9,7 @@ import androidx.compose.runtime.produceState
 import com.music.bitchord.playback.SleepTimerMode
 import com.music.bitchord.playback.SleepTimerStatus
 import com.music.bitchord.playback.SmartSleepTimer
+import com.music.bitchord.data.model.ShuffleMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import com.music.bitchord.ui.theme.NothingGlyphEqualizer
@@ -725,6 +726,7 @@ fun NowPlayingScreen(
     hasNext: Boolean,
     repeatMode: Int,
     shuffleEnabled: Boolean,
+    shuffleMode: ShuffleMode = if (shuffleEnabled) ShuffleMode.STANDARD else ShuffleMode.OFF,
     autoplayEnabled: Boolean,
     signedIn: Boolean,
     accountName: String?,
@@ -1637,6 +1639,7 @@ fun NowPlayingScreen(
             lyricsOpen = lyricsOpen,
             queueOpen = queueOpen,
             shuffleEnabled = shuffleEnabled,
+            shuffleMode = shuffleMode,
             repeatMode = repeatMode,
             autoplayEnabled = autoplayEnabled,
             onToggleLyrics = toggleLyrics,
@@ -1773,6 +1776,12 @@ fun NowPlayingScreen(
                 onDismiss = { showAudioOutput = false },
                 onOpenPipeline = { showAudioPipeline = true },
                 onOpenCast = { showCast = true },
+                currentSong = song,
+                currentPositionMs = position.positionMs,
+                queue = queue,
+                queueIndex = queueIndex,
+                isPlaying = isPlaying,
+                onPauseLocal = { if (isPlaying) onPlayPause() },
             )
         }
         if (showLyricsProviders) {

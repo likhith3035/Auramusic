@@ -2234,6 +2234,7 @@ private fun BitChordApp(
     }
 
     val shuffleEnabled by QueueShuffle.enabled.collectAsStateWithLifecycle()
+    val shuffleMode by QueueShuffle.mode.collectAsStateWithLifecycle()
 
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
 
@@ -5055,6 +5056,7 @@ private fun BitChordApp(
             repeatMode = player.repeatMode,
 
             shuffleEnabled = shuffleEnabled,
+            shuffleMode = shuffleMode,
 
             autoplayEnabled = autoplayEnabled,
 

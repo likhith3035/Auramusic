@@ -416,6 +416,8 @@ fun MediaItem.toSong() = Song(
     playbackSourceId = mediaMetadata.extras?.getString(EXTRA_PLAYBACK_SOURCE_ID),
     localUri = mediaMetadata.extras?.getString(EXTRA_LOCAL_URI),
     localPath = mediaMetadata.extras?.getString(EXTRA_LOCAL_PATH),
+    isSmartRecommendation = mediaMetadata.extras?.getBoolean(EXTRA_IS_SMART_RECOMMENDATION) == true,
+    smartSeedTitle = mediaMetadata.extras?.getString(EXTRA_SMART_SEED_TITLE),
 )
 
 /** @see Song.fromAutoplay */
@@ -444,6 +446,8 @@ val MediaItem.queueEntryId: String?
 /** Public metadata keys for queue categorization and immutable queue entry identity. */
 const val EXTRA_QUEUE_TIER = "bitchord.queueTier"
 const val EXTRA_QUEUE_ENTRY_ID = "bitchord.queueEntryId"
+const val EXTRA_IS_SMART_RECOMMENDATION = "bitchord.isSmartRecommendation"
+const val EXTRA_SMART_SEED_TITLE = "bitchord.smartSeedTitle"
 
 /**
  * Marks a queue entry as AutoPlay's rather than the user's. Carried on the
@@ -664,7 +668,8 @@ fun Song.toMediaItem(): MediaItem {
                     offlineUri != null || durationText != null ||
                     artistId != null || albumId != null || setVideoId != null ||
                     isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
-                    playbackSource != null || playbackSourceType != null || playbackSourceId != null
+                    playbackSource != null || playbackSourceType != null || playbackSourceId != null ||
+                    isSmartRecommendation || smartSeedTitle != null
                 ) {
                     setExtras(
                         bundleOf(
@@ -684,6 +689,8 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_EXPLICIT to isExplicit,
                             EXTRA_IS_VIDEO to isVideo,
                             EXTRA_VIDEO_ORIGIN to isVideoOrigin,
+                            EXTRA_IS_SMART_RECOMMENDATION to isSmartRecommendation,
+                            EXTRA_SMART_SEED_TITLE to smartSeedTitle,
                         ),
                     )
                 }

@@ -47,6 +47,10 @@ import com.music.bitchord.ui.theme.NothingThemeTokens
 import com.music.bitchord.ui.player.RepeatModes
 import com.music.bitchord.ui.player.rememberMixPulse
 import androidx.compose.runtime.SideEffect
+import com.music.bitchord.desktop.connect.AuraConnectHost
+import com.music.bitchord.data.connect.AuraPlaybackState
+import com.music.bitchord.data.connect.toConnectTrack
+import com.music.bitchord.data.connect.toSong
 import com.music.bitchord.data.model.QueueTier
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -1610,6 +1614,54 @@ fun BitChordDesktopApp() {
             ),
         )
         onDispose { DesktopWindowsMedia.stop() }
+    }
+
+    DisposableEffect(playbackEngine) {
+        AuraConnectHost.getState = {
+            val engineState = playbackEngine.state.value
+            AuraPlaybackState(
+                isPlaying = engineState.isPlaying,
+                positionMs = engineState.positionMs,
+                durationMs = engineState.durationMs,
+                volume = volume,
+                track = liveQueue.current?.toConnectTrack(engineState.durationMs),
+                queue = liveQueue.songs.map { it.toConnectTrack() },
+                queueIndex = liveQueue.index,
+                updatedAtMs = System.currentTimeMillis(),
+            )
+        }
+        AuraConnectHost.onPlay = ::playFromUser
+        AuraConnectHost.onPause = ::pauseFromUser
+        AuraConnectHost.onTogglePlayPause = ::togglePlayPauseFromUser
+        AuraConnectHost.onNext = ::playNext
+        AuraConnectHost.onPrevious = ::playPrevious
+        AuraConnectHost.onSeek = { ms -> playbackEngine.seekTo(ms) }
+        AuraConnectHost.onSetVolume = { newVol ->
+            val v = newVol.coerceIn(0f, 1f)
+            volume = v
+            playbackEngine.setVolume(v)
+        }
+        AuraConnectHost.onPlayIndex = ::playQueueIndex
+        AuraConnectHost.onTransferSession = { session ->
+            val incomingSongs = session.queue.map { it.toSong() }
+            if (incomingSongs.isNotEmpty()) {
+                val targetIndex = session.queueIndex.coerceIn(0, incomingSongs.size - 1)
+                playSongs(incomingSongs, targetIndex)
+                if (session.positionMs > 0) {
+                    playbackEngine.seekTo(session.positionMs)
+                }
+            } else {
+                val track = session.track
+                if (track != null) {
+                    playSongs(listOf(track.toSong()), 0)
+                    if (session.positionMs > 0) {
+                        playbackEngine.seekTo(session.positionMs)
+                    }
+                }
+            }
+        }
+        AuraConnectHost.start()
+        onDispose { AuraConnectHost.stop() }
     }
 
     LaunchedEffect(playbackSpeed) { playbackEngine.setPlaybackSpeed(playbackSpeed) }

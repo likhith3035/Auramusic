@@ -2589,7 +2589,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun toggleShuffleFromSession() {
-        player?.let(QueueShuffle::toggle)
+        player?.let { QueueShuffle.toggle(it, scope) }
         refreshCustomLayouts()
     }
 
@@ -5881,7 +5881,7 @@ class PlaybackService : MediaLibraryService() {
         // this process, so QueueShuffle's process-wide object may still hold
         // the previous service instance's value. Only assigning `true` made a
         // stale enabled state consume the first tap meant to enable Shuffle.
-        QueueShuffle.setEnabled(AppSettings.shuffleEnabled.value)
+        QueueShuffle.setMode(AppSettings.shuffleMode.value)
         player.repeatMode = AppSettings.repeatMode.value
     }
 

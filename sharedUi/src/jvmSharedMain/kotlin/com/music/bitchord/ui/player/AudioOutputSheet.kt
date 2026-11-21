@@ -29,6 +29,20 @@ import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.ui.unit.sp
+import com.music.bitchord.connect.AuraConnectManager
+import com.music.bitchord.data.connect.AuraConnectDevice
+import com.music.bitchord.data.connect.AuraDeviceType
+import com.music.bitchord.data.connect.AuraPlaybackState
+import com.music.bitchord.data.model.Song
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -88,9 +102,23 @@ internal fun AudioOutputSheet(
     onOpenPipeline: () -> Unit,
     onOpenCast: () -> Unit,
     modifier: Modifier = Modifier,
+    currentSong: Song? = null,
+    currentPositionMs: Long = 0L,
+    queue: List<Song> = emptyList(),
+    queueIndex: Int = 0,
+    isPlaying: Boolean = false,
+    onPauseLocal: () -> Unit = {},
 ) {
     val outputs = rememberAudioOutputs()
     val cast by PlayerPlatform.host.castState.collectAsStateWithLifecycle()
+    val connectDevices by AuraConnectManager.discoveredDevices.collectAsStateWithLifecycle()
+    val connectedDevice by AuraConnectManager.connectedDevice.collectAsStateWithLifecycle()
+    val remotePlayback by AuraConnectManager.remotePlaybackState.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        AuraConnectManager.startDiscovery()
+        onDispose {}
+    }
 
     PlayerDrawer(
         hazeState = hazeState,
@@ -117,6 +145,64 @@ internal fun AudioOutputSheet(
             // receivers behind it are chosen in a popup of their own — there
             // can be any number of them, and they come and go while it is open.
             if (cast.supported) CastRow(cast = cast, onClick = onOpenCast)
+        }
+
+        if (connectDevices.isNotEmpty() || connectedDevice != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "AURA CONNECT (WI-FI)",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                ),
+                color = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                connectDevices.forEach { device ->
+                    val isConnected = connectedDevice?.id == device.id
+                    AuraConnectDeviceRow(
+                        device = device,
+                        isConnected = isConnected,
+                        remoteState = if (isConnected) remotePlayback else null,
+                        onConnect = {
+                            if (isConnected) {
+                                AuraConnectManager.disconnect()
+                            } else {
+                                AuraConnectManager.connect(device)
+                            }
+                        },
+                    )
+                }
+            }
+
+            if (connectedDevice != null && remotePlayback != null) {
+                Spacer(Modifier.height(8.dp))
+                AuraRemoteControlCard(
+                    device = connectedDevice!!,
+                    playback = remotePlayback!!,
+                    canTransfer = currentSong != null,
+                    onTogglePlayPause = { AuraConnectManager.sendCommand("PLAY_PAUSE") },
+                    onPrevious = { AuraConnectManager.sendCommand("PREVIOUS") },
+                    onNext = { AuraConnectManager.sendCommand("NEXT") },
+                    onTransferPlayback = {
+                        AuraConnectManager.transferPlaybackToDevice(
+                            device = connectedDevice!!,
+                            currentTrack = currentSong,
+                            positionMs = currentPositionMs,
+                            queue = queue,
+                            queueIndex = queueIndex,
+                            isPlaying = true,
+                        )
+                        onPauseLocal()
+                    },
+                )
+            }
         }
 
         Spacer(Modifier.height(10.dp))
@@ -424,3 +510,229 @@ private fun iconFor(kind: AudioOutputKind): ImageVector = when (kind) {
 /** How many times the level is re-read after a route change, and how far apart. */
 private const val VOLUME_REREADS = 4
 private const val VOLUME_REREAD_GAP_MS = 250L
+
+@Composable
+private fun AuraConnectDeviceRow(
+    device: AuraConnectDevice,
+    isConnected: Boolean,
+    remoteState: AuraPlaybackState?,
+    onConnect: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val active = isConnected
+    val icon = when (device.deviceType) {
+        AuraDeviceType.DESKTOP -> Icons.Rounded.Computer
+        AuraDeviceType.TV -> Icons.Rounded.Tv
+        AuraDeviceType.MOBILE -> Icons.Rounded.PhoneAndroid
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ROW_SHAPE)
+            .background(if (active) NothingThemeTokens.Red.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                haptics.play(Haptic.Select)
+                onConnect()
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(if (active) NothingThemeTokens.Red.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) NothingThemeTokens.Red else Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(21.dp),
+            )
+        }
+        Spacer(Modifier.width(13.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                color = Color.White.copy(alpha = if (active) 1f else 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            val subtitle = when {
+                active && remoteState?.isPlaying == true -> "Playing on Wi-Fi · Tap to disconnect"
+                active -> "Connected · Ready for commands"
+                else -> "Wi-Fi Device · Tap to connect & control"
+            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (active) NothingThemeTokens.Red.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (active) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = NothingThemeTokens.Red,
+                modifier = Modifier.size(20.dp),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.35f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AuraRemoteControlCard(
+    device: AuraConnectDevice,
+    playback: AuraPlaybackState,
+    canTransfer: Boolean,
+    onTogglePlayPause: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onTransferPlayback: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = playback.track?.title?.takeIf { it.isNotBlank() } ?: "No Track Playing",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!playback.track?.artist.isNullOrBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = playback.track?.artist.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // Transport controls
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.1f))
+                        .clickable {
+                            haptics.play(Haptic.Tap)
+                            onPrevious()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.SkipPrevious,
+                        contentDescription = "Previous",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(NothingThemeTokens.Red)
+                        .clickable {
+                            haptics.play(Haptic.ToggleOn)
+                            onTogglePlayPause()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (playback.isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.1f))
+                        .clickable {
+                            haptics.play(Haptic.Tap)
+                            onNext()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.SkipNext,
+                        contentDescription = "Next",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+
+        if (canTransfer) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .clickable {
+                        haptics.play(Haptic.Select)
+                        onTransferPlayback()
+                    }
+                    .padding(vertical = 8.dp, horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Sync,
+                    contentDescription = null,
+                    tint = NothingThemeTokens.Red,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Transfer Phone Playback to ${device.name}",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                )
+            }
+        }
+    }
+}

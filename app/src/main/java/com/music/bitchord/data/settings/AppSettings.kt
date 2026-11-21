@@ -15,6 +15,7 @@ import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.playback.EqLayout
 import com.music.bitchord.playback.EqualizerPreset
 import com.music.bitchord.data.ai.AuraAiPersona
+import com.music.bitchord.data.model.ShuffleMode
 import kotlinx.coroutines.flow.MutableStateFlow
 
 
@@ -418,6 +419,9 @@ object AppSettings {
 
     /** Whether the queue is held in shuffled order (Mix button). */
     val shuffleEnabled = MutableStateFlow(false)
+
+    /** 3-state shuffle mode: OFF, STANDARD, SMART. */
+    val shuffleMode = MutableStateFlow(ShuffleMode.OFF)
 
     /** Repeat mode for the player — Off, All, or One. */
     val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
@@ -961,7 +965,16 @@ object AppSettings {
         }
         lastSeenWhatsNewVersion.value = prefs.getInt(KEY_LAST_SEEN_WHATS_NEW_VERSION, 0)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
-        shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
+        val savedShuffleModeStr = prefs.getString(KEY_SHUFFLE_MODE, null)
+        val restoredShuffleMode = if (savedShuffleModeStr != null) {
+            runCatching { ShuffleMode.valueOf(savedShuffleModeStr) }.getOrDefault(ShuffleMode.OFF)
+        } else if (prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)) {
+            ShuffleMode.STANDARD
+        } else {
+            ShuffleMode.OFF
+        }
+        shuffleMode.value = restoredShuffleMode
+        shuffleEnabled.value = restoredShuffleMode != ShuffleMode.OFF
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
@@ -1239,7 +1252,20 @@ object AppSettings {
 
     fun setShuffleEnabled(value: Boolean) {
         shuffleEnabled.value = value
-        prefs.edit().putBoolean(KEY_SHUFFLE_ENABLED, value).apply()
+        shuffleMode.value = if (value) ShuffleMode.STANDARD else ShuffleMode.OFF
+        prefs.edit()
+            .putBoolean(KEY_SHUFFLE_ENABLED, value)
+            .putString(KEY_SHUFFLE_MODE, shuffleMode.value.name)
+            .apply()
+    }
+
+    fun setShuffleMode(value: ShuffleMode) {
+        shuffleMode.value = value
+        shuffleEnabled.value = value != ShuffleMode.OFF
+        prefs.edit()
+            .putString(KEY_SHUFFLE_MODE, value.name)
+            .putBoolean(KEY_SHUFFLE_ENABLED, value != ShuffleMode.OFF)
+            .apply()
     }
 
     fun setRepeatMode(value: Int) {
@@ -2416,6 +2442,7 @@ object AppSettings {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
+    private const val KEY_SHUFFLE_MODE = "shuffle_mode"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"

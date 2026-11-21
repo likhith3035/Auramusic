@@ -11,6 +11,24 @@ enum class QueueTier {
 }
 
 /**
+ * Playback shuffle state machine.
+ * OFF: strictly sequential playback in original queue order.
+ * STANDARD: random order shuffle of context and autoplay sections.
+ * SMART: smart shuffle that interleaves harmonic recommended tracks into the queue.
+ */
+enum class ShuffleMode {
+    OFF,
+    STANDARD,
+    SMART;
+
+    fun next(): ShuffleMode = when (this) {
+        OFF -> STANDARD
+        STANDARD -> SMART
+        SMART -> OFF
+    }
+}
+
+/**
  * One credited artist, as YouTube Music itself states them.
  *
  * @property browseId The artist's own channel, so their page is the one that
@@ -141,6 +159,10 @@ data class Song(
      * non-history rows (e.g. search results, library).
      */
     val feedbackToken: String? = null,
+    /** Whether this track was injected by the Smart Shuffle recommendation engine. */
+    val isSmartRecommendation: Boolean = false,
+    /** Title of the seed song used to generate this Smart Shuffle recommendation. */
+    val smartSeedTitle: String? = null,
 ) {
     /** Legacy derived property: true if and only if [queueTier] is [QueueTier.AUTOPLAY]. */
     val fromAutoplay: Boolean get() = queueTier == QueueTier.AUTOPLAY
