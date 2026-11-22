@@ -463,22 +463,17 @@ internal fun LandscapeCredits(
             }
         }
         Spacer(Modifier.width(10.dp))
-        // Same gate as the portrait player's: no account to like against for a
-        // guest — but a local file or a finished download is liked on the
-        // device, which needs none.
-        if (signedIn || song.localUri != null) {
-            val liked = likeStatus == LikeStatus.LIKE
-            CircleGlyph(
-                icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
-                contentDescription = stringResource(
-                    if (liked) Res.string.remove_from_liked else Res.string.like,
-                ),
-                onClick = onToggleLike,
-                active = liked,
-                haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-            )
-            Spacer(Modifier.width(8.dp))
-        }
+        val liked = likeStatus == LikeStatus.LIKE
+        CircleGlyph(
+            icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
+            contentDescription = stringResource(
+                if (liked) Res.string.remove_from_liked else Res.string.like,
+            ),
+            onClick = onToggleLike,
+            active = liked,
+            haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+        )
+        Spacer(Modifier.width(8.dp))
         CircleGlyph(
             icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
             contentDescription = stringResource(Res.string.more),

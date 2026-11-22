@@ -9,6 +9,7 @@ import com.music.bitchord.ui.library.DailyHighlightsCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Storage
@@ -58,6 +59,12 @@ fun libraryLinks(): List<LibraryLink> {
         icon = icon,
     )
     return listOfNotNull(
+        link(
+            Icons.Rounded.Favorite,
+            stringResource(R.string.auto_liked),
+            stringResource(R.string.favorites_on_device),
+            "local:favorites",
+        ),
         link(
             Icons.Rounded.Download,
             stringResource(R.string.downloads),

@@ -615,57 +615,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * them ([likeStatuses]) means a tap shows immediately without the library
      * having to be re-fetched, and a later refresh can't undo it.
      */
-    /** Every rating known for this account: the library's, then this session's. */
+    /** Every rating known for this account: the library's, local storage's, then this session's. */
     val likeStatuses: StateFlow<Map<String, LikeStatus>> =
-        combine(_library, LikeState.overrides) { library, overrides ->
+        combine(_library, LikeState.overrides, com.music.bitchord.data.favorites.FavoriteStore.likedIds) { library, overrides, localLiked ->
             val liked = (library as? UiState.Success)?.data?.likedSongs
                 ?.associate { it.videoId to LikeStatus.LIKE }
                 .orEmpty()
-            liked + overrides
+            val fromLocal = localLiked.associateWith { LikeStatus.LIKE }
+            liked + fromLocal + overrides
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     fun likeStatusOf(videoId: String): LikeStatus =
         likeStatuses.value[videoId] ?: LikeStatus.INDIFFERENT
 
+    private fun isYouTubeVideoId(id: String): Boolean =
+        id.length == 11 && id.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' || it == '-' }
+
     /**
      * Sets (or clears) the thumbs rating on [videoId].
      *
-     * Written to the screen first and rolled back if YouTube refuses. A rating
-     * is a one-tap, low-stakes action taken while a song is playing; waiting
-     * on a round trip before the heart fills reads as the tap not having
-     * registered, and people tap again.
+     * Written to the screen and local favorite store immediately so that ratings
+     * take effect across online, guest, and offline listening. When signed in,
+     * the rating is synchronized with YouTube Music in the background.
      */
-    fun setLike(videoId: String, status: LikeStatus) {
-        if (!requireSignIn()) return
+    fun setLike(videoId: String, status: LikeStatus, song: Song? = null) {
         val previous = likeStatusOf(videoId)
         if (previous == status) return
         LikeState.set(videoId, status)
-        viewModelScope.launch {
-            YtMusicRepository.rate(videoId, status).fold(
-                onSuccess = {
-                    // Liked Music is now out of date either way.
-                    libraryStale = true
-                    if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
-                    if (status == LikeStatus.LIKE && AppSettings.downloadLikedSongs.value) {
-                        viewModelScope.launch {
-                            val candidate = (_library.value as? UiState.Success)?.data?.likedSongs?.firstOrNull { it.videoId == videoId }
-                                ?: AudioCache.cachedSongs().firstOrNull { it.song.videoId == videoId }?.song
-                                ?: YtMusicRepository.browseSongs(YtMusicRepository.LIKED_MUSIC).getOrNull()?.songs?.firstOrNull { it.videoId == videoId }
-                            if (candidate != null) {
-                                Downloads.enqueue(getApplication(), candidate)
-                            }
-                        }
-                    }
-                    // Clearing the heart means forgetting the song, not
-                    // demoting it — see [forgetFromLibrary].
-                    val unliked = previous == LikeStatus.LIKE &&
-                        status == LikeStatus.INDIFFERENT
-                    if (unliked) forgetFromLibrary(videoId)
-                },
-                onFailure = {
-                    LikeState.set(videoId, previous)
-                },
-            )
+        com.music.bitchord.data.favorites.FavoriteStore.setLike(videoId, status, song)
+
+        if (status == LikeStatus.LIKE && AppSettings.downloadLikedSongs.value) {
+            viewModelScope.launch {
+                val candidate = song
+                    ?: (_library.value as? UiState.Success)?.data?.likedSongs?.firstOrNull { it.videoId == videoId }
+                    ?: AudioCache.cachedSongs().firstOrNull { it.song.videoId == videoId }?.song
+                    ?: YtMusicRepository.browseSongs(YtMusicRepository.LIKED_MUSIC).getOrNull()?.songs?.firstOrNull { it.videoId == videoId }
+                if (candidate != null) {
+                    Downloads.enqueue(getApplication(), candidate)
+                }
+            }
+        }
+
+        if (_signedIn.value && isYouTubeVideoId(videoId)) {
+            viewModelScope.launch {
+                YtMusicRepository.rate(videoId, status).fold(
+                    onSuccess = {
+                        libraryStale = true
+                        if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
+                        val unliked = previous == LikeStatus.LIKE &&
+                            status == LikeStatus.INDIFFERENT
+                        if (unliked) forgetFromLibrary(videoId)
+                    },
+                    onFailure = { error ->
+                        com.music.bitchord.data.TrackLog.w("BitChord", "Failed to sync rating to YouTube: ${error.message}", about = videoId)
+                    },
+                )
+            }
+        } else {
+            libraryStale = true
+            if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
         }
     }
 
@@ -726,23 +734,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The heart: liked becomes neutral, anything else becomes liked. */
-    fun toggleLike(videoId: String) = setLike(
-        videoId,
-        if (likeStatusOf(videoId) == LikeStatus.LIKE) LikeStatus.INDIFFERENT else LikeStatus.LIKE,
+    fun toggleLike(videoId: String, song: Song? = null) = setLike(
+        videoId = videoId,
+        status = if (likeStatusOf(videoId) == LikeStatus.LIKE) LikeStatus.INDIFFERENT else LikeStatus.LIKE,
+        song = song,
     )
 
     /** As [toggleLike], for the thumb-down. */
     fun toggleDislike(videoId: String): LikeStatus? {
-        if (!requireSignIn()) return null
         val previous = likeStatusOf(videoId)
-        setLike(
-            videoId,
-            if (previous == LikeStatus.DISLIKE) {
-                LikeStatus.INDIFFERENT
-            } else {
-                LikeStatus.DISLIKE
-            },
-        )
+        val target = if (previous == LikeStatus.DISLIKE) LikeStatus.INDIFFERENT else LikeStatus.DISLIKE
+        setLike(videoId, target)
         return previous
     }
 
@@ -2584,6 +2586,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val context = getApplication<Application>()
                     val songs = Downloads.getDownloadedSongs(context)
                     if (songs.isEmpty()) UiState.Error("No downloaded tracks")
+                    else UiState.Success(songs)
+                }
+                browseId == "local:favorites" || (browseId == YtMusicRepository.LIKED_MUSIC && !_signedIn.value) -> {
+                    val songs = com.music.bitchord.data.favorites.FavoriteStore.favoriteSongs.value
+                    name = getApplication<Application>().getString(R.string.auto_liked)
+                    credit = if (songs.isEmpty()) getApplication<Application>().getString(R.string.auto_empty_liked_title) else "${songs.size} songs · On device"
+                    artwork = songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
+                    if (songs.isEmpty()) UiState.Error(getApplication<Application>().getString(R.string.auto_empty_liked_subtitle))
                     else UiState.Success(songs)
                 }
                 browseId == CACHE_FOLDER_BROWSE_ID -> cachedSongsState()

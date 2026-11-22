@@ -3895,23 +3895,18 @@ fun NowPlayingScreen(
                             Spacer(Modifier.width(10.dp))
                             // Beside the credits rather than down in the toggle row:
                             // liking is about *this song*, and the row below is about
-                            // how the queue plays. Guests get nothing to tap, since
-                            // there's no account to record it against — except on a
-                            // local file or a finished download, whose star is the
-                            // device's own Liked playlist and needs no account.
-                            if (signedIn || song.localUri != null) {
-                                val liked = likeStatus == LikeStatus.LIKE
-                                CircleGlyph(
-                                    icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
-                                    contentDescription = stringResource(
-                                        if (liked) Res.string.remove_from_liked else Res.string.like,
-                                    ),
-                                    onClick = onToggleLike,
-                                    active = liked,
-                                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
+                            // how the queue plays.
+                            val liked = likeStatus == LikeStatus.LIKE
+                            CircleGlyph(
+                                icon = if (liked) BitChordIcons.StarFilled else BitChordIcons.Star,
+                                contentDescription = stringResource(
+                                    if (liked) Res.string.remove_from_liked else Res.string.like,
+                                ),
+                                onClick = onToggleLike,
+                                active = liked,
+                                haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+                            )
+                            Spacer(Modifier.width(8.dp))
                             // While the lyrics are up the menu glyph becomes the share
                             // entry: the same pick mode a long-press on a line opens,
                             // only on phones where a card can actually be made. While

@@ -1422,6 +1422,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        com.music.bitchord.data.favorites.FavoriteStore.init(this)
 
         if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
             com.music.bitchord.data.innertube.Innertube.cookie = com.music.bitchord.auth.AuthStore(this).cookie
@@ -2865,6 +2866,9 @@ class PlaybackService : MediaLibraryService() {
         exoPlayer.addMediaItems(restored)
     }
 
+    private fun isYouTubeVideoId(id: String): Boolean =
+        id.length == 11 && id.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' || it == '-' }
+
     private fun toggleFavoriteFromNotification(videoId: String) {
         favoriteActionJob?.cancel()
         val previous = LikeState.overrides.value[videoId] ?: LikeStatus.INDIFFERENT
@@ -2877,20 +2881,22 @@ class PlaybackService : MediaLibraryService() {
         // Match the player UI: update both surfaces immediately, then reconcile
         // the optimistic state with YouTube in the background.
         LikeState.set(videoId, target)
+        val song = player?.currentMediaItem?.takeIf { it.mediaId == videoId }?.toSong()
+        com.music.bitchord.data.favorites.FavoriteStore.setLike(videoId, target, song)
         if (target == LikeStatus.LIKE && AppSettings.downloadLikedSongs.value) {
-            val song = player?.currentMediaItem?.takeIf { it.mediaId == videoId }?.toSong()
             if (song != null) {
                 Downloads.enqueue(this@PlaybackService, song)
             }
         }
         refreshCustomLayouts()
-        favoriteActionJob = scope.launch {
-            YtMusicRepository.rate(videoId, target)
-                .onFailure {
-                    LikeState.set(videoId, previous)
-                    refreshCustomLayouts()
-                    TrackLog.w("BitChord", "notification favorite failed: ${it.message}", about = videoId)
-                }
+        if (com.music.bitchord.data.innertube.Innertube.cookie != null && isYouTubeVideoId(videoId)) {
+            favoriteActionJob = scope.launch {
+                YtMusicRepository.rate(videoId, target)
+                    .onFailure {
+                        refreshCustomLayouts()
+                        TrackLog.w("BitChord", "notification favorite failed: ${it.message}", about = videoId)
+                    }
+            }
         }
     }
 

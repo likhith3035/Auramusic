@@ -5064,9 +5064,9 @@ private fun BitChordApp(
 
             signedIn = signedIn,
 
-            likeStatus = likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
+            likeStatus = likeStatuses[displayedSong.videoId] ?: likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
 
-            onToggleLike = { viewModel.toggleLike(song.videoId) },
+            onToggleLike = { viewModel.toggleLike(displayedSong.videoId, displayedSong) },
 
             // The service owns both the queue and the Shuffle state. Keeping
 
@@ -8639,7 +8639,7 @@ private fun BitChordApp(
 
                 // in place, and people often thumb a song and then queue it.
 
-                onToggleLike = { viewModel.toggleLike(song.videoId) },
+                onToggleLike = { viewModel.toggleLike(song.videoId, song) },
 
                 onToggleDislike = {
 
