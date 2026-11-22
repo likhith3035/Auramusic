@@ -203,6 +203,12 @@ fun LivingWeatherCanvas(
             WeatherVisualType.CLEAR_NIGHT -> {
                 drawClearNightScene(stars, clouds, pulsePhase, slowPhase, width, height)
             }
+            WeatherVisualType.SUNRISE -> {
+                drawSunriseScene(stars, clouds, pulsePhase, slowPhase, width, height)
+            }
+            WeatherVisualType.SUNSET -> {
+                drawSunsetScene(clouds, pulsePhase, slowPhase, width, height)
+            }
             WeatherVisualType.CLOUDY -> {
                 drawCloudyScene(clouds, slowPhase, width, height)
             }
@@ -388,45 +394,72 @@ private fun DrawScope.drawSunnyScene(
     val sunCenterX = (width - 76.dp.toPx()).coerceAtLeast(width * 0.74f)
     val sunCenterY = height * 0.44f
     val sunRadius = (height * 0.26f).coerceIn(46.dp.toPx(), 60.dp.toPx())
-
     val pulseScale = 0.94f + 0.12f * pulsePhase
 
-    // 1. Broad atmospheric daylight warmth filling upper-right hemisphere
+    // 1. Broad daylight atmospheric scattering filling sky with true Rayleigh warmth
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFA500).copy(alpha = 0.22f * pulseScale),
-                Color(0xFFFFB703).copy(alpha = 0.12f * pulseScale),
-                Color(0xFFFB8500).copy(alpha = 0.04f),
+                Color(0xFFFFA500).copy(alpha = 0.24f * pulseScale),
+                Color(0xFFFFB703).copy(alpha = 0.14f * pulseScale),
+                Color(0xFF38BDF8).copy(alpha = 0.05f),
                 Color.Transparent,
             ),
             center = Offset(sunCenterX, sunCenterY),
-            radius = (width * 0.58f).coerceAtLeast(sunRadius * 4.2f),
+            radius = (width * 0.60f).coerceAtLeast(sunRadius * 4.4f),
         ),
     )
 
-    // 2. Volumetric golden-amber solar corona
+    // 2. Multi-layered dynamic solar corona with gentle pulsation
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFE082).copy(alpha = 0.45f * pulseScale),
-                Color(0xFFFFB703).copy(alpha = 0.28f * pulseScale),
-                Color(0xFFFB8500).copy(alpha = 0.10f),
+                Color(0xFFFFF9C4).copy(alpha = 0.50f * pulseScale),
+                Color(0xFFFFE082).copy(alpha = 0.30f * pulseScale),
+                Color(0xFFFFB703).copy(alpha = 0.12f),
                 Color.Transparent,
             ),
             center = Offset(sunCenterX, sunCenterY),
-            radius = sunRadius * 2.3f * pulseScale,
+            radius = sunRadius * 2.35f * pulseScale,
         ),
     )
 
-    // 3. Cinematic anamorphic lens flare horizontal streak
-    val flareHalfSpan = sunRadius * 3.6f
-    val flareThickness = sunRadius * 0.24f
+    // 3. Optical 8-point aperture starburst rays radiating from the blazing core
+    val starburstAngles = listOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
+    for (angleDeg in starburstAngles) {
+        val rad = (angleDeg + pulsePhase * 4f) * (PI.toFloat() / 180f)
+        val isCardinal = (angleDeg % 90f == 0f)
+        val rayLength = sunRadius * (if (isCardinal) 2.2f else 1.6f) * pulseScale
+        val rayEnd = Offset(
+            sunCenterX + cos(rad) * rayLength,
+            sunCenterY + sin(rad) * rayLength,
+        )
+        drawLine(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.35f * pulseScale),
+                    Color(0xFFFEF08A).copy(alpha = 0.15f * pulseScale),
+                    Color.Transparent,
+                ),
+                start = Offset(sunCenterX, sunCenterY),
+                end = rayEnd,
+            ),
+            start = Offset(sunCenterX, sunCenterY),
+            end = rayEnd,
+            strokeWidth = if (isCardinal) 1.5f else 1.0f,
+            cap = StrokeCap.Round,
+        )
+    }
+
+    // 4. Cinematic horizontal anamorphic lens flare with subtle cyan-amber fringe
+    val flareHalfSpan = sunRadius * 3.8f
+    val flareThickness = sunRadius * 0.22f
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFFBEB).copy(alpha = 0.55f * pulseScale),
-                Color(0xFFFEF08A).copy(alpha = 0.25f * pulseScale),
+                Color(0xFFFFFFFF).copy(alpha = 0.62f * pulseScale),
+                Color(0xFFFEF08A).copy(alpha = 0.28f * pulseScale),
+                Color(0xFF38BDF8).copy(alpha = 0.08f),
                 Color.Transparent,
             ),
             center = Offset(sunCenterX, sunCenterY),
@@ -436,39 +469,55 @@ private fun DrawScope.drawSunnyScene(
         size = Size(flareHalfSpan * 2f, flareThickness),
     )
 
-    // 4. Photorealistic incandescent Sun body with blinding white-hot core
+    // Secondary circular lens flare ghost reflection along optical axis
+    val ghostCenterX = sunCenterX - sunRadius * 1.5f
+    val ghostCenterY = sunCenterY + sunRadius * 0.85f
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFFFFF),
-                Color(0xFFFFFDE7),
-                Color(0xFFFEF08A),
-                Color(0xFFFBBF24),
-                Color(0xFFF59E0B),
+                Color(0xFF38BDF8).copy(alpha = 0.15f * pulseScale),
+                Color(0xFF818CF8).copy(alpha = 0.08f * pulseScale),
+                Color.Transparent,
             ),
-            center = Offset(sunCenterX - sunRadius * 0.18f, sunCenterY - sunRadius * 0.18f),
+            center = Offset(ghostCenterX, ghostCenterY),
+            radius = sunRadius * 0.40f,
+        ),
+    )
+
+    // 5. Photorealistic incandescent Sun body with limb darkening & white-hot core
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),       // Specular white-hot core
+                Color(0xFFFFFDE7),       // White-yellow inner photosphere
+                Color(0xFFFEF08A),       // Photosphere midtones
+                Color(0xFFFBBF24),       // Golden chromosphere
+                Color(0xFFF59E0B),       // Solar amber
+                Color(0xFFD97706),       // Limb darkening edge
+            ),
+            center = Offset(sunCenterX - sunRadius * 0.16f, sunCenterY - sunRadius * 0.16f),
             radius = sunRadius,
         ),
         radius = sunRadius,
         center = Offset(sunCenterX, sunCenterY),
     )
 
-    // 5. Sun-kissed golden rim highlight
+    // 6. Photospheric specular crescent rim highlight
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.85f),
-                Color(0xFFFFF9C4).copy(alpha = 0.35f),
+                Color.White.copy(alpha = 0.90f),
+                Color(0xFFFFF9C4).copy(alpha = 0.40f),
                 Color.Transparent,
             ),
-            center = Offset(sunCenterX - sunRadius * 0.22f, sunCenterY - sunRadius * 0.22f),
+            center = Offset(sunCenterX - sunRadius * 0.20f, sunCenterY - sunRadius * 0.20f),
             radius = sunRadius * 0.65f,
         ),
         radius = sunRadius * 0.65f,
-        center = Offset(sunCenterX - sunRadius * 0.22f, sunCenterY - sunRadius * 0.22f),
+        center = Offset(sunCenterX - sunRadius * 0.20f, sunCenterY - sunRadius * 0.20f),
     )
 
-    // 6. Drift soft sunlit clouds across the lower perimeter
+    // 7. Drift soft sunlit clouds across lower perimeter
     drawAtmosphericClouds(
         clouds = clouds,
         slowPhase = slowPhase,
@@ -476,6 +525,284 @@ private fun DrawScope.drawSunnyScene(
         height = height,
         cloudTint = Color(0xFFFEF3C7),
         baseAlphaMultiplier = 0.55f,
+    )
+}
+
+private fun DrawScope.drawSunriseScene(
+    stars: List<Star>,
+    clouds: List<CloudCluster>,
+    pulsePhase: Float,
+    slowPhase: Float,
+    width: Float,
+    height: Float,
+) {
+    val sunCenterX = (width - 76.dp.toPx()).coerceAtLeast(width * 0.74f)
+    val sunCenterY = height * 0.52f
+    val sunRadius = (height * 0.25f).coerceIn(44.dp.toPx(), 58.dp.toPx())
+    val pulseScale = 0.94f + 0.12f * pulsePhase
+
+    // 1. Dawn sky atmosphere: deep twilight purple at top fading into soft coral, rose, and radiant morning gold
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF18112C).copy(alpha = 0.75f),
+                Color(0xFF38153A).copy(alpha = 0.70f),
+                Color(0xFF701F48).copy(alpha = 0.65f),
+                Color(0xFFC2410C).copy(alpha = 0.55f),
+                Color(0xFFFBBF24).copy(alpha = 0.50f),
+            ),
+            startY = 0f,
+            endY = height,
+        ),
+        size = Size(width, height),
+    )
+
+    // 2. Faint morning stars fading in the western upper sky
+    for (star in stars) {
+        if (star.relX < 0.65f && star.relY < 0.45f) {
+            val starX = star.relX * width
+            val starY = star.relY * height
+            val twinkle = 0.20f + 0.50f * (0.5f + 0.5f * sin((slowPhase * 3f * PI + star.phase).toFloat()))
+            drawCircle(
+                color = Color(0xFFFFEDD5).copy(alpha = (twinkle * 0.45f).coerceIn(0f, 1f)),
+                radius = star.radius * 0.8f,
+                center = Offset(starX, starY),
+            )
+        }
+    }
+
+    // 3. Volumetric morning god-rays (crepuscular rays radiating upwards from the rising sun)
+    val rayAngles = listOf(-80f, -60f, -40f, -20f, 0f, 20f, 40f)
+    for (angleDeg in rayAngles) {
+        val rad = angleDeg * (PI.toFloat() / 180f)
+        val rayLen = width * 0.75f
+        val rayEnd = Offset(
+            sunCenterX + sin(rad) * rayLen,
+            sunCenterY - cos(rad) * rayLen,
+        )
+        drawLine(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFFFEF08A).copy(alpha = 0.18f * pulseScale),
+                    Color(0xFFFDBA74).copy(alpha = 0.08f * pulseScale),
+                    Color.Transparent,
+                ),
+                start = Offset(sunCenterX, sunCenterY),
+                end = rayEnd,
+            ),
+            start = Offset(sunCenterX, sunCenterY),
+            end = rayEnd,
+            strokeWidth = (22.dp.toPx() * (1f + 0.15f * sin(slowPhase * 2f * PI.toFloat()))),
+            cap = StrokeCap.Round,
+        )
+    }
+
+    // 4. Broad atmospheric morning dawn glow
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFF59E0B).copy(alpha = 0.35f * pulseScale),
+                Color(0xFFFB7185).copy(alpha = 0.20f * pulseScale),
+                Color(0xFFC026D3).copy(alpha = 0.08f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = (width * 0.60f).coerceAtLeast(sunRadius * 4.5f),
+        ),
+    )
+
+    // 5. Dawn solar corona
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFEF08A).copy(alpha = 0.55f * pulseScale),
+                Color(0xFFFB923C).copy(alpha = 0.30f * pulseScale),
+                Color(0xFFF43F5E).copy(alpha = 0.12f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = sunRadius * 2.2f * pulseScale,
+        ),
+    )
+
+    // 6. Dawn anamorphic horizontal flare streak
+    val flareHalfSpan = sunRadius * 3.8f
+    val flareThickness = sunRadius * 0.22f
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFBEB).copy(alpha = 0.60f * pulseScale),
+                Color(0xFFFDE68A).copy(alpha = 0.28f * pulseScale),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = flareHalfSpan,
+        ),
+        topLeft = Offset(sunCenterX - flareHalfSpan, sunCenterY - flareThickness * 0.5f),
+        size = Size(flareHalfSpan * 2f, flareThickness),
+    )
+
+    // 7. Photorealistic rising Sun body (molten peach-white core with dawn chromosphere)
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),       // Blinding white core
+                Color(0xFFFFFBEB),       // Incandescent mantle
+                Color(0xFFFDE047),       // Morning gold
+                Color(0xFFFB923C),       // Peach chromosphere
+                Color(0xFFEA580C),       // Dawn limb
+            ),
+            center = Offset(sunCenterX - sunRadius * 0.15f, sunCenterY - sunRadius * 0.15f),
+            radius = sunRadius,
+        ),
+        radius = sunRadius,
+        center = Offset(sunCenterX, sunCenterY),
+    )
+
+    // 8. Golden morning horizon mist layers
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFDE047).copy(alpha = 0.35f),
+                Color(0xFFFB923C).copy(alpha = 0.18f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY + sunRadius * 0.6f),
+            radius = sunRadius * 2.5f,
+        ),
+        topLeft = Offset(sunCenterX - sunRadius * 2.2f, sunCenterY + sunRadius * 0.2f),
+        size = Size(sunRadius * 4.4f, sunRadius * 0.9f),
+    )
+
+    // 9. Soft morning clouds catching peach and gold dawn light
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFFED7AA),
+        baseAlphaMultiplier = 0.60f,
+    )
+}
+
+private fun DrawScope.drawSunsetScene(
+    clouds: List<CloudCluster>,
+    pulsePhase: Float,
+    slowPhase: Float,
+    width: Float,
+    height: Float,
+) {
+    val sunCenterX = (width - 76.dp.toPx()).coerceAtLeast(width * 0.74f)
+    val sunCenterY = height * 0.48f
+    val sunRadius = (height * 0.26f).coerceIn(46.dp.toPx(), 60.dp.toPx())
+    val pulseScale = 0.94f + 0.12f * pulsePhase
+
+    // 1. Rich twilight/dusk sky atmosphere: deep indigo-violet at top to crimson, burning orange, and sunset gold
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF0F0B1E).copy(alpha = 0.80f),
+                Color(0xFF260D2E).copy(alpha = 0.75f),
+                Color(0xFF581234).copy(alpha = 0.70f),
+                Color(0xFF9F1239).copy(alpha = 0.65f),
+                Color(0xFFC2410C).copy(alpha = 0.60f),
+                Color(0xFFF59E0B).copy(alpha = 0.50f),
+            ),
+            startY = 0f,
+            endY = height,
+        ),
+        size = Size(width, height),
+    )
+
+    // 2. Broad blazing horizontal sunset horizon glow
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFF97316).copy(alpha = 0.38f * pulseScale),
+                Color(0xFFBE123C).copy(alpha = 0.22f * pulseScale),
+                Color(0xFF4C0519).copy(alpha = 0.08f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY + sunRadius * 0.2f),
+            radius = width * 0.65f,
+        ),
+        topLeft = Offset(sunCenterX - width * 0.65f, sunCenterY - sunRadius * 1.5f),
+        size = Size(width * 1.3f, sunRadius * 3.5f),
+    )
+
+    // 3. Volumetric burning sunset corona
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFED7AA).copy(alpha = 0.55f * pulseScale),
+                Color(0xFFF97316).copy(alpha = 0.35f * pulseScale),
+                Color(0xFFE11D48).copy(alpha = 0.15f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = sunRadius * 2.4f * pulseScale,
+        ),
+    )
+
+    // 4. Blazing ruby-amber horizontal anamorphic lens flare
+    val flareHalfSpan = sunRadius * 4.2f
+    val flareThickness = sunRadius * 0.26f
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFBEB).copy(alpha = 0.65f * pulseScale),
+                Color(0xFFFB923C).copy(alpha = 0.32f * pulseScale),
+                Color(0xFFE11D48).copy(alpha = 0.12f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX, sunCenterY),
+            radius = flareHalfSpan,
+        ),
+        topLeft = Offset(sunCenterX - flareHalfSpan, sunCenterY - flareThickness * 0.5f),
+        size = Size(flareHalfSpan * 2f, flareThickness),
+    )
+
+    // 5. Photorealistic molten sunset Sun with rich limb darkening
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),       // Intense white-amber core
+                Color(0xFFFEF3C7),       // White-gold inner mantle
+                Color(0xFFFBBF24),       // Sunset gold
+                Color(0xFFF97316),       // Burning orange
+                Color(0xFFDC2626),       // Cadmium red mantle
+                Color(0xFF991B1B),       // Crimson sunset limb
+            ),
+            center = Offset(sunCenterX - sunRadius * 0.12f, sunCenterY - sunRadius * 0.12f),
+            radius = sunRadius,
+        ),
+        radius = sunRadius,
+        center = Offset(sunCenterX, sunCenterY),
+    )
+
+    // 6. Sunset rim specular crescent highlight
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.85f),
+                Color(0xFFFEF08A).copy(alpha = 0.35f),
+                Color.Transparent,
+            ),
+            center = Offset(sunCenterX - sunRadius * 0.18f, sunCenterY - sunRadius * 0.18f),
+            radius = sunRadius * 0.62f,
+        ),
+        radius = sunRadius * 0.62f,
+        center = Offset(sunCenterX - sunRadius * 0.18f, sunCenterY - sunRadius * 0.18f),
+    )
+
+    // 7. Dramatic backlit sunset clouds with glowing fiery orange-red bottoms and deep purple tops
+    drawAtmosphericClouds(
+        clouds = clouds,
+        slowPhase = slowPhase,
+        width = width,
+        height = height,
+        cloudTint = Color(0xFFF87171),
+        baseAlphaMultiplier = 0.65f,
     )
 }
 
@@ -493,20 +820,20 @@ private fun DrawScope.drawClearNightScene(
 
     val pulseScale = 0.94f + 0.12f * pulsePhase
 
-    // 1. Ambient celestial deep night glow
+    // 1. Ambient celestial deep night glow with subtle Rayleigh starlight dispersion
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF4338CA).copy(alpha = 0.20f * pulseScale),
-                Color(0xFF1E1B4B).copy(alpha = 0.10f * pulseScale),
+                Color(0xFF4338CA).copy(alpha = 0.22f * pulseScale),
+                Color(0xFF1E1B4B).copy(alpha = 0.12f * pulseScale),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = (width * 0.65f).coerceAtLeast(moonRadius * 3.5f),
+            radius = (width * 0.65f).coerceAtLeast(moonRadius * 3.6f),
         ),
     )
 
-    // 2. Twinkling stars across the sky
+    // 2. Twinkling stars across the sky with cross diffraction spikes
     for (star in stars) {
         val starX = star.relX * width
         val starY = star.relY * height
@@ -543,17 +870,17 @@ private fun DrawScope.drawClearNightScene(
         }
     }
 
-    // 3. Volumetric ethereal lunar corona halo (soft white glow)
+    // 3. Volumetric ethereal lunar corona halo (soft white inner glow with violet-blue Rayleigh outer fringe)
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.32f * pulseScale),
-                Color(0xFFE0E7FF).copy(alpha = 0.18f * pulseScale),
-                Color(0xFFA5B4FC).copy(alpha = 0.06f),
+                Color.White.copy(alpha = 0.35f * pulseScale),
+                Color(0xFFE0E7FF).copy(alpha = 0.20f * pulseScale),
+                Color(0xFF818CF8).copy(alpha = 0.08f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = moonRadius * 2.1f * pulseScale,
+            radius = moonRadius * 2.15f * pulseScale,
         ),
     )
 
@@ -561,25 +888,26 @@ private fun DrawScope.drawClearNightScene(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.55f * pulseScale),
-                Color(0xFFEDE9FE).copy(alpha = 0.25f),
+                Color.White.copy(alpha = 0.58f * pulseScale),
+                Color(0xFFEDE9FE).copy(alpha = 0.28f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = moonRadius * 1.32f,
+            radius = moonRadius * 1.34f,
         ),
     )
 
-    // 4. Photorealistic 3D Spherical Moon Body
+    // 4. Photorealistic 3D Spherical Moon Body with multi-stop regolith crust
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
                 Color(0xFFFFFFFF),       // Specular highland
-                Color(0xFFF1F5F9),       // Bright crust
+                Color(0xFFF8FAFC),       // Bright anorthosite crust
                 Color(0xFFE2E8F0),       // Anorthosite regolith
                 Color(0xFFCBD5E1),       // Regolith midtones
                 Color(0xFF94A3B8),       // Shaded regolith
                 Color(0xFF64748B),       // Terminator edge
+                Color(0xFF334155),       // Shadow rim
             ),
             center = Offset(moonCenterX - moonRadius * 0.28f, moonCenterY - moonRadius * 0.28f),
             radius = moonRadius * 1.25f,
@@ -588,13 +916,13 @@ private fun DrawScope.drawClearNightScene(
         center = Offset(moonCenterX, moonCenterY),
     )
 
-    // 5. Organic Lunar Maria (basaltic plains creating the authentic moon pattern)
+    // 5. Authentic Lunar Maria (basaltic plains matching actual lunar geography)
     // Oceanus Procellarum & Mare Imbrium (northwest)
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF334155).copy(alpha = 0.52f),
-                Color(0xFF475569).copy(alpha = 0.25f),
+                Color(0xFF334155).copy(alpha = 0.54f),
+                Color(0xFF475569).copy(alpha = 0.26f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX - moonRadius * 0.32f, moonCenterY - moonRadius * 0.26f),
@@ -604,12 +932,26 @@ private fun DrawScope.drawClearNightScene(
         size = Size(moonRadius * 0.66f, moonRadius * 0.52f),
     )
 
+    // Sinus Iridum (Bay of Rainbows - curved highland promontory)
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF1E293B).copy(alpha = 0.45f),
+                Color.Transparent,
+            ),
+            center = Offset(moonCenterX - moonRadius * 0.42f, moonCenterY - moonRadius * 0.45f),
+            radius = moonRadius * 0.16f,
+        ),
+        topLeft = Offset(moonCenterX - moonRadius * 0.50f, moonCenterY - moonRadius * 0.52f),
+        size = Size(moonRadius * 0.22f, moonRadius * 0.18f),
+    )
+
     // Mare Serenitatis & Mare Tranquillitatis (northeast/east)
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.48f),
-                Color(0xFF334155).copy(alpha = 0.22f),
+                Color(0xFF1E293B).copy(alpha = 0.50f),
+                Color(0xFF334155).copy(alpha = 0.24f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX + moonRadius * 0.20f, moonCenterY - moonRadius * 0.16f),
@@ -623,8 +965,8 @@ private fun DrawScope.drawClearNightScene(
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.50f),
-                Color(0xFF334155).copy(alpha = 0.20f),
+                Color(0xFF1E293B).copy(alpha = 0.52f),
+                Color(0xFF334155).copy(alpha = 0.22f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX + moonRadius * 0.54f, moonCenterY - moonRadius * 0.08f),
@@ -638,8 +980,8 @@ private fun DrawScope.drawClearNightScene(
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF334155).copy(alpha = 0.42f),
-                Color(0xFF475569).copy(alpha = 0.18f),
+                Color(0xFF334155).copy(alpha = 0.45f),
+                Color(0xFF475569).copy(alpha = 0.20f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX + moonRadius * 0.30f, moonCenterY + moonRadius * 0.24f),
@@ -653,8 +995,8 @@ private fun DrawScope.drawClearNightScene(
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.46f),
-                Color(0xFF334155).copy(alpha = 0.20f),
+                Color(0xFF1E293B).copy(alpha = 0.48f),
+                Color(0xFF334155).copy(alpha = 0.22f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX - moonRadius * 0.18f, moonCenterY + moonRadius * 0.26f),
@@ -681,18 +1023,18 @@ private fun DrawScope.drawClearNightScene(
         style = Stroke(width = 1.0f),
     )
 
-    // Radiating ejecta rays across the lunar disk
-    val rayAngles = listOf(205f, 225f, 245f, 270f, 295f, 320f, 340f, 5f, 25f)
+    // 12 Radiating high-albedo ejecta rays reaching across the lunar disk
+    val rayAngles = listOf(195f, 210f, 225f, 245f, 270f, 290f, 310f, 330f, 345f, 5f, 20f, 35f)
     for (angleDeg in rayAngles) {
         val rad = angleDeg * (PI.toFloat() / 180f)
-        val rayLen = moonRadius * 0.65f
+        val rayLen = moonRadius * 0.70f
         val endX = tychoX + cos(rad) * rayLen
         val endY = tychoY + sin(rad) * rayLen
         drawLine(
             brush = Brush.linearGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.50f),
-                    Color.White.copy(alpha = 0.15f),
+                    Color.White.copy(alpha = 0.55f),
+                    Color.White.copy(alpha = 0.18f),
                     Color.Transparent,
                 ),
                 start = Offset(tychoX, tychoY),
@@ -704,11 +1046,11 @@ private fun DrawScope.drawClearNightScene(
         )
     }
 
-    // Copernicus crater (equatorial northwest)
+    // Copernicus crater (equatorial northwest) with dual terraced rings
     val copernicusX = moonCenterX - moonRadius * 0.26f
     val copernicusY = moonCenterY + moonRadius * 0.04f
     drawCircle(
-        color = Color.White.copy(alpha = 0.88f),
+        color = Color.White.copy(alpha = 0.90f),
         radius = moonRadius * 0.05f,
         center = Offset(copernicusX, copernicusY),
     )
@@ -719,6 +1061,15 @@ private fun DrawScope.drawClearNightScene(
         style = Stroke(width = 0.8f),
     )
 
+    // Aristarchus Crater (brightest anomaly in the northwest)
+    val aristarchusX = moonCenterX - moonRadius * 0.44f
+    val aristarchusY = moonCenterY - moonRadius * 0.10f
+    drawCircle(
+        color = Color.White.copy(alpha = 0.95f),
+        radius = moonRadius * 0.035f,
+        center = Offset(aristarchusX, aristarchusY),
+    )
+
     // 7. Limb Darkening & Spherical Rim Depth
     drawCircle(
         brush = Brush.radialGradient(
@@ -726,7 +1077,7 @@ private fun DrawScope.drawClearNightScene(
                 Color.Transparent,
                 Color.Transparent,
                 Color(0xFF0F172A).copy(alpha = 0.18f),
-                Color(0xFF020617).copy(alpha = 0.50f),
+                Color(0xFF020617).copy(alpha = 0.52f),
             ),
             center = Offset(moonCenterX, moonCenterY),
             radius = moonRadius,

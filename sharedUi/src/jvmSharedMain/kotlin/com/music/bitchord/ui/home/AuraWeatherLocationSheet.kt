@@ -3,6 +3,8 @@ package com.music.bitchord.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.weather.AuraLocationResult
 import com.music.bitchord.data.weather.AuraWeatherRepository
+import com.music.bitchord.data.weather.WeatherVisualType
 import com.music.bitchord.ui.theme.NothingThemeTokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -400,6 +403,93 @@ fun AuraWeatherLocationSheet(
                 }
                 Spacer(Modifier.height(12.dp))
             }
+
+            // Interactive Atmospheric Scene Controls (Sunrise, Sunny Day, Sunset, Clear Night, Rain, Storm, Snow)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (nothingOsMode) "A T M O S P H E R E   S C E N E" else "Atmospheric Scene",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                            fontSize = 11.5.sp,
+                            letterSpacing = if (nothingOsMode) 1.sp else (-0.2).sp,
+                        ),
+                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                    )
+                    val currentOverride = AuraWeatherRepository.currentManualVisualOverride()
+                    if (currentOverride != null) {
+                        Text(
+                            text = "Manual Mode",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 10.5.sp,
+                            ),
+                            color = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF38BDF8),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                val scenes = listOf(
+                    null to "Auto",
+                    WeatherVisualType.SUNRISE to "Sunrise",
+                    WeatherVisualType.CLEAR_DAY to "Sunny Day",
+                    WeatherVisualType.SUNSET to "Sunset",
+                    WeatherVisualType.CLEAR_NIGHT to "Clear Night",
+                    WeatherVisualType.RAIN to "Rain",
+                    WeatherVisualType.THUNDERSTORM to "Storm",
+                    WeatherVisualType.SNOW to "Snow",
+                )
+                val currentOverride = AuraWeatherRepository.currentManualVisualOverride()
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for ((sceneType, label) in scenes) {
+                        val isSelected = (currentOverride == sceneType) || (sceneType == null && currentOverride == null)
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = if (isSelected) {
+                                if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)
+                            } else {
+                                if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.08f)
+                            },
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = if (isSelected) {
+                                    Color.Transparent
+                                } else {
+                                    if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.12f)
+                                },
+                            ),
+                            modifier = Modifier.clickable {
+                                AuraWeatherRepository.setManualVisualOverride(sceneType)
+                            },
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 11.sp,
+                                ),
+                                color = if (isSelected) Color.White else (if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.75f)),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
 
             // City Search Box
             Surface(

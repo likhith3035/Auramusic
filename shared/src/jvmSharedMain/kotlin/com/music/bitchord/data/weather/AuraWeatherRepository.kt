@@ -20,6 +20,8 @@ import kotlin.math.roundToInt
 enum class WeatherVisualType {
     CLEAR_DAY,
     CLEAR_NIGHT,
+    SUNRISE,
+    SUNSET,
     RAIN,
     THUNDERSTORM,
     CLOUDY,
@@ -80,10 +82,47 @@ object AuraWeatherRepository {
     private var cachedLon: Double? = null
     private var cachedCity: String? = null
     private var cachedCountry: String? = null
+    private var cachedWeatherCode: Int? = null
+    private var manualVisualOverride: WeatherVisualType? = null
 
     fun isCustomLocation(): Boolean = customLocation != null
 
     fun currentCustomLocation(): AuraLocationResult? = customLocation
+
+    fun currentManualVisualOverride(): WeatherVisualType? = manualVisualOverride
+
+    fun setManualVisualOverride(override: WeatherVisualType?) {
+        manualVisualOverride = override
+        val curr = _currentWeather.value
+        if (override == null) {
+            val isDay = isDayTime()
+            val (label, vis) = mapWmoCode(cachedWeatherCode ?: 0, isDay)
+            _currentWeather.value = curr.copy(
+                visualType = vis,
+                conditionLabel = label,
+                isDay = isDay,
+                moodPills = moodPillsFor(vis, isDay),
+            )
+        } else {
+            val isDay = override != WeatherVisualType.CLEAR_NIGHT
+            val label = when (override) {
+                WeatherVisualType.SUNRISE -> "Sunrise"
+                WeatherVisualType.SUNSET -> "Sunset"
+                WeatherVisualType.CLEAR_DAY -> "Clear Sky"
+                WeatherVisualType.CLEAR_NIGHT -> "Clear Night"
+                WeatherVisualType.RAIN -> "Rainy"
+                WeatherVisualType.THUNDERSTORM -> "Thunderstorm"
+                WeatherVisualType.CLOUDY -> "Cloudy"
+                WeatherVisualType.SNOW -> "Snowing"
+            }
+            _currentWeather.value = curr.copy(
+                visualType = override,
+                conditionLabel = label,
+                isDay = isDay,
+                moodPills = moodPillsFor(override, isDay),
+            )
+        }
+    }
 
     fun setTemperatureUnit(useFahrenheit: Boolean) {
         isFahrenheitPreference = useFahrenheit
@@ -198,12 +237,27 @@ object AuraWeatherRepository {
 
                     val tempRaw = current["temperature_2m"]?.jsonPrimitive?.doubleOrNull ?: 22.0
                     val weatherCode = current["weather_code"]?.jsonPrimitive?.intOrNull ?: 0
+                    cachedWeatherCode = weatherCode
                     val isDayInt = current["is_day"]?.jsonPrimitive?.intOrNull ?: if (isDayTime()) 1 else 0
                     val isDay = isDayInt == 1
                     val humidity = current["relative_humidity_2m"]?.jsonPrimitive?.intOrNull
                     val windSpeed = current["wind_speed_10m"]?.jsonPrimitive?.doubleOrNull
 
-                    val (conditionLabel, visualType) = mapWmoCode(weatherCode, isDay)
+                    val (autoLabel, autoVisual) = mapWmoCode(weatherCode, isDay)
+                    val visualType = manualVisualOverride ?: autoVisual
+                    val conditionLabel = if (manualVisualOverride != null) {
+                        when (manualVisualOverride) {
+                            WeatherVisualType.SUNRISE -> "Sunrise"
+                            WeatherVisualType.SUNSET -> "Sunset"
+                            WeatherVisualType.CLEAR_DAY -> "Clear Sky"
+                            WeatherVisualType.CLEAR_NIGHT -> "Clear Night"
+                            WeatherVisualType.RAIN -> "Rainy"
+                            WeatherVisualType.THUNDERSTORM -> "Thunderstorm"
+                            WeatherVisualType.CLOUDY -> "Cloudy"
+                            WeatherVisualType.SNOW -> "Snowing"
+                            else -> autoLabel
+                        }
+                    } else autoLabel
                     val pills = moodPillsFor(visualType, isDay)
 
                     _currentWeather.value = AuraWeatherInfo(
@@ -297,10 +351,24 @@ object AuraWeatherRepository {
     }
 
     private fun mapWmoCode(code: Int, isDay: Boolean): Pair<String, WeatherVisualType> {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val celestialType = when {
+            !isDay || hour < 5 || hour >= 20 -> WeatherVisualType.CLEAR_NIGHT
+            hour in 5..7 -> WeatherVisualType.SUNRISE
+            hour in 17..19 -> WeatherVisualType.SUNSET
+            else -> WeatherVisualType.CLEAR_DAY
+        }
+        val celestialLabel = when (celestialType) {
+            WeatherVisualType.SUNRISE -> "Sunrise"
+            WeatherVisualType.SUNSET -> "Sunset"
+            WeatherVisualType.CLEAR_DAY -> "Clear Sky"
+            else -> "Clear Night"
+        }
+
         return when (code) {
-            0 -> if (isDay) "Clear Sky" to WeatherVisualType.CLEAR_DAY else "Clear Night" to WeatherVisualType.CLEAR_NIGHT
-            1 -> if (isDay) "Mainly Clear" to WeatherVisualType.CLEAR_DAY else "Clear Night" to WeatherVisualType.CLEAR_NIGHT
-            2 -> if (isDay) "Partly Cloudy" to WeatherVisualType.CLEAR_DAY else "Partly Cloudy" to WeatherVisualType.CLEAR_NIGHT
+            0 -> celestialLabel to celestialType
+            1 -> (if (celestialType == WeatherVisualType.SUNRISE) "Dawn" else if (celestialType == WeatherVisualType.SUNSET) "Golden Hour" else if (isDay) "Mainly Clear" else "Clear Night") to celestialType
+            2 -> (if (celestialType == WeatherVisualType.SUNRISE) "Sunrise Clouds" else if (celestialType == WeatherVisualType.SUNSET) "Sunset Clouds" else if (isDay) "Partly Cloudy" else "Partly Cloudy") to celestialType
             3 -> "Overcast" to WeatherVisualType.CLOUDY
             45, 48 -> "Foggy" to WeatherVisualType.CLOUDY
             51, 53, 55 -> "Light Drizzle" to WeatherVisualType.RAIN
@@ -312,11 +380,13 @@ object AuraWeatherRepository {
             80, 81, 82 -> "Rain Showers" to WeatherVisualType.RAIN
             85, 86 -> "Snow Showers" to WeatherVisualType.SNOW
             95, 96, 99 -> "Thunderstorm" to WeatherVisualType.THUNDERSTORM
-            else -> if (isDay) "Clear Sky" to WeatherVisualType.CLEAR_DAY else "Clear Night" to WeatherVisualType.CLEAR_NIGHT
+            else -> celestialLabel to celestialType
         }
     }
 
     fun moodPillsFor(visualType: WeatherVisualType, isDay: Boolean): List<String> = when (visualType) {
+        WeatherVisualType.SUNRISE -> listOf("Sunrise Acoustic", "Morning Dawn", "Fresh Awakening", "Golden Hour")
+        WeatherVisualType.SUNSET -> listOf("Sunset Chill", "Golden Hour Grooves", "Dusk Lo-Fi", "Evening Drive")
         WeatherVisualType.RAIN -> listOf("Rainy Day Lo-Fi", "Acoustic Rain", "Cozy Jazz", "Chill Hop")
         WeatherVisualType.THUNDERSTORM -> listOf("Storm Ambient", "Dark Academia", "Thunder Rhythms", "Deep Chill")
         WeatherVisualType.SNOW -> listOf("Winter Acoustic", "Warm Coffee", "Soft Piano", "Chill Snow")
@@ -331,10 +401,26 @@ object AuraWeatherRepository {
     }
 
     private fun defaultFallbackWeather(): AuraWeatherInfo {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val isDay = isDayTime()
-        val visualType = if (isDay) WeatherVisualType.CLEAR_DAY else WeatherVisualType.CLEAR_NIGHT
-        val label = if (isDay) "Clear Sky" else "Clear Night"
-        val temp = if (isDay) 23 else 19
+        val visualType = when {
+            hour in 5..7 -> WeatherVisualType.SUNRISE
+            hour in 17..19 -> WeatherVisualType.SUNSET
+            isDay -> WeatherVisualType.CLEAR_DAY
+            else -> WeatherVisualType.CLEAR_NIGHT
+        }
+        val label = when (visualType) {
+            WeatherVisualType.SUNRISE -> "Sunrise"
+            WeatherVisualType.SUNSET -> "Sunset"
+            WeatherVisualType.CLEAR_DAY -> "Clear Sky"
+            else -> "Clear Night"
+        }
+        val temp = when (visualType) {
+            WeatherVisualType.SUNRISE -> 20
+            WeatherVisualType.SUNSET -> 22
+            WeatherVisualType.CLEAR_DAY -> 25
+            else -> 19
+        }
         return AuraWeatherInfo(
             temperatureC = temp,
             conditionLabel = label,
