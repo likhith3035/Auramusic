@@ -64,7 +64,10 @@ import androidx.compose.ui.unit.sp
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.NothingThemeTokens
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * Flagship capabilities highlighted in the Home screen feature discovery carousel.
@@ -254,402 +257,228 @@ fun AuraGreetingHeader(
         )
     }
 
-    // Animated soundwave equalizer bars in the greeting card
+    // Real-time ticking clock aligned to minute boundaries
+    var clockCalendar by remember { mutableStateOf(Calendar.getInstance()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clockCalendar = Calendar.getInstance()
+            val nowMs = System.currentTimeMillis()
+            val delayMs = (60_000L - (nowMs % 60_000L)).coerceAtLeast(1000L)
+            delay(delayMs)
+        }
+    }
+
+    val (clockTime, clockPeriod) = remember(clockCalendar) {
+        val hour12 = clockCalendar.get(Calendar.HOUR).let { if (it == 0) 12 else it }
+        val minute = String.format(Locale.getDefault(), "%02d", clockCalendar.get(Calendar.MINUTE))
+        val period = if (clockCalendar.get(Calendar.AM_PM) == Calendar.AM) "AM" else "PM"
+        Pair("$hour12:$minute", period)
+    }
+
+    val clockDate = remember(clockCalendar) {
+        SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(clockCalendar.time)
+    }
+
+    val headlineGreeting = remember(timeOfDay, firstName) {
+        if (!firstName.isNullOrBlank()) {
+            "${timeOfDay.greeting}, $firstName"
+        } else {
+            timeOfDay.greeting
+        }
+    }
+
+    val effectiveSubtitle = when {
+        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
+        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
+        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
+    }
+
+    // Animated equalizing soundwave bars for playback indicator
     val infiniteTransition = rememberInfiniteTransition(label = "greeting_pulse")
     val bar1 by infiniteTransition.animateFloat(
-        initialValue = 4f, targetValue = 14f,
+        initialValue = 4f, targetValue = 13f,
         animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "gb1",
     )
     val bar2 by infiniteTransition.animateFloat(
-        initialValue = 12f, targetValue = 5f,
+        initialValue = 11f, targetValue = 5f,
         animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "gb2",
     )
     val bar3 by infiniteTransition.animateFloat(
-        initialValue = 6f, targetValue = 16f,
+        initialValue = 6f, targetValue = 15f,
         animationSpec = infiniteRepeatable(tween(480, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "gb3",
     )
 
-    if (nothingOsMode) {
-        // Nothing OS Mode: AMOLED Pitch Black + NDot Matrix + Living Weather Canvas + Red Glyph
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = NothingThemeTokens.Surface,
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(horizontal = PAGE_GUTTER, vertical = 3.dp)
-                .border(1.dp, NothingThemeTokens.Border, RoundedCornerShape(16.dp)),
+    // Frameless, full-bleed atmospheric canopy with living celestial canvas
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(240.dp),
+    ) {
+        // Living weather canvas rendering photorealistic Sun / Moon and weather particle effects
+        LivingWeatherCanvas(
+            visualType = weather.visualType,
+            blendColor = if (nothingOsMode) NothingThemeTokens.Black else Color(0xFF0C0D14),
+            reduceAnimation = reduceAnimation,
+            isDay = weather.isDay,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Content overlay: Left side has clock, date, greeting, subtitle, and mood chips
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                // Full-bleed living ambient weather canvas
-                LivingWeatherCanvas(
-                    visualType = weather.visualType,
-                    blendColor = NothingThemeTokens.Surface,
-                    reduceAnimation = reduceAnimation,
-                    modifier = Modifier.matchParentSize(),
+            // Top Section: Real-Time Digital Clock & Date
+            Column {
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Text(
+                        text = clockTime,
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 38.sp,
+                            letterSpacing = (-0.5).sp,
+                            lineHeight = 40.sp,
+                        ),
+                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                    )
+                    if (clockPeriod.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = clockPeriod,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                letterSpacing = 0.5.sp,
+                            ),
+                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.90f),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                Text(
+                    text = clockDate,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp,
+                    ),
+                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.82f),
+                )
+            }
+
+            // Middle Section: Dynamic Headline Greeting & Subtitle (Playback or Weather)
+            Column {
+                Text(
+                    text = headlineGreeting,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        letterSpacing = (-0.3).sp,
+                    ),
+                    color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
 
-                Column(
+                Spacer(Modifier.height(3.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    // Top Row: Pulsing LED glyph, Matrix Tag + Weather Info, and Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(percent = 50))
-                                .clickable { showWeatherSheet = true },
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(NothingThemeTokens.Red),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "${timeOfDay.dotMatrixGreeting}  ·  ${weather.displayTemperature}",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.2.sp,
-                                    fontSize = 10.sp,
-                                ),
-                                color = NothingThemeTokens.White,
-                            )
-                        }
-
-                        // Nothing OS Audio Pulse Indicator / 1-Tap Quick Resume
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(NothingThemeTokens.SurfaceElevated)
-                                .border(
-                                    1.dp,
-                                    if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.Border,
-                                    RoundedCornerShape(percent = 50),
-                                )
-                                .then(
-                                    if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                        Modifier.clickable { onResumeClick() }
-                                    } else Modifier
-                                )
-                                .padding(horizontal = 7.dp, vertical = 3.5.dp),
-                        ) {
+                        .clip(RoundedCornerShape(percent = 50))
+                        .then(
                             if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Resume",
-                                    tint = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
-                                    modifier = Modifier.size(11.dp),
-                                )
-                                Spacer(Modifier.width(2.dp))
-                                Text(
-                                    text = if (isPlaying) "PAUSE" else "RESUME",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.8.sp,
-                                    ),
-                                    color = if (isPlaying) NothingThemeTokens.Red else NothingThemeTokens.White,
-                                )
-                                Spacer(Modifier.width(3.dp))
+                                Modifier.clickable { onResumeClick() }
+                            } else {
+                                Modifier.clickable { showWeatherSheet = true }
                             }
-                            listOf(bar1, bar2, bar3).forEach { barHeight ->
-                                Box(
-                                    modifier = Modifier
-                                        .width(2.dp)
-                                        .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
-                                    .clip(RoundedCornerShape(percent = 50))
-                                    .background(NothingThemeTokens.Red),
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    // Main headline greeting (clean typography, no emojis)
-                    val headlineText = if (!firstName.isNullOrBlank()) {
-                        "${timeOfDay.greeting}, $firstName"
-                    } else {
-                        "${timeOfDay.greeting}, listener"
-                    }
-
-                    Text(
-                        text = headlineText,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            letterSpacing = (-0.3).sp,
                         ),
-                        color = NothingThemeTokens.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    Spacer(Modifier.height(2.dp))
-
-                    // Single-line compact subtitle: live weather condition or current playing song
-                    val effectiveSubtitle = when {
-                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
-                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
-                        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
+                ) {
+                    if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Resume",
+                            tint = if (nothingOsMode && isPlaying) NothingThemeTokens.Red else Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
                     }
                     Text(
                         text = effectiveSubtitle,
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
                         ),
-                        color = NothingThemeTokens.MutedText,
+                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.72f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { showWeatherSheet = true },
                     )
-
-                    // Contextual Weather Mood Chips (tight, compact micro-pills matching real outdoor weather)
-                    if (onMoodClick != null) {
-                        Spacer(Modifier.height(8.dp))
+                    if (isPlaying && !currentSongTitle.isNullOrBlank()) {
+                        Spacer(Modifier.width(6.dp))
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.Bottom,
+                            modifier = Modifier.height(10.dp),
                         ) {
-                            weather.moodPills.forEach { mood ->
-                                Surface(
-                                    shape = RoundedCornerShape(percent = 50),
-                                    color = NothingThemeTokens.SurfaceElevated,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border),
-                                    modifier = Modifier.clickable { onMoodClick(mood) },
-                                ) {
-                                    Text(
-                                        text = mood,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                        ),
-                                        color = NothingThemeTokens.White,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
-                                    )
-                                }
+                            listOf(bar1, bar2, bar3).forEach { barH ->
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .height((barH * 0.7f).dp)
+                                        .clip(RoundedCornerShape(percent = 50))
+                                        .background(if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)),
+                                )
                             }
                         }
                     }
                 }
             }
-        }
-    } else {
-        // Classic Aura: Luxurious Celestial Atmospheric Card with Living Weather Canvas
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = Color(0xFF10121C),
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(horizontal = PAGE_GUTTER, vertical = 3.dp)
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.16f),
-                            Color.White.copy(alpha = 0.04f),
-                        ),
-                    ),
-                    shape = RoundedCornerShape(18.dp),
-                ),
-        ) {
-            Box(
+
+            // Bottom Section: Contextual Mood Pills
+            val pills = if (weather.moodPills.isNotEmpty()) weather.moodPills else timeOfDay.moodPills
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            colors = timeOfDay.gradientColors,
-                        ),
-                    ),
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Full-bleed living ambient weather canvas
-                LivingWeatherCanvas(
-                    visualType = weather.visualType,
-                    blendColor = Color(0xFF10121C),
-                    reduceAnimation = reduceAnimation,
-                    modifier = Modifier.matchParentSize(),
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    // Top Row: Time Period Tag + Weather Temp + Quick Resume
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth(),
+                pills.forEach { mood ->
+                    Surface(
+                        shape = RoundedCornerShape(percent = 50),
+                        color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.14f),
+                        ),
+                        modifier = Modifier.then(
+                            if (onMoodClick != null) Modifier.clickable { onMoodClick(mood) } else Modifier
+                        ),
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(percent = 50),
-                            color = Color.White.copy(alpha = 0.12f),
-                            modifier = Modifier.clickable { showWeatherSheet = true },
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF00D2FF)),
-                                )
-                                Spacer(Modifier.width(5.dp))
-                                Text(
-                                    text = "${timeOfDay.periodTag} · ${weather.displayTemperature}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.sp,
-                                        fontSize = 10.sp,
-                                    ),
-                                    color = Color.White.copy(alpha = 0.9f),
-                                )
-                            }
-                        }
-
-                        // Right: Quick Resume Pill + Dancing Equalizer Bars
-                        Surface(
-                            shape = RoundedCornerShape(percent = 50),
-                            color = if (isPlaying) Color(0xFF00D2FF).copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.25f),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isPlaying) Color(0xFF00D2FF).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.12f),
+                        Text(
+                            text = mood,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 11.5.sp,
                             ),
-                            modifier = Modifier.then(
-                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                    Modifier.clickable { onResumeClick() }
-                                } else Modifier
-                            ),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
-                            ) {
-                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                    Icon(
-                                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                        contentDescription = if (isPlaying) "Pause" else "Resume",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(11.dp),
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isPlaying) "Playing" else "Resume",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp,
-                                            letterSpacing = 0.5.sp,
-                                        ),
-                                        color = Color.White,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                    verticalAlignment = Alignment.Bottom,
-                                    modifier = Modifier.height(11.dp),
-                                ) {
-                                    listOf(bar1, bar2, bar3).forEach { barHeight ->
-                                        Box(
-                                            modifier = Modifier
-                                                .width(2.dp)
-                                                .height((if (isPlaying || currentSongTitle.isNullOrBlank()) barHeight * 0.7f else 4f).dp)
-                                                .clip(RoundedCornerShape(percent = 50))
-                                                .background(Color(0xFF00D2FF)),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    // Dynamic Personalized Greeting (Zero emojis)
-                    val greetingHeadline = if (!firstName.isNullOrBlank()) {
-                        "${timeOfDay.greeting}, $firstName"
-                    } else {
-                        timeOfDay.greeting
-                    }
-
-                    Text(
-                        text = greetingHeadline,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            letterSpacing = (-0.4).sp,
-                        ),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    Spacer(Modifier.height(2.dp))
-
-                    val effectiveClassicSubtitle = when {
-                        !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
-                        !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
-                        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
-                    }
-                    Text(
-                        text = effectiveClassicSubtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                        ),
-                        color = Color.White.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { showWeatherSheet = true },
-                    )
-
-                    // Contextual Weather Mood Chips (matching outdoor weather)
-                    if (onMoodClick != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            weather.moodPills.forEach { mood ->
-                                Surface(
-                                    shape = RoundedCornerShape(percent = 50),
-                                    color = Color.White.copy(alpha = 0.12f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
-                                    modifier = Modifier.clickable { onMoodClick(mood) },
-                                ) {
-                                    Text(
-                                        text = mood,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 10.sp,
-                                        ),
-                                        color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    )
-                                }
-                            }
-                        }
+                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.92f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
                     }
                 }
             }
