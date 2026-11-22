@@ -53,9 +53,12 @@ import com.music.bitchord.ui.player.PlayerSettings
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +71,52 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlinx.coroutines.delay
+
+/**
+ * Aesthetic typography personalities for the Home screen celestial canopy clock.
+ * Features ultra-bold display kerning matching flagship mobile lockscreens,
+ * minimalist luxury, Nothing OS digital monospace, and editorial serif.
+ */
+enum class AuraClockStyle(
+    val label: String,
+    val fontWeight: FontWeight,
+    val letterSpacing: Float,
+    val fontSize: Float,
+    val useMonospace: Boolean = false,
+    val useSerif: Boolean = false,
+    val shadowAlpha: Float = 0.55f,
+) {
+    HERO_BOLD(
+        label = "Aura Bold Display",
+        fontWeight = FontWeight.W800,
+        letterSpacing = -1.5f,
+        fontSize = 48f,
+        shadowAlpha = 0.55f,
+    ),
+    MINIMAL_SLEEK(
+        label = "Modern Sleek",
+        fontWeight = FontWeight.W400,
+        letterSpacing = -0.5f,
+        fontSize = 46f,
+        shadowAlpha = 0.45f,
+    ),
+    TECH_MONO(
+        label = "Cyber Digital",
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.8f,
+        fontSize = 42f,
+        useMonospace = true,
+        shadowAlpha = 0.50f,
+    ),
+    EDITORIAL_SERIF(
+        label = "Editorial Serif",
+        fontWeight = FontWeight.Bold,
+        letterSpacing = -0.5f,
+        fontSize = 46f,
+        useSerif = true,
+        shadowAlpha = 0.50f,
+    ),
+}
 
 /**
  * Flagship capabilities highlighted in the Home screen feature discovery carousel.
@@ -326,6 +375,15 @@ fun AuraGreetingHeader(
             modifier = Modifier.fillMaxSize(),
         )
 
+        var clockStyleIndex by remember { mutableStateOf(0) }
+        val activeClockStyle = AuraClockStyle.values()[clockStyleIndex % AuraClockStyle.values().size]
+        val clockFontFamily = when {
+            nothingOsMode || activeClockStyle.useMonospace -> FontFamily.Monospace
+            activeClockStyle.useSerif -> FontFamily.Serif
+            else -> MaterialTheme.typography.displayLarge.fontFamily ?: FontFamily.SansSerif
+        }
+        val bodyFontFamily = if (nothingOsMode) FontFamily.Monospace else (MaterialTheme.typography.bodyMedium.fontFamily ?: FontFamily.SansSerif)
+
         // Content overlay: Left side has clock, date, greeting, subtitle, and mood chips
         // Top padding ensures clean separation from top bar actions and status bar
         Column(
@@ -334,19 +392,30 @@ fun AuraGreetingHeader(
                 .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Top Section: Real-Time Digital Clock & Date
-            Column {
+            // Top Section: Real-Time Digital Clock & Date with tap-to-cycle typography personality
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        clockStyleIndex = (clockStyleIndex + 1) % AuraClockStyle.values().size
+                    },
+            ) {
                 Row(
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     Text(
                         text = clockTime,
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 38.sp,
-                            letterSpacing = (-0.5).sp,
-                            lineHeight = 40.sp,
+                        style = TextStyle(
+                            fontFamily = clockFontFamily,
+                            fontWeight = activeClockStyle.fontWeight,
+                            fontSize = activeClockStyle.fontSize.sp,
+                            letterSpacing = activeClockStyle.letterSpacing.sp,
+                            lineHeight = activeClockStyle.fontSize.sp,
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = activeClockStyle.shadowAlpha),
+                                offset = Offset(0f, 3f),
+                                blurRadius = 8f,
+                            ),
                         ),
                         color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
                     )
@@ -354,28 +423,39 @@ fun AuraGreetingHeader(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = clockPeriod,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                            style = TextStyle(
+                                fontFamily = clockFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontSize = 19.sp,
                                 letterSpacing = 0.5.sp,
+                                shadow = Shadow(
+                                    color = Color.Black.copy(alpha = 0.45f),
+                                    offset = Offset(0f, 2f),
+                                    blurRadius = 6f,
+                                ),
                             ),
                             color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.90f),
-                            modifier = Modifier.padding(bottom = 4.dp),
+                            modifier = Modifier.padding(bottom = 6.dp),
                         )
                     }
                 }
 
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
 
                 Text(
                     text = clockDate,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
+                    style = TextStyle(
+                        fontFamily = bodyFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.5.sp,
+                        letterSpacing = 0.2.sp,
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.35f),
+                            offset = Offset(0f, 1.5f),
+                            blurRadius = 4f,
+                        ),
                     ),
-                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.82f),
+                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.88f),
                 )
             }
 
@@ -383,11 +463,16 @@ fun AuraGreetingHeader(
             Column {
                 Text(
                     text = headlineGreeting,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
+                    style = TextStyle(
+                        fontFamily = bodyFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        letterSpacing = (-0.3).sp,
+                        fontSize = 22.sp,
+                        letterSpacing = (-0.4).sp,
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.45f),
+                            offset = Offset(0f, 2f),
+                            blurRadius = 6f,
+                        ),
                     ),
                     color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
                     maxLines = 1,
@@ -419,12 +504,18 @@ fun AuraGreetingHeader(
                     }
                     Text(
                         text = effectiveSubtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp,
+                        style = TextStyle(
+                            fontFamily = bodyFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.40f),
+                                offset = Offset(0f, 1.5f),
+                                blurRadius = 4f,
+                            ),
                         ),
-                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.72f),
+                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.78f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

@@ -20,8 +20,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.weather.WeatherVisualType
+import com.music.bitchord.sharedui.resources.Res
+import com.music.bitchord.sharedui.resources.aura_moon_photorealistic
+import org.jetbrains.compose.resources.painterResource
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -182,6 +187,8 @@ fun LivingWeatherCanvas(
         )
     }
 
+    val moonPainter = painterResource(Res.drawable.aura_moon_photorealistic)
+
     Canvas(modifier = modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
@@ -201,7 +208,7 @@ fun LivingWeatherCanvas(
                 drawSunnyScene(clouds, pulsePhase, slowPhase, width, height)
             }
             WeatherVisualType.CLEAR_NIGHT -> {
-                drawClearNightScene(stars, clouds, pulsePhase, slowPhase, width, height)
+                drawClearNightScene(stars, clouds, pulsePhase, slowPhase, width, height, moonPainter)
             }
             WeatherVisualType.SUNRISE -> {
                 drawSunriseScene(stars, clouds, pulsePhase, slowPhase, width, height)
@@ -220,17 +227,17 @@ fun LivingWeatherCanvas(
             }
         }
 
-        // Text-protection scrim on the left: ensures digital clock, date, greeting, and subtitle remain 100% crisp and readable
+        // Text-protection scrim on the left: soft vignette that preserves celestial sky & clouds while ensuring 100% legibility
         drawRect(
             brush = Brush.horizontalGradient(
                 colors = listOf(
-                    blendColor.copy(alpha = 0.85f),
-                    blendColor.copy(alpha = 0.65f),
-                    blendColor.copy(alpha = 0.25f),
+                    blendColor.copy(alpha = 0.50f),
+                    blendColor.copy(alpha = 0.30f),
+                    blendColor.copy(alpha = 0.10f),
                     Color.Transparent,
                 ),
                 startX = 0f,
-                endX = (width * 0.65f).coerceAtLeast(180.dp.toPx()),
+                endX = (width * 0.68f).coerceAtLeast(180.dp.toPx()),
             ),
             size = Size(width, height),
         )
@@ -813,6 +820,7 @@ private fun DrawScope.drawClearNightScene(
     slowPhase: Float,
     width: Float,
     height: Float,
+    moonPainter: Painter? = null,
 ) {
     val moonCenterX = (width - 76.dp.toPx()).coerceAtLeast(width * 0.74f)
     val moonCenterY = height * 0.44f
@@ -874,13 +882,13 @@ private fun DrawScope.drawClearNightScene(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.35f * pulseScale),
-                Color(0xFFE0E7FF).copy(alpha = 0.20f * pulseScale),
+                Color.White.copy(alpha = 0.38f * pulseScale),
+                Color(0xFFE0E7FF).copy(alpha = 0.22f * pulseScale),
                 Color(0xFF818CF8).copy(alpha = 0.08f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = moonRadius * 2.15f * pulseScale,
+            radius = moonRadius * 2.20f * pulseScale,
         ),
     )
 
@@ -888,196 +896,74 @@ private fun DrawScope.drawClearNightScene(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.58f * pulseScale),
-                Color(0xFFEDE9FE).copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.62f * pulseScale),
+                Color(0xFFEDE9FE).copy(alpha = 0.30f),
                 Color.Transparent,
             ),
             center = Offset(moonCenterX, moonCenterY),
-            radius = moonRadius * 1.34f,
+            radius = moonRadius * 1.35f,
         ),
     )
 
-    // 4. Photorealistic 3D Spherical Moon Body with multi-stop regolith crust
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFFFFFFFF),       // Specular highland
-                Color(0xFFF8FAFC),       // Bright anorthosite crust
-                Color(0xFFE2E8F0),       // Anorthosite regolith
-                Color(0xFFCBD5E1),       // Regolith midtones
-                Color(0xFF94A3B8),       // Shaded regolith
-                Color(0xFF64748B),       // Terminator edge
-                Color(0xFF334155),       // Shadow rim
-            ),
-            center = Offset(moonCenterX - moonRadius * 0.28f, moonCenterY - moonRadius * 0.28f),
-            radius = moonRadius * 1.25f,
-        ),
-        radius = moonRadius,
-        center = Offset(moonCenterX, moonCenterY),
-    )
-
-    // 5. Authentic Lunar Maria (basaltic plains matching actual lunar geography)
-    // Oceanus Procellarum & Mare Imbrium (northwest)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF334155).copy(alpha = 0.54f),
-                Color(0xFF475569).copy(alpha = 0.26f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX - moonRadius * 0.32f, moonCenterY - moonRadius * 0.26f),
-            radius = moonRadius * 0.40f,
-        ),
-        topLeft = Offset(moonCenterX - moonRadius * 0.65f, moonCenterY - moonRadius * 0.55f),
-        size = Size(moonRadius * 0.66f, moonRadius * 0.52f),
-    )
-
-    // Sinus Iridum (Bay of Rainbows - curved highland promontory)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.45f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX - moonRadius * 0.42f, moonCenterY - moonRadius * 0.45f),
-            radius = moonRadius * 0.16f,
-        ),
-        topLeft = Offset(moonCenterX - moonRadius * 0.50f, moonCenterY - moonRadius * 0.52f),
-        size = Size(moonRadius * 0.22f, moonRadius * 0.18f),
-    )
-
-    // Mare Serenitatis & Mare Tranquillitatis (northeast/east)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.50f),
-                Color(0xFF334155).copy(alpha = 0.24f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX + moonRadius * 0.20f, moonCenterY - moonRadius * 0.16f),
-            radius = moonRadius * 0.32f,
-        ),
-        topLeft = Offset(moonCenterX + moonRadius * 0.02f, moonCenterY - moonRadius * 0.38f),
-        size = Size(moonRadius * 0.50f, moonRadius * 0.40f),
-    )
-
-    // Mare Crisium (far eastern circular sea)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.52f),
-                Color(0xFF334155).copy(alpha = 0.22f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX + moonRadius * 0.54f, moonCenterY - moonRadius * 0.08f),
-            radius = moonRadius * 0.18f,
-        ),
-        topLeft = Offset(moonCenterX + moonRadius * 0.40f, moonCenterY - moonRadius * 0.22f),
-        size = Size(moonRadius * 0.28f, moonRadius * 0.26f),
-    )
-
-    // Mare Fecunditatis & Mare Nectaris (southeast)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF334155).copy(alpha = 0.45f),
-                Color(0xFF475569).copy(alpha = 0.20f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX + moonRadius * 0.30f, moonCenterY + moonRadius * 0.24f),
-            radius = moonRadius * 0.26f,
-        ),
-        topLeft = Offset(moonCenterX + moonRadius * 0.12f, moonCenterY + moonRadius * 0.08f),
-        size = Size(moonRadius * 0.42f, moonRadius * 0.36f),
-    )
-
-    // Mare Nubium & Mare Humorum (southwest)
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color(0xFF1E293B).copy(alpha = 0.48f),
-                Color(0xFF334155).copy(alpha = 0.22f),
-                Color.Transparent,
-            ),
-            center = Offset(moonCenterX - moonRadius * 0.18f, moonCenterY + moonRadius * 0.26f),
-            radius = moonRadius * 0.28f,
-        ),
-        topLeft = Offset(moonCenterX - moonRadius * 0.38f, moonCenterY + moonRadius * 0.10f),
-        size = Size(moonRadius * 0.46f, moonRadius * 0.38f),
-    )
-
-    // 6. Tycho Crater & Radiating Ejecta Rays (south highlands)
-    val tychoX = moonCenterX - moonRadius * 0.06f
-    val tychoY = moonCenterY + moonRadius * 0.58f
-
-    // Bright crater impact core
-    drawCircle(
-        color = Color.White.copy(alpha = 0.95f),
-        radius = moonRadius * 0.06f,
-        center = Offset(tychoX, tychoY),
-    )
-    drawCircle(
-        color = Color(0xFF1E293B).copy(alpha = 0.40f),
-        radius = moonRadius * 0.09f,
-        center = Offset(tychoX, tychoY),
-        style = Stroke(width = 1.0f),
-    )
-
-    // 12 Radiating high-albedo ejecta rays reaching across the lunar disk
-    val rayAngles = listOf(195f, 210f, 225f, 245f, 270f, 290f, 310f, 330f, 345f, 5f, 20f, 35f)
-    for (angleDeg in rayAngles) {
-        val rad = angleDeg * (PI.toFloat() / 180f)
-        val rayLen = moonRadius * 0.70f
-        val endX = tychoX + cos(rad) * rayLen
-        val endY = tychoY + sin(rad) * rayLen
-        drawLine(
-            brush = Brush.linearGradient(
+    // 4. Lunar Body: High-Definition Photorealistic NASA Texture or Procedural Regolith
+    if (moonPainter != null) {
+        with(moonPainter) {
+            translate(moonCenterX - moonRadius, moonCenterY - moonRadius) {
+                draw(
+                    size = Size(moonRadius * 2f, moonRadius * 2f),
+                    alpha = 1.0f,
+                )
+            }
+        }
+    } else {
+        // Fallback procedural lunar body
+        drawCircle(
+            brush = Brush.radialGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.55f),
-                    Color.White.copy(alpha = 0.18f),
-                    Color.Transparent,
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF8FAFC),
+                    Color(0xFFE2E8F0),
+                    Color(0xFFCBD5E1),
+                    Color(0xFF94A3B8),
+                    Color(0xFF64748B),
+                    Color(0xFF334155),
                 ),
-                start = Offset(tychoX, tychoY),
-                end = Offset(endX, endY),
+                center = Offset(moonCenterX - moonRadius * 0.28f, moonCenterY - moonRadius * 0.28f),
+                radius = moonRadius * 1.25f,
             ),
-            start = Offset(tychoX, tychoY),
-            end = Offset(endX, endY),
-            strokeWidth = 1.0f,
+            radius = moonRadius,
+            center = Offset(moonCenterX, moonCenterY),
+        )
+
+        // Authentic Lunar Maria (basaltic plains)
+        drawOval(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF334155).copy(alpha = 0.54f), Color.Transparent),
+                center = Offset(moonCenterX - moonRadius * 0.32f, moonCenterY - moonRadius * 0.26f),
+                radius = moonRadius * 0.40f,
+            ),
+            topLeft = Offset(moonCenterX - moonRadius * 0.65f, moonCenterY - moonRadius * 0.55f),
+            size = Size(moonRadius * 0.66f, moonRadius * 0.52f),
+        )
+        drawOval(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF1E293B).copy(alpha = 0.50f), Color.Transparent),
+                center = Offset(moonCenterX + moonRadius * 0.20f, moonCenterY - moonRadius * 0.16f),
+                radius = moonRadius * 0.32f,
+            ),
+            topLeft = Offset(moonCenterX + moonRadius * 0.02f, moonCenterY - moonRadius * 0.38f),
+            size = Size(moonRadius * 0.50f, moonRadius * 0.40f),
         )
     }
 
-    // Copernicus crater (equatorial northwest) with dual terraced rings
-    val copernicusX = moonCenterX - moonRadius * 0.26f
-    val copernicusY = moonCenterY + moonRadius * 0.04f
-    drawCircle(
-        color = Color.White.copy(alpha = 0.90f),
-        radius = moonRadius * 0.05f,
-        center = Offset(copernicusX, copernicusY),
-    )
-    drawCircle(
-        color = Color(0xFF334155).copy(alpha = 0.35f),
-        radius = moonRadius * 0.08f,
-        center = Offset(copernicusX, copernicusY),
-        style = Stroke(width = 0.8f),
-    )
-
-    // Aristarchus Crater (brightest anomaly in the northwest)
-    val aristarchusX = moonCenterX - moonRadius * 0.44f
-    val aristarchusY = moonCenterY - moonRadius * 0.10f
-    drawCircle(
-        color = Color.White.copy(alpha = 0.95f),
-        radius = moonRadius * 0.035f,
-        center = Offset(aristarchusX, aristarchusY),
-    )
-
-    // 7. Limb Darkening & Spherical Rim Depth
+    // 5. Limb Darkening & Spherical Depth Shading
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
                 Color.Transparent,
                 Color.Transparent,
-                Color(0xFF0F172A).copy(alpha = 0.18f),
-                Color(0xFF020617).copy(alpha = 0.52f),
+                Color(0xFF0F172A).copy(alpha = 0.10f),
+                Color(0xFF020617).copy(alpha = 0.38f),
             ),
             center = Offset(moonCenterX, moonCenterY),
             radius = moonRadius,
@@ -1086,7 +972,7 @@ private fun DrawScope.drawClearNightScene(
         center = Offset(moonCenterX, moonCenterY),
     )
 
-    // 8. Soft nocturnal moonlit clouds passing peacefully
+    // 6. Soft nocturnal moonlit clouds passing peacefully across lower perimeter
     drawAtmosphericClouds(
         clouds = clouds,
         slowPhase = slowPhase,
