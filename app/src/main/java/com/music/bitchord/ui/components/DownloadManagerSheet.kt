@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import dev.chrisbanes.haze.HazeState
 import com.music.bitchord.R
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.artworkAt
@@ -80,7 +81,11 @@ import com.music.bitchord.ui.haptics.rememberHaptics
  * one of them is worth walking over to.
  */
 @Composable
-fun TopBarDownloadButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun TopBarDownloadButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+) {
     val session by DownloadSession.state.collectAsStateWithLifecycle()
 
     val haptics = rememberHaptics()
@@ -121,11 +126,12 @@ fun TopBarDownloadButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             shrinkTowards = Alignment.End,
         ),
     ) {
-        IconButton(
+        TopBarActionCircle(
             onClick = {
                 haptics.play(Haptic.Select)
                 onClick()
             },
+            hazeState = hazeState,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (session.busy) {

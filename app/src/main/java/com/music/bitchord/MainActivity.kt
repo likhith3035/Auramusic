@@ -531,6 +531,7 @@ import com.music.bitchord.ui.components.QueueActionNotice
 import com.music.bitchord.ui.components.QueueActionNoticeHost
 
 import com.music.bitchord.ui.components.TopBarAccountButton
+import com.music.bitchord.ui.components.TopBarActionCircle
 
 import com.music.bitchord.ui.screens.SegmentedControl
 
@@ -7695,31 +7696,16 @@ private fun BitChordApp(
                         ) {
 
                             updateNotice?.let { update ->
-
-                                IconButton(onClick = { showUpdateDialog = true }) {
-
+                                TopBarActionCircle(
+                                    onClick = { showUpdateDialog = true },
+                                    hazeState = hazeState,
+                                ) {
                                     Icon(
-
-                                        // An arrow rising out of a bar, not the
-
-                                        // little phone-with-an-arrow: at 24dp the
-
-                                        // handset outline is mush, and the glyph
-
-                                        // has to read as "newer version" rather
-
-                                        // than as "something about your device".
-
                                         Icons.Rounded.Upgrade,
-
                                         contentDescription = stringResource(R.string.update_available, update.version),
-
                                         tint = MaterialTheme.colorScheme.primary,
-
                                     )
-
                                 }
-
                             }
 
                         }
@@ -7738,28 +7724,18 @@ private fun BitChordApp(
 
                             ) {
 
-                                IconButton(
-
+                                TopBarActionCircle(
                                     onClick = {
-
                                         showHistory = true
-
                                         viewModel.loadHistory()
-
                                     },
-
+                                    hazeState = hazeState,
                                 ) {
-
                                     Icon(
-
                                         Icons.Rounded.History,
-
                                         contentDescription = stringResource(R.string.listening_history),
-
                                         tint = MaterialTheme.colorScheme.onSurface,
-
                                     )
-
                                 }
 
                             }
@@ -7778,18 +7754,15 @@ private fun BitChordApp(
 
                                 Box {
 
-                                    IconButton(onClick = { librarySortMenuOpen = true }) {
-
+                                    TopBarActionCircle(
+                                        onClick = { librarySortMenuOpen = true },
+                                        hazeState = hazeState,
+                                    ) {
                                         Icon(
-
                                             Icons.Rounded.Sort,
-
                                             contentDescription = stringResource(R.string.sort_library),
-
                                             tint = MaterialTheme.colorScheme.onSurface,
-
                                         )
-
                                     }
 
                                     DropdownMenu(
@@ -7850,18 +7823,15 @@ private fun BitChordApp(
 
                                 // can see the content it blurs.
 
-                                IconButton(onClick = { songSortMenuOpen = true }) {
-
+                                TopBarActionCircle(
+                                    onClick = { songSortMenuOpen = true },
+                                    hazeState = hazeState,
+                                ) {
                                     Icon(
-
                                         Icons.Rounded.Sort,
-
                                         contentDescription = stringResource(R.string.sort_songs),
-
                                         tint = MaterialTheme.colorScheme.onSurface,
-
                                     )
-
                                 }
 
                             }
@@ -7878,40 +7848,24 @@ private fun BitChordApp(
 
                             ) {
 
-                                IconButton(
-
+                                TopBarActionCircle(
                                     onClick = {
-
                                         val sendIntent = Intent(Intent.ACTION_SEND).apply {
-
                                             type = "text/plain"
-
                                             putExtra(
-
                                                 Intent.EXTRA_TEXT,
-
                                                 "https://music.youtube.com/channel/${detail.browseId}",
-
                                             )
-
                                         }
-
                                         context.startActivity(Intent.createChooser(sendIntent, detail.title))
-
                                     },
-
+                                    hazeState = hazeState,
                                 ) {
-
                                     Icon(
-
                                         Icons.Rounded.IosShare,
-
                                         contentDescription = stringResource(R.string.share),
-
                                         tint = MaterialTheme.colorScheme.onSurface,
-
                                     )
-
                                 }
 
                             }
@@ -7924,112 +7878,67 @@ private fun BitChordApp(
 
                             // itself rather than being told.
 
-                            TopBarDownloadButton(onClick = { showDownloadManager = true })
+                            TopBarDownloadButton(
+                                onClick = { showDownloadManager = true },
+                                hazeState = hazeState,
+                            )
 
                             if (updateNotice != null) {
-
-                                IconButton(
-
+                                TopBarActionCircle(
                                     onClick = { showUpdateDialog = true },
-
-                                    modifier = Modifier.size(40.dp),
-
+                                    hazeState = hazeState,
                                 ) {
-
                                     Box(contentAlignment = Alignment.TopEnd) {
-
                                         Icon(
-
                                             imageVector = Icons.Rounded.Upgrade,
-
                                             contentDescription = stringResource(R.string.software_update),
-
                                             tint = MaterialTheme.colorScheme.primary,
-
                                             modifier = Modifier.size(24.dp),
-
                                         )
-
                                         Box(
-
                                             modifier = Modifier
-
                                                 .size(8.dp)
-
                                                 .clip(CircleShape)
-
                                                 .background(Color(0xFF34D399)),
-
                                         )
-
                                     }
-
                                 }
-
                             }
 
                             if (auraAiUnlocked) {
-
-                                IconButton(
-
+                                TopBarActionCircle(
                                     onClick = { showAuraChat = true },
-
-                                    modifier = Modifier.size(40.dp),
-
+                                    hazeState = hazeState,
                                 ) {
-
                                     AuraOrbIcon(
-
                                         size = 28.dp,
-
                                         isPlaying = player.isPlaying,
-
                                     )
-
                                 }
-
                             }
 
-                            IconButton(
-
+                            TopBarActionCircle(
                                 onClick = { showSettings = true },
-
-                                modifier = Modifier.size(40.dp),
-
+                                hazeState = hazeState,
                             ) {
-
                                 Icon(
-
                                     imageVector = Icons.Rounded.Settings,
-
                                     contentDescription = stringResource(R.string.settings),
-
                                     tint = if (showSettings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-
                                     modifier = Modifier.size(22.dp),
-
                                 )
-
                             }
 
                             TopBarAccountButton(
-
                                 account = account,
-
                                 onClick = {
-
                                     if (signedIn) {
-
                                         viewModel.loadChannels()
-
                                         showAccountSelector = true
-
                                     } else showSettings = true
-
                                 },
-
                                 onSwipeProfile = { forward -> viewModel.stepProfile(forward) },
-
+                                hazeState = hazeState,
                             )
 
                         }

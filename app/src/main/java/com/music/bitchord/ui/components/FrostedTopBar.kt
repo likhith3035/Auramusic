@@ -14,6 +14,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -63,6 +64,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,7 +90,7 @@ import kotlin.math.roundToInt
  * backdrop, fixed headers that sit directly beneath it — measures from here
  * rather than from a copy of the number.
  */
-val TopBarContentHeight = 52.dp
+val TopBarContentHeight = 58.dp
 
 /**
  * The breathing room between the bar's bottom edge and the first thing under
@@ -209,6 +211,9 @@ fun FrostedTopBar(
     } else {
         surfaceColor.copy(alpha = 0.96f)
     }
+    val density = LocalDensity.current
+    val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTopPx = with(density) { statusBarTopPadding.toPx() }
 
     Column(
         modifier = modifier
@@ -227,16 +232,20 @@ fun FrostedTopBar(
                 .then(
                     if (topBarBgAlpha < 1f) {
                         Modifier.drawWithContent {
-                            // Subtle status bar contrast gradient scrim to keep system status indicators (clock, battery, Wi-Fi)
+                            // Dedicated status bar contrast horizon scrim to keep system status indicators (clock, battery, Wi-Fi)
                             // crisp and readable on any background, matching standard modern mobile apps
-                            val scrimAlpha = (1f - topBarBgAlpha) * 0.40f
+                            val scrimAlpha = (1f - topBarBgAlpha) * 0.55f
                             if (scrimAlpha > 0.01f) {
+                                val scrimHeight = (statusBarTopPx + with(density) { 18.dp.toPx() }).coerceAtLeast(1f)
                                 drawRect(
                                     brush = Brush.verticalGradient(
-                                        0.0f to statusScrimColor.copy(alpha = scrimAlpha),
-                                        0.55f to statusScrimColor.copy(alpha = scrimAlpha * 0.35f),
+                                        0.0f to Color.Black.copy(alpha = scrimAlpha),
+                                        (statusBarTopPx / scrimHeight).coerceIn(0f, 1f) to Color.Black.copy(alpha = scrimAlpha * 0.50f),
                                         1.0f to Color.Transparent,
+                                        startY = 0f,
+                                        endY = scrimHeight,
                                     ),
+                                    size = androidx.compose.ui.geometry.Size(size.width, scrimHeight),
                                 )
                             }
                             drawContent()
@@ -328,12 +337,14 @@ fun FrostedTopBar(
                         // centred in the same 44dp control in every material.
                         modifier = Modifier
                             .align(Alignment.CenterStart)
-                            .padding(start = BAR_GUTTER),
+                            .padding(start = BAR_GUTTER, top = 6.dp, bottom = 4.dp),
                     )
                 } else {
                     IconButton(
                         onClick = onBack,
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp),
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 4.dp, top = 6.dp, bottom = 4.dp),
                     ) {
                         Icon(
                             Icons.AutoMirrored.Rounded.ArrowBack,
@@ -354,18 +365,15 @@ fun FrostedTopBar(
                     .then(if (accessory != null) Modifier.fillMaxWidth().padding(start = edge) else Modifier)
                     // Same outer edge as the navbar; PILL_INSET below is
                     // internal padding around the icons, not extra margin.
-                    .padding(end = edge),
+                    .padding(end = edge, top = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (accessory != null) {
                     Box(Modifier.weight(1f)) { accessory() }
                     Spacer(Modifier.width(ACCESSORY_GAP))
                 }
-                if (useFloatingChrome) {
-                    ArtworkPageActions(hazeState = backButtonHazeState, content = actions)
-                } else {
-                    actions()
-                }
+                actions()
             }
         }
         HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
@@ -404,9 +412,40 @@ private fun ArtworkPageBackButton(
     }
 }
 
-/** One shared pill for every action at the right of a floating top bar. */
+/**
+ * Standalone circular floating action button with its own frosted glass surface.
+ * Each top bar action button renders with an independent circular surface, preventing
+ * buttons from merging into a single shared pill container.
+ */
 @Composable
-private fun ArtworkPageActions(
+fun TopBarActionCircle(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    size: Dp = 42.dp,
+    content: @Composable () -> Unit,
+) {
+    val shape = CircleShape
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .then(artworkPageSurface(shape = shape, hazeState = hazeState))
+            .clip(shape)
+            .clickable(
+                onClick = onClick,
+                role = Role.Button,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+/** One shared pill for every action at the right of a floating top bar. */
+@Deprecated("Use individual TopBarActionCircle and TopBarAccountButton surfaces instead")
+@Composable
+fun ArtworkPageActions(
     hazeState: HazeState?,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
@@ -458,7 +497,7 @@ private fun Modifier.artworkActionEdgePadding(): Modifier = layout { measurable,
 /** The navbar's exact material choice, reusable by every floating top control. */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-private fun artworkPageSurface(
+fun artworkPageSurface(
     shape: CornerBasedShape,
     hazeState: HazeState?,
 ): Modifier {
@@ -471,7 +510,7 @@ private fun artworkPageSurface(
         .then(
             when {
                 useLiquidGlass -> Modifier.liquidGlass(shape)
-                reduceDynamicBlur || hazeState == null -> Modifier.background(container)
+                reduceDynamicBlur || hazeState == null -> Modifier.background(container.copy(alpha = 0.85f))
                 else -> Modifier.optimizedHazeEffect(
                     state = hazeState,
                     style = HazeMaterials.regular(container),
@@ -492,23 +531,26 @@ private fun artworkPageSurface(
  * out, or before the account menu has come back, it falls back to a person
  * glyph on a filled circle so the tap target never disappears.
  *
- * The hairline ring is what keeps a photo with light edges from dissolving into
- * the bar's glass; it is the same one thumbnails elsewhere carry.
+ * Renders on its own separate circular frosted glass surface with consistent 42dp bounds.
  */
 @Composable
 fun TopBarAccountButton(
     account: Account?,
     onClick: () -> Unit,
     onSwipeProfile: ((forward: Boolean) -> Boolean)? = null,
+    hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
+    size: Dp = 42.dp,
 ) {
     val translation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    // Wrapped in an IconButton so it keeps the 48dp target, the ripple and the
-    // spacing every other action in this bar has.
-    IconButton(
-        onClick = onClick,
+    val shape = CircleShape
+
+    Box(
         modifier = modifier
+            .size(size)
+            .then(artworkPageSurface(shape = shape, hazeState = hazeState))
+            .clip(shape)
             .graphicsLayer { translationY = translation.value }
             .pointerInput(onSwipeProfile) {
                 if (onSwipeProfile == null) return@pointerInput
@@ -523,7 +565,12 @@ fun TopBarAccountButton(
                         }
                     },
                 )
-            },
+            }
+            .clickable(
+                onClick = onClick,
+                role = Role.Button,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
         val photo = account?.thumbnailUrl
         if (photo != null) {
