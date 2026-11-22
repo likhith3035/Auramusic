@@ -6282,19 +6282,13 @@ private fun BitChordApp(
                             onSongSwipe = onSongSwipe,
 
                             onShuffle = { songs ->
-
+                                if (songs.isEmpty()) return@LocalMusicScreen
                                 QueueShuffle.enableForNextQueue()
-
                                 playFrom(
-
                                     songs,
-
                                     songs.indices.random(),
-
                                     QueueSource(page.title, PlaybackSourceType.BROWSE, page.browseId),
-
                                 )
-
                             },
 
                             emptyMessage = (localState as? com.music.bitchord.data.model.UiState.Error)
@@ -6414,25 +6408,16 @@ private fun BitChordApp(
                             onSongSwipe = onSongSwipe,
 
                             onShuffle = { songs ->
-
+                                if (songs.isEmpty()) return@DetailScreen
                                 // Shuffle goes on first so the queue is built shuffled
-
                                 // as it is set — the random pick here only decides
-
                                 // which track leads it.
-
                                 QueueShuffle.enableForNextQueue()
-
                                 playFrom(
-
                                     songs,
-
                                     songs.indices.random(),
-
                                     QueueSource(page.title, PlaybackSourceType.BROWSE, page.browseId),
-
                                 )
-
                             },
 
                             onSectionItemClick = { item ->
@@ -9866,17 +9851,13 @@ private fun BitChordApp(
                 onPlay = act { songs -> play(songs, 0) }.takeIf { target.fromCard },
 
                 onShuffle = act { songs ->
-
-                    // As on a release page: shuffle goes on before the queue
-
-                    // is built, so it is built shuffled rather than played
-
-                    // out of order.
-
-                    QueueShuffle.enableForNextQueue()
-
-                    play(songs, songs.indices.random())
-
+                    if (songs.isNotEmpty()) {
+                        // As on a release page: shuffle goes on before the queue
+                        // is built, so it is built shuffled rather than played
+                        // out of order.
+                        QueueShuffle.enableForNextQueue()
+                        play(songs, songs.indices.random())
+                    }
                 }.takeIf { target.fromCard },
 
                 onOpen = target.browseId
