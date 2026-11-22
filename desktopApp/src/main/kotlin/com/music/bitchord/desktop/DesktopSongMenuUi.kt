@@ -402,32 +402,35 @@ private class DesktopMenuPosition : PopupPositionProvider {
         val margin = MENU_MARGIN
         val taskbarSafeBottom = TASKBAR_SAFE_MARGIN
 
+        val effectiveWidth = if (popupContentSize.width > 0) popupContentSize.width else 280
+        val effectiveHeight = if (popupContentSize.height > 0) popupContentSize.height else 400
+
         // Horizontal positioning:
         // If anchor is in the right half of the window, bloom leftward by aligning right edges
         // so the menu does not overflow off the right edge of the monitor.
         val desiredX = if (anchorBounds.left + anchorBounds.width / 2 > windowSize.width / 2) {
-            anchorBounds.right - popupContentSize.width
+            anchorBounds.right - effectiveWidth
         } else {
             anchorBounds.left
         }
-        val maxX = (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)
+        val maxX = (windowSize.width - effectiveWidth - margin).coerceAtLeast(margin)
         val x = desiredX.coerceIn(margin, maxX)
 
         // Vertical positioning:
         // If anchor is in the bottom half of the window (like the player bar), always open ABOVE
         // the anchor to stay well clear of the player bar and the Windows taskbar.
-        val fitsAbove = anchorBounds.top - popupContentSize.height - margin >= margin
-        val fitsBelow = anchorBounds.bottom + margin + popupContentSize.height + taskbarSafeBottom <= windowSize.height
+        val fitsAbove = anchorBounds.top - effectiveHeight - margin >= margin
+        val fitsBelow = anchorBounds.bottom + margin + effectiveHeight + taskbarSafeBottom <= windowSize.height
         val isBottomHalf = anchorBounds.top + anchorBounds.height / 2 > windowSize.height / 2
 
         val desiredY = when {
-            isBottomHalf && fitsAbove -> anchorBounds.top - popupContentSize.height - margin
+            isBottomHalf && fitsAbove -> anchorBounds.top - effectiveHeight - margin
             !isBottomHalf && fitsBelow -> anchorBounds.bottom + margin
-            fitsAbove -> anchorBounds.top - popupContentSize.height - margin
+            fitsAbove -> anchorBounds.top - effectiveHeight - margin
             fitsBelow -> anchorBounds.bottom + margin
             else -> margin
         }
-        val maxY = (windowSize.height - popupContentSize.height - taskbarSafeBottom).coerceAtLeast(margin)
+        val maxY = (windowSize.height - effectiveHeight - taskbarSafeBottom).coerceAtLeast(margin)
         val y = desiredY.coerceIn(margin, maxY)
 
         return IntOffset(x, y)
