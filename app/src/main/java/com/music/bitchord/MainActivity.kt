@@ -7322,58 +7322,6 @@ private fun BitChordApp(
 
                 // the white theme background in light mode.
 
-                // On an artist page the photograph and logo run up under the status
-
-                // bar, and a fade across them would only muddy them. It comes in as
-
-                // the page scrolls past that header, when content starts passing
-
-                // under the bar and needs the cover.
-
-                val artistListState = detail
-
-                    ?.takeIf { isDetailVisible && it.type == BrowseType.ARTIST }
-
-                    ?.let { detailListStates.getOrPut(it.browseId) { LazyListState() } }
-
-                val topFadeAlpha by remember(artistListState) {
-
-                    derivedStateOf {
-
-                        val list = artistListState ?: return@derivedStateOf 1f
-
-                        if (list.firstVisibleItemIndex > 0) return@derivedStateOf 1f
-
-                        val header = list.layoutInfo.visibleItemsInfo
-
-                            .firstOrNull { it.index == 0 }?.size?.toFloat()
-
-                            ?: return@derivedStateOf 0f
-
-                        ((list.firstVisibleItemScrollOffset - header * TOP_FADE_START) /
-
-                            (header * TOP_FADE_RAMP)).coerceIn(0f, 1f)
-
-                    }
-
-                }
-
-                BottomFadeScrim(
-
-                    pageColor = chromePageColor,
-
-                    modifier = Modifier
-
-                        .align(Alignment.TopCenter)
-
-                        .rotate(180f)
-
-                        .graphicsLayer { alpha = topFadeAlpha },
-
-                )
-
-
-
                 FrostedTopBar(
 
                     title = when {

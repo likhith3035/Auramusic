@@ -90,13 +90,13 @@ import kotlin.math.roundToInt
  * backdrop, fixed headers that sit directly beneath it — measures from here
  * rather than from a copy of the number.
  */
-val TopBarContentHeight = 58.dp
+val TopBarContentHeight = 48.dp
 
 /**
  * The breathing room between the bar's bottom edge and the first thing under
  * it, so content rests below the glass instead of against it.
  */
-val TopBarContentGap = 12.dp
+val TopBarContentGap = 8.dp
 
 /**
  * How much of each end of the bar is spoken for, so a long title truncates
@@ -184,43 +184,13 @@ fun FrostedTopBar(
         animationSpec = tween(220),
         label = "topBarTitleAlpha",
     )
-    val topBarBgAlpha by animateFloatAsState(
-        targetValue = if (scrolled) 1f else if (transparentBackdrop) 0f else 1f,
-        animationSpec = tween(220),
-        label = "topBarBgAlpha",
-    )
-    // Every bounded bar uses the same hairline, whether its pane is blurred or
-    // solid. A transparent artwork page has no pane edge for a line to mark at rest,
-    // but gains a clean subtle boundary once scrolled.
-    val dividerColor by animateColorAsState(
-        targetValue = if (scrolled) {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-        } else if (transparentBackdrop) {
-            Color.Transparent
-        } else {
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-        },
-        animationSpec = tween(220),
-        label = "topBarDivider",
-    )
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val isDarkTheme = (surfaceColor.red + surfaceColor.green + surfaceColor.blue) < 1.5f
-    val statusScrimColor = if (isDarkTheme) Color.Black else Color.White
-    val barBackground = if (reduceDynamicBlur) {
-        surfaceColor
-    } else {
-        surfaceColor.copy(alpha = 0.96f)
-    }
-    val density = LocalDensity.current
-    val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val statusBarTopPx = with(density) { statusBarTopPadding.toPx() }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (topBarBgAlpha > 0f) {
-                    Modifier.background(barBackground.copy(alpha = topBarBgAlpha))
+                if (reduceDynamicBlur && !transparentBackdrop) {
+                    Modifier.background(MaterialTheme.colorScheme.surface)
                 } else {
                     Modifier
                 },
@@ -229,31 +199,6 @@ fun FrostedTopBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (topBarBgAlpha < 1f) {
-                        Modifier.drawWithContent {
-                            // Dedicated status bar contrast horizon scrim to keep system status indicators (clock, battery, Wi-Fi)
-                            // crisp and readable on any background, matching standard modern mobile apps
-                            val scrimAlpha = (1f - topBarBgAlpha) * 0.55f
-                            if (scrimAlpha > 0.01f) {
-                                val scrimHeight = (statusBarTopPx + with(density) { 18.dp.toPx() }).coerceAtLeast(1f)
-                                drawRect(
-                                    brush = Brush.verticalGradient(
-                                        0.0f to Color.Black.copy(alpha = scrimAlpha),
-                                        (statusBarTopPx / scrimHeight).coerceIn(0f, 1f) to Color.Black.copy(alpha = scrimAlpha * 0.50f),
-                                        1.0f to Color.Transparent,
-                                        startY = 0f,
-                                        endY = scrimHeight,
-                                    ),
-                                    size = androidx.compose.ui.geometry.Size(size.width, scrimHeight),
-                                )
-                            }
-                            drawContent()
-                        }
-                    } else {
-                        Modifier
-                    },
-                )
                 .statusBarsPadding()
                 .height(TopBarContentHeight),
         ) {
@@ -334,17 +279,17 @@ fun FrostedTopBar(
                         hazeState = backButtonHazeState,
                         // The surface edge aligns with the floating navbar. The
                         // padding belongs outside the circle; its icon remains
-                        // centred in the same 44dp control in every material.
+                        // centred in the same 40dp control in every material.
                         modifier = Modifier
                             .align(Alignment.CenterStart)
-                            .padding(start = BAR_GUTTER, top = 6.dp, bottom = 4.dp),
+                            .padding(start = BAR_GUTTER),
                     )
                 } else {
                     IconButton(
                         onClick = onBack,
                         modifier = Modifier
                             .align(Alignment.CenterStart)
-                            .padding(start = 4.dp, top = 6.dp, bottom = 4.dp),
+                            .padding(start = 4.dp),
                     ) {
                         Icon(
                             Icons.AutoMirrored.Rounded.ArrowBack,
@@ -365,7 +310,7 @@ fun FrostedTopBar(
                     .then(if (accessory != null) Modifier.fillMaxWidth().padding(start = edge) else Modifier)
                     // Same outer edge as the navbar; PILL_INSET below is
                     // internal padding around the icons, not extra margin.
-                    .padding(end = edge, top = 6.dp, bottom = 4.dp),
+                    .padding(end = edge),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -376,7 +321,6 @@ fun FrostedTopBar(
                 actions()
             }
         }
-        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
         RefreshPuck(refreshing = refreshing, pullFraction = pullFraction)
     }
 }
@@ -401,7 +345,7 @@ private fun ArtworkPageBackButton(
     IconButton(
         onClick = onClick,
         modifier = modifier
-            .size(44.dp)
+            .size(40.dp)
             .then(artworkPageSurface(shape = shape, hazeState = hazeState)),
     ) {
         Icon(
@@ -422,7 +366,7 @@ fun TopBarActionCircle(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
-    size: Dp = 42.dp,
+    size: Dp = 40.dp,
     content: @Composable () -> Unit,
 ) {
     val shape = CircleShape
@@ -540,7 +484,7 @@ fun TopBarAccountButton(
     onSwipeProfile: ((forward: Boolean) -> Boolean)? = null,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
-    size: Dp = 42.dp,
+    size: Dp = 40.dp,
 ) {
     val translation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
