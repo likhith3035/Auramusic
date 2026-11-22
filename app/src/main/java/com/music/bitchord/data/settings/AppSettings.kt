@@ -237,6 +237,7 @@ object AppSettings {
      * not one portable audio file.
      */
     val exportDownloads = MutableStateFlow(true)
+    val downloadLikedSongs = MutableStateFlow(false)
     val newReleaseAlertsEnabled = MutableStateFlow(true)
     val newReleaseAlertFrequencyHours = MutableStateFlow(12)
 
@@ -897,6 +898,7 @@ object AppSettings {
         migrateDownloadQuality()
         downloadQuality.value = readDownloadQuality()
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
+        downloadLikedSongs.value = prefs.getBoolean(KEY_DOWNLOAD_LIKED_SONGS, false)
         if (!prefs.contains(KEY_EXPORT_DOWNLOADS_V2_SET)) {
             prefs.edit()
                 .putBoolean(KEY_EXPORT_DOWNLOADS_V2_SET, true)
@@ -1300,6 +1302,11 @@ object AppSettings {
     fun setWifiOnlyDownloads(value: Boolean) {
         wifiOnlyDownloads.value = value
         prefs.edit().putBoolean(KEY_WIFI_ONLY_DOWNLOADS, value).apply()
+    }
+
+    fun setDownloadLikedSongs(value: Boolean) {
+        downloadLikedSongs.value = value
+        prefs.edit().putBoolean(KEY_DOWNLOAD_LIKED_SONGS, value).apply()
     }
 
     fun setCrossfadeSeconds(value: Int) {
@@ -2412,6 +2419,7 @@ object AppSettings {
     private const val KEY_UPGRADE_LENGTH_SLACK_SECONDS = "upgrade_length_slack_seconds"
     private const val KEY_QUALITY_DOWNLOAD = "audio_quality_download"
     private const val KEY_WIFI_ONLY_DOWNLOADS = "wifi_only_downloads"
+    private const val KEY_DOWNLOAD_LIKED_SONGS = "download_liked_songs"
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_EXPORT_DOWNLOADS_V2_SET = "export_downloads_v2_set"
     private const val KEY_LOSSLESS = "lossless_audio"

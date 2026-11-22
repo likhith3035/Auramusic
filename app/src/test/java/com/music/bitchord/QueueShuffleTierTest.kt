@@ -5,10 +5,25 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.QueueShuffle
 import com.music.bitchord.playback.queueEntryId
 import com.music.bitchord.playback.toMediaItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class QueueShuffleTierTest {
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     private fun testSong(
         id: String,

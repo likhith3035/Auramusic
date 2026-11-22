@@ -1,5 +1,6 @@
 package com.music.bitchord
 
+import kotlinx.coroutines.Job
 import android.app.PictureInPictureParams
 import android.util.Rational
 import com.music.bitchord.ui.player.AndroidMusicVideo
@@ -54,8 +55,9 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 
 import androidx.compose.animation.core.animateFloatAsState
-
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.animateScrollBy
 
 import androidx.compose.animation.fadeOut
 
@@ -8074,48 +8076,50 @@ private fun BitChordApp(
 
 
 
-                // One tab handler, whichever bar is drawing it.
-
-                val onTabSelected: (Int) -> Unit = { index ->
-
-                    viewModel.clearDetail()
-
-                    viewModel.closeMoodGenre()
-
-                    showSettings = false
-
-                    showAccountScrobbling = false
-
-                    showSources = false
-
-                    showListenTogether = false
-
-                    showEqualizer = false
-
-                    showReplay = false
-
-                    settingsSubScreen = null
-
-                    showHistory = false
-
-                    libraryShowAll = null
-
-                    selectedTab = index
-
-
-
-                    // Every search tab tap resets the field, focuses it, and opens
-
-                    // the keyboard through SearchScreen's focus request.
-
-                    if (index == TAB_SEARCH) {
-
-                        viewModel.onQueryChange("")
-
-                        searchFocusRequested = true
-
+                val scrollScope = rememberCoroutineScope()
+                var scrollJob by remember { mutableStateOf<Job?>(null) }
+                val onActiveTabTap: () -> Unit = {
+                    if (detail == null && selectedMoodGenre == null && !showSettings &&
+                        !showAccountScrobbling && !showSources && !showListenTogether &&
+                        !showEqualizer && !showReplay && settingsSubScreen == null && !showHistory &&
+                        libraryShowAll == null && selectedTab != TAB_SEARCH
+                    ) {
+                        scrollJob?.cancel()
+                        scrollJob = scrollScope.launch {
+                            currentListState.scrollToTopEased()
+                        }
                     }
+                }
 
+                // One tab handler, whichever bar is drawing it.
+                val onTabSelected: (Int) -> Unit = { index ->
+                    if (index == selectedTab && detail == null && selectedMoodGenre == null &&
+                        !showSettings && !showAccountScrobbling && !showSources && !showListenTogether &&
+                        !showEqualizer && !showReplay && settingsSubScreen == null && !showHistory &&
+                        libraryShowAll == null
+                    ) {
+                        onActiveTabTap()
+                    } else {
+                        viewModel.clearDetail()
+                        viewModel.closeMoodGenre()
+                        showSettings = false
+                        showAccountScrobbling = false
+                        showSources = false
+                        showListenTogether = false
+                        showEqualizer = false
+                        showReplay = false
+                        settingsSubScreen = null
+                        showHistory = false
+                        libraryShowAll = null
+                        selectedTab = index
+
+                        // Every search tab tap resets the field, focuses it, and opens
+                        // the keyboard through SearchScreen's focus request.
+                        if (index == TAB_SEARCH) {
+                            viewModel.onQueryChange("")
+                            searchFocusRequested = true
+                        }
+                    }
                 }
 
 
@@ -10318,5 +10322,49 @@ private fun WebSessionOverlay(
                 },
             )
         }
+    }
+}
+
+/** Duration of the smooth scroll-to-top animation in milliseconds. */
+private const val SCROLL_TO_TOP_DURATION_MS = 550
+
+/** Number of items above which we treat a list as "far" and do a bounded jump near the top. */
+private const val FAR_LIST_THRESHOLD = 15
+
+private suspend fun LazyListState.scrollToTopEased() {
+    val firstIndex = this.firstVisibleItemIndex
+    val scrollOffset = this.firstVisibleItemScrollOffset
+    if (firstIndex == 0 && scrollOffset == 0) return
+
+    val visibleItems = this.layoutInfo.visibleItemsInfo
+    if (visibleItems.isEmpty()) {
+        this.scrollToItem(0)
+        return
+    }
+    val avgHeight = visibleItems.sumOf { it.size } / visibleItems.size.toFloat()
+    val estimatedDistance = avgHeight * firstIndex + scrollOffset
+
+    if (firstIndex > FAR_LIST_THRESHOLD) {
+        val targetIndex = (firstIndex - FAR_LIST_THRESHOLD).coerceAtLeast(0)
+        this.scrollToItem(targetIndex)
+        kotlinx.coroutines.delay(16L)
+        val remainingOffset = this.firstVisibleItemScrollOffset +
+            (visibleItems.getOrNull(0)?.size?.toFloat() ?: 0f)
+        if (remainingOffset > 0) {
+            this.animateScrollBy(
+                value = -remainingOffset,
+                animationSpec = tween(SCROLL_TO_TOP_DURATION_MS, easing = FastOutSlowInEasing),
+            )
+        }
+    } else {
+        if (estimatedDistance > 0) {
+            this.animateScrollBy(
+                value = -estimatedDistance,
+                animationSpec = tween(SCROLL_TO_TOP_DURATION_MS, easing = FastOutSlowInEasing),
+            )
+        }
+    }
+    if (this.firstVisibleItemIndex != 0 || this.firstVisibleItemScrollOffset != 0) {
+        this.animateScrollToItem(0)
     }
 }

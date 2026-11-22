@@ -646,6 +646,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // Liked Music is now out of date either way.
                     libraryStale = true
                     if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
+                    if (status == LikeStatus.LIKE && AppSettings.downloadLikedSongs.value) {
+                        viewModelScope.launch {
+                            val candidate = (_library.value as? UiState.Success)?.data?.likedSongs?.firstOrNull { it.videoId == videoId }
+                                ?: AudioCache.cachedSongs().firstOrNull { it.song.videoId == videoId }?.song
+                                ?: YtMusicRepository.browseSongs(YtMusicRepository.LIKED_MUSIC).getOrNull()?.songs?.firstOrNull { it.videoId == videoId }
+                            if (candidate != null) {
+                                Downloads.enqueue(getApplication(), candidate)
+                            }
+                        }
+                    }
                     // Clearing the heart means forgetting the song, not
                     // demoting it — see [forgetFromLibrary].
                     val unliked = previous == LikeStatus.LIKE &&

@@ -61,6 +61,10 @@
     <string name="auto_unavailable_title">Content unavailable</string>
     <string name="auto_unavailable_subtitle">Reopen the folder and try again</string>
     <string name="add_to_playlist">Add to playlist</string>
+    <string name="find_a_playlist" translatable="false">Find a playlist</string>
+    <string name="no_playlists_match" translatable="false">No playlists match “%1$s”</string>
+    <string name="download_liked_songs" translatable="false">Download liked songs</string>
+    <string name="download_liked_songs_subtitle" translatable="false">Automatically downloads your favorites whenever you like a song</string>
     <string name="add_to_library">Add to library</string>
     <string name="remove_from_library">Remove from library</string>
     <string name="subscribe">Subscribe</string>
@@ -996,10 +1000,10 @@
     <string name="output_precision">Output precision</string>
 
     <string name="prefer_usb_dac">Prefer USB DAC</string>
-    <string name="auto_lock_bluetooth">Auto-lock to Bluetooth</string>
-    <string name="auto_lock_bluetooth_subtitle">Direct music strictly to Bluetooth speakers or headphones</string>
-    <string name="separate_app_sound_samsung">Separate App Sound (Samsung One UI)</string>
-    <string name="separate_app_sound_samsung_subtitle">Open system settings to route all other phone audio to the phone speaker</string>
+    <string name="auto_lock_bluetooth" translatable="false">Auto-lock to Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle" translatable="false">Direct music strictly to Bluetooth speakers or headphones</string>
+    <string name="separate_app_sound_samsung" translatable="false">Separate App Sound (Samsung One UI)</string>
+    <string name="separate_app_sound_samsung_subtitle" translatable="false">Open system settings to route all other phone audio to the phone speaker</string>
 
     <string name="loudness_normalization">Loudness normalization</string>
 

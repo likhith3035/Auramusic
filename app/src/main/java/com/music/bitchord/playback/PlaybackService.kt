@@ -2877,6 +2877,12 @@ class PlaybackService : MediaLibraryService() {
         // Match the player UI: update both surfaces immediately, then reconcile
         // the optimistic state with YouTube in the background.
         LikeState.set(videoId, target)
+        if (target == LikeStatus.LIKE && AppSettings.downloadLikedSongs.value) {
+            val song = player?.currentMediaItem?.takeIf { it.mediaId == videoId }?.toSong()
+            if (song != null) {
+                Downloads.enqueue(this@PlaybackService, song)
+            }
+        }
         refreshCustomLayouts()
         favoriteActionJob = scope.launch {
             YtMusicRepository.rate(videoId, target)
