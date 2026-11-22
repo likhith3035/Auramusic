@@ -99,8 +99,8 @@ import com.music.bitchord.ui.home.AuraGreetingHeader
 import com.music.bitchord.ui.player.MeshGradientBackground
 import com.music.bitchord.ui.player.MeshPalette
 
-/** How far the Listen now heading and feed sit above the shared top inset. */
-private val HOME_TITLE_LIFT = 28.dp
+/** How far the Listen now heading and feed sit above the shared top inset (0.dp preserves clean status bar clearance). */
+private val HOME_TITLE_LIFT = 0.dp
 
 private const val RECENTS_TITLE = "Recents"
 private const val RECENT_TRACKS_PER_COLUMN = 4

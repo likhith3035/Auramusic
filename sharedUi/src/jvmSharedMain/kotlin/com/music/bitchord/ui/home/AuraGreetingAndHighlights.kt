@@ -315,7 +315,7 @@ fun AuraGreetingHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(240.dp),
+            .height(246.dp),
     ) {
         // Living weather canvas rendering photorealistic Sun / Moon and weather particle effects
         LivingWeatherCanvas(
@@ -327,10 +327,11 @@ fun AuraGreetingHeader(
         )
 
         // Content overlay: Left side has clock, date, greeting, subtitle, and mood chips
+        // Top padding ensures clean separation from top bar actions and status bar
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             // Top Section: Real-Time Digital Clock & Date

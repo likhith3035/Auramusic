@@ -52,7 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -180,31 +182,69 @@ fun FrostedTopBar(
         animationSpec = tween(220),
         label = "topBarTitleAlpha",
     )
+    val topBarBgAlpha by animateFloatAsState(
+        targetValue = if (scrolled) 1f else if (transparentBackdrop) 0f else 1f,
+        animationSpec = tween(220),
+        label = "topBarBgAlpha",
+    )
     // Every bounded bar uses the same hairline, whether its pane is blurred or
-    // solid. A transparent artwork page has no pane edge for a line to mark.
+    // solid. A transparent artwork page has no pane edge for a line to mark at rest,
+    // but gains a clean subtle boundary once scrolled.
     val dividerColor by animateColorAsState(
-        targetValue = MaterialTheme.colorScheme.outline.copy(
-            alpha = when {
-                transparentBackdrop -> 0f
-                else -> 0.6f
-            },
-        ),
+        targetValue = if (scrolled) {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        } else if (transparentBackdrop) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        },
         animationSpec = tween(220),
         label = "topBarDivider",
     )
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val isDarkTheme = (surfaceColor.red + surfaceColor.green + surfaceColor.blue) < 1.5f
+    val statusScrimColor = if (isDarkTheme) Color.Black else Color.White
+    val barBackground = if (reduceDynamicBlur) {
+        surfaceColor
+    } else {
+        surfaceColor.copy(alpha = 0.96f)
+    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (reduceDynamicBlur && !transparentBackdrop) {
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                } else Modifier,
+                if (topBarBgAlpha > 0f) {
+                    Modifier.background(barBackground.copy(alpha = topBarBgAlpha))
+                } else {
+                    Modifier
+                },
             ),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (topBarBgAlpha < 1f) {
+                        Modifier.drawWithContent {
+                            // Subtle status bar contrast gradient scrim to keep system status indicators (clock, battery, Wi-Fi)
+                            // crisp and readable on any background, matching standard modern mobile apps
+                            val scrimAlpha = (1f - topBarBgAlpha) * 0.40f
+                            if (scrimAlpha > 0.01f) {
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        0.0f to statusScrimColor.copy(alpha = scrimAlpha),
+                                        0.55f to statusScrimColor.copy(alpha = scrimAlpha * 0.35f),
+                                        1.0f to Color.Transparent,
+                                    ),
+                                )
+                            }
+                            drawContent()
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
                 .statusBarsPadding()
                 .height(TopBarContentHeight),
         ) {
