@@ -7,9 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -364,7 +361,7 @@ fun AuraGreetingHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(240.dp),
+            .height(200.dp),
     ) {
         // Living weather canvas rendering photorealistic Sun / Moon and weather particle effects
         LivingWeatherCanvas(
@@ -384,13 +381,13 @@ fun AuraGreetingHeader(
         }
         val bodyFontFamily = if (nothingOsMode) FontFamily.Monospace else (MaterialTheme.typography.bodyMedium.fontFamily ?: FontFamily.SansSerif)
 
-        // Content overlay: Left side has clock, date, greeting, subtitle, and mood chips
+        // Content overlay: Left side has clock, date, greeting, and subtitle (mood cards strip removed; height reduced cleanly)
         // Top padding ensures clean separation from top bar actions and status bar
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.Top,
         ) {
             // Top Section: Real-Time Digital Clock & Date with tap-to-cycle typography personality
             Column(
@@ -458,6 +455,8 @@ fun AuraGreetingHeader(
                     color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.88f),
                 )
             }
+
+            Spacer(Modifier.height(22.dp))
 
             // Middle Section: Dynamic Headline Greeting & Subtitle (Playback or Weather)
             Column {
@@ -536,41 +535,6 @@ fun AuraGreetingHeader(
                                 )
                             }
                         }
-                    }
-                }
-            }
-
-            // Bottom Section: Contextual Mood Pills
-            val pills = if (weather.moodPills.isNotEmpty()) weather.moodPills else timeOfDay.moodPills
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                pills.forEach { mood ->
-                    Surface(
-                        shape = RoundedCornerShape(percent = 50),
-                        color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.14f),
-                        ),
-                        modifier = Modifier.then(
-                            if (onMoodClick != null) Modifier.clickable { onMoodClick(mood) } else Modifier
-                        ),
-                    ) {
-                        Text(
-                            text = mood,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontFamily = if (nothingOsMode) FontFamily.Monospace else FontFamily.Default,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 11.5.sp,
-                            ),
-                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.92f),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        )
                     }
                 }
             }

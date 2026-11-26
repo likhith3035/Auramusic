@@ -442,6 +442,7 @@ fun AuraWeatherLocationSheet(
                     WeatherVisualType.CLEAR_DAY to "Sunny Day",
                     WeatherVisualType.SUNSET to "Sunset",
                     WeatherVisualType.CLEAR_NIGHT to "Clear Night",
+                    WeatherVisualType.CLOUDY to "Cloudy",
                     WeatherVisualType.RAIN to "Rain",
                     WeatherVisualType.THUNDERSTORM to "Storm",
                     WeatherVisualType.SNOW to "Snow",
