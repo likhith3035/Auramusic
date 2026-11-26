@@ -308,6 +308,7 @@ fun AuraGreetingHeader(
     LaunchedEffect(Unit) {
         while (true) {
             clockCalendar = Calendar.getInstance()
+            AuraWeatherRepository.refreshCelestialState()
             val nowMs = System.currentTimeMillis()
             val delayMs = (60_000L - (nowMs % 60_000L)).coerceAtLeast(1000L)
             delay(delayMs)

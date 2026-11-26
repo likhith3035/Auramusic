@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -14,7 +15,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Request
 import java.net.URLEncoder
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.Calendar
+import java.util.TimeZone
 import kotlin.math.roundToInt
 
 enum class WeatherVisualType {
@@ -67,7 +71,18 @@ data class AuraWeatherInfo(
  */
 object AuraWeatherRepository {
 
+    internal data class DailySolarWindow(
+        val sunriseEpochMs: Long,
+        val sunsetEpochMs: Long,
+    )
+
     private const val CACHE_DURATION_MS = 45 * 60 * 1000L // 45 minutes
+    private const val SUNRISE_PRE_WINDOW_MS = 30L * 60_000L
+    private const val SUNRISE_POST_WINDOW_MS = 50L * 60_000L
+    private const val SUNSET_PRE_WINDOW_MS = 45L * 60_000L
+    private const val SUNSET_POST_WINDOW_MS = 40L * 60_000L
+
+    @Volatile
     private var lastFetchTimeMs = 0L
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -78,11 +93,23 @@ object AuraWeatherRepository {
     private val _currentWeather = MutableStateFlow(defaultFallbackWeather())
     val currentWeather: StateFlow<AuraWeatherInfo> = _currentWeather.asStateFlow()
 
+    @Volatile
     private var cachedLat: Double? = null
+    @Volatile
     private var cachedLon: Double? = null
+    @Volatile
     private var cachedCity: String? = null
+    @Volatile
     private var cachedCountry: String? = null
+    @Volatile
     private var cachedWeatherCode: Int? = null
+    @Volatile
+    private var cachedApiIsDay: Boolean? = null
+    @Volatile
+    private var cachedUtcOffsetSeconds: Int? = null
+    @Volatile
+    private var cachedSolarWindows: List<DailySolarWindow> = emptyList()
+    @Volatile
     private var manualVisualOverride: WeatherVisualType? = null
 
     fun isCustomLocation(): Boolean = customLocation != null
@@ -93,28 +120,12 @@ object AuraWeatherRepository {
 
     fun setManualVisualOverride(override: WeatherVisualType?) {
         manualVisualOverride = override
-        val curr = _currentWeather.value
         if (override == null) {
-            val isDay = isDayTime()
-            val (label, vis) = mapWmoCode(cachedWeatherCode ?: 0, isDay)
-            _currentWeather.value = curr.copy(
-                visualType = vis,
-                conditionLabel = label,
-                isDay = isDay,
-                moodPills = moodPillsFor(vis, isDay),
-            )
+            refreshCelestialState()
         } else {
+            val curr = _currentWeather.value
             val isDay = override != WeatherVisualType.CLEAR_NIGHT
-            val label = when (override) {
-                WeatherVisualType.SUNRISE -> "Sunrise"
-                WeatherVisualType.SUNSET -> "Sunset"
-                WeatherVisualType.CLEAR_DAY -> "Clear Sky"
-                WeatherVisualType.CLEAR_NIGHT -> "Clear Night"
-                WeatherVisualType.RAIN -> "Rainy"
-                WeatherVisualType.THUNDERSTORM -> "Thunderstorm"
-                WeatherVisualType.CLOUDY -> "Cloudy"
-                WeatherVisualType.SNOW -> "Snowing"
-            }
+            val label = conditionLabelForOverride(override)
             _currentWeather.value = curr.copy(
                 visualType = override,
                 conditionLabel = label,
@@ -122,6 +133,42 @@ object AuraWeatherRepository {
                 moodPills = moodPillsFor(override, isDay),
             )
         }
+    }
+
+    /**
+     * Re-evaluates astronomical Sunrise / Sunset / Daylight / Night transitions against cached
+     * city solar timestamps as local time advances, without making extra network requests.
+     */
+    fun refreshCelestialState(nowEpochMs: Long = System.currentTimeMillis()) {
+        if (manualVisualOverride != null) return
+        val curr = _currentWeather.value
+        val fallbackIsDay = cachedApiIsDay ?: isDayTime(nowEpochMs, cachedUtcOffsetSeconds)
+        val (autoLabel, autoVisual, effectiveIsDay) = mapWmoCode(
+            code = cachedWeatherCode ?: 0,
+            fallbackIsDay = fallbackIsDay,
+            nowEpochMs = nowEpochMs,
+            solarWindows = cachedSolarWindows,
+            utcOffsetSeconds = cachedUtcOffsetSeconds,
+        )
+        if (curr.visualType != autoVisual || curr.conditionLabel != autoLabel || curr.isDay != effectiveIsDay) {
+            _currentWeather.value = curr.copy(
+                visualType = autoVisual,
+                conditionLabel = autoLabel,
+                isDay = effectiveIsDay,
+                moodPills = moodPillsFor(autoVisual, effectiveIsDay),
+            )
+        }
+    }
+
+    private fun conditionLabelForOverride(override: WeatherVisualType): String = when (override) {
+        WeatherVisualType.SUNRISE -> "Sunrise"
+        WeatherVisualType.SUNSET -> "Sunset"
+        WeatherVisualType.CLEAR_DAY -> "Clear Sky"
+        WeatherVisualType.CLEAR_NIGHT -> "Clear Night"
+        WeatherVisualType.RAIN -> "Rainy"
+        WeatherVisualType.THUNDERSTORM -> "Thunderstorm"
+        WeatherVisualType.CLOUDY -> "Cloudy"
+        WeatherVisualType.SNOW -> "Snowing"
     }
 
     fun setTemperatureUnit(useFahrenheit: Boolean) {
@@ -193,6 +240,7 @@ object AuraWeatherRepository {
     suspend fun refresh(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && lastFetchTimeMs > 0 && (now - lastFetchTimeMs) < CACHE_DURATION_MS) {
+            refreshCelestialState(now)
             return
         }
 
@@ -221,8 +269,11 @@ object AuraWeatherRepository {
                     country = cachedCountry
                 }
 
-                // Fetch real-time weather from Open-Meteo
-                val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m"
+                // Fetch real-time weather + daily astronomical sunrise/sunset in the target city's timezone
+                val url =
+                    "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+                        "&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m" +
+                        "&daily=sunrise,sunset&timezone=auto&past_days=1&forecast_days=2"
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "AuraMusic/3.3.0")
@@ -235,30 +286,44 @@ object AuraWeatherRepository {
                     val root = json.parseToJsonElement(bodyStr).jsonObject
                     val current = root["current"]?.jsonObject ?: return@use
 
+                    val (parsedUtcOffset, parsedSolarWindows) = parseDailySolarWindows(root)
+                    cachedUtcOffsetSeconds = parsedUtcOffset
+                    cachedSolarWindows = parsedSolarWindows
+
                     val tempRaw = current["temperature_2m"]?.jsonPrimitive?.doubleOrNull ?: 22.0
                     val weatherCode = current["weather_code"]?.jsonPrimitive?.intOrNull ?: 0
                     cachedWeatherCode = weatherCode
-                    val isDayInt = current["is_day"]?.jsonPrimitive?.intOrNull ?: if (isDayTime()) 1 else 0
-                    val isDay = isDayInt == 1
+                    val apiIsDayInt = current["is_day"]?.jsonPrimitive?.intOrNull
+                    val fallbackIsDay = if (apiIsDayInt != null) {
+                        apiIsDayInt == 1
+                    } else {
+                        isDayTime(now, parsedUtcOffset)
+                    }
+                    cachedApiIsDay = fallbackIsDay
+
                     val humidity = current["relative_humidity_2m"]?.jsonPrimitive?.intOrNull
                     val windSpeed = current["wind_speed_10m"]?.jsonPrimitive?.doubleOrNull
 
-                    val (autoLabel, autoVisual) = mapWmoCode(weatherCode, isDay)
-                    val visualType = manualVisualOverride ?: autoVisual
-                    val conditionLabel = if (manualVisualOverride != null) {
-                        when (manualVisualOverride) {
-                            WeatherVisualType.SUNRISE -> "Sunrise"
-                            WeatherVisualType.SUNSET -> "Sunset"
-                            WeatherVisualType.CLEAR_DAY -> "Clear Sky"
-                            WeatherVisualType.CLEAR_NIGHT -> "Clear Night"
-                            WeatherVisualType.RAIN -> "Rainy"
-                            WeatherVisualType.THUNDERSTORM -> "Thunderstorm"
-                            WeatherVisualType.CLOUDY -> "Cloudy"
-                            WeatherVisualType.SNOW -> "Snowing"
-                            else -> autoLabel
-                        }
-                    } else autoLabel
-                    val pills = moodPillsFor(visualType, isDay)
+                    val (autoLabel, autoVisual, effectiveIsDay) = mapWmoCode(
+                        code = weatherCode,
+                        fallbackIsDay = fallbackIsDay,
+                        nowEpochMs = now,
+                        solarWindows = parsedSolarWindows,
+                        utcOffsetSeconds = parsedUtcOffset,
+                    )
+                    val activeOverride = manualVisualOverride
+                    val visualType = activeOverride ?: autoVisual
+                    val conditionLabel = if (activeOverride != null) {
+                        conditionLabelForOverride(activeOverride)
+                    } else {
+                        autoLabel
+                    }
+                    val finalIsDay = if (activeOverride != null) {
+                        activeOverride != WeatherVisualType.CLEAR_NIGHT
+                    } else {
+                        effectiveIsDay
+                    }
+                    val pills = moodPillsFor(visualType, finalIsDay)
 
                     _currentWeather.value = AuraWeatherInfo(
                         temperatureC = tempRaw.roundToInt(),
@@ -266,7 +331,7 @@ object AuraWeatherRepository {
                         visualType = visualType,
                         city = city,
                         country = country,
-                        isDay = isDay,
+                        isDay = finalIsDay,
                         moodPills = pills,
                         humidity = humidity,
                         windSpeedKmH = windSpeed,
@@ -350,14 +415,100 @@ object AuraWeatherRepository {
         }
     }
 
-    private fun mapWmoCode(code: Int, isDay: Boolean): Pair<String, WeatherVisualType> {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val celestialType = when {
-            !isDay || hour < 5 || hour >= 20 -> WeatherVisualType.CLEAR_NIGHT
-            hour in 5..7 -> WeatherVisualType.SUNRISE
-            hour in 17..19 -> WeatherVisualType.SUNSET
-            else -> WeatherVisualType.CLEAR_DAY
+    internal fun parseDailySolarWindows(root: JsonObject): Pair<Int?, List<DailySolarWindow>> {
+        val utcOffsetSeconds = root["utc_offset_seconds"]?.jsonPrimitive?.intOrNull
+        val daily = root["daily"]?.jsonObject ?: return utcOffsetSeconds to emptyList()
+        val sunriseArr = daily["sunrise"]?.jsonArray ?: return utcOffsetSeconds to emptyList()
+        val sunsetArr = daily["sunset"]?.jsonArray ?: return utcOffsetSeconds to emptyList()
+        val offset = ZoneOffset.ofTotalSeconds(utcOffsetSeconds ?: 0)
+
+        val count = minOf(sunriseArr.size, sunsetArr.size)
+        val windows = buildList {
+            for (i in 0 until count) {
+                val riseStr = sunriseArr[i].jsonPrimitive.content
+                val setStr = sunsetArr[i].jsonPrimitive.content
+                val riseMs = parseIsoLocalEpochMs(riseStr, offset)
+                val setMs = parseIsoLocalEpochMs(setStr, offset)
+                if (riseMs != null && setMs != null && setMs > riseMs) {
+                    add(DailySolarWindow(sunriseEpochMs = riseMs, sunsetEpochMs = setMs))
+                }
+            }
         }
+        return utcOffsetSeconds to windows
+    }
+
+    private fun parseIsoLocalEpochMs(isoLocal: String, offset: ZoneOffset): Long? {
+        return try {
+            LocalDateTime.parse(isoLocal).toInstant(offset).toEpochMilli()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Determines clear-sky celestial phase (Sunrise, Daylight, Sunset, Clear Night) from exact
+     * astronomical sunrise/sunset timestamps, falling back to location-offset clock hours if unavailable.
+     */
+    internal fun resolveAstronomicalCelestialState(
+        nowEpochMs: Long,
+        solarWindows: List<DailySolarWindow>,
+        utcOffsetSeconds: Int?,
+        fallbackIsDay: Boolean,
+    ): Pair<WeatherVisualType, Boolean> {
+        if (solarWindows.isNotEmpty()) {
+            val isSunrise = solarWindows.any {
+                nowEpochMs in (it.sunriseEpochMs - SUNRISE_PRE_WINDOW_MS)..(it.sunriseEpochMs + SUNRISE_POST_WINDOW_MS)
+            }
+            if (isSunrise) {
+                return WeatherVisualType.SUNRISE to true
+            }
+
+            val inSunset = solarWindows.firstOrNull {
+                nowEpochMs in (it.sunsetEpochMs - SUNSET_PRE_WINDOW_MS)..(it.sunsetEpochMs + SUNSET_POST_WINDOW_MS)
+            }
+            if (inSunset != null) {
+                return WeatherVisualType.SUNSET to (nowEpochMs < inSunset.sunsetEpochMs)
+            }
+
+            val isDaylight = solarWindows.any {
+                nowEpochMs >= (it.sunriseEpochMs + SUNRISE_POST_WINDOW_MS) &&
+                    nowEpochMs < (it.sunsetEpochMs - SUNSET_PRE_WINDOW_MS)
+            }
+            return if (isDaylight) {
+                WeatherVisualType.CLEAR_DAY to true
+            } else {
+                WeatherVisualType.CLEAR_NIGHT to false
+            }
+        }
+
+        val hour = localHourFor(nowEpochMs, utcOffsetSeconds)
+        return when {
+            !fallbackIsDay || hour < 5 || hour >= 20 -> WeatherVisualType.CLEAR_NIGHT to false
+            hour in 5..7 -> WeatherVisualType.SUNRISE to true
+            hour in 17..19 -> WeatherVisualType.SUNSET to true
+            else -> WeatherVisualType.CLEAR_DAY to true
+        }
+    }
+
+    internal data class MappedWeather(
+        val label: String,
+        val visualType: WeatherVisualType,
+        val isDay: Boolean,
+    )
+
+    internal fun mapWmoCode(
+        code: Int,
+        fallbackIsDay: Boolean,
+        nowEpochMs: Long = System.currentTimeMillis(),
+        solarWindows: List<DailySolarWindow> = cachedSolarWindows,
+        utcOffsetSeconds: Int? = cachedUtcOffsetSeconds,
+    ): MappedWeather {
+        val (celestialType, effectiveIsDay) = resolveAstronomicalCelestialState(
+            nowEpochMs = nowEpochMs,
+            solarWindows = solarWindows,
+            utcOffsetSeconds = utcOffsetSeconds,
+            fallbackIsDay = fallbackIsDay,
+        )
         val celestialLabel = when (celestialType) {
             WeatherVisualType.SUNRISE -> "Sunrise"
             WeatherVisualType.SUNSET -> "Sunset"
@@ -365,10 +516,24 @@ object AuraWeatherRepository {
             else -> "Clear Night"
         }
 
-        return when (code) {
+        val (label, visual) = when (code) {
             0 -> celestialLabel to celestialType
-            1 -> (if (celestialType == WeatherVisualType.SUNRISE) "Dawn" else if (celestialType == WeatherVisualType.SUNSET) "Golden Hour" else if (isDay) "Mainly Clear" else "Clear Night") to celestialType
-            2 -> (if (celestialType == WeatherVisualType.SUNRISE) "Sunrise Clouds" else if (celestialType == WeatherVisualType.SUNSET) "Sunset Clouds" else if (isDay) "Partly Cloudy" else "Partly Cloudy") to celestialType
+            1 -> (
+                when (celestialType) {
+                    WeatherVisualType.SUNRISE -> "Dawn"
+                    WeatherVisualType.SUNSET -> "Golden Hour"
+                    WeatherVisualType.CLEAR_DAY -> "Mainly Clear"
+                    else -> "Clear Night"
+                }
+            ) to celestialType
+            2 -> (
+                when (celestialType) {
+                    WeatherVisualType.SUNRISE -> "Sunrise Clouds"
+                    WeatherVisualType.SUNSET -> "Sunset Clouds"
+                    WeatherVisualType.CLEAR_DAY -> "Partly Cloudy"
+                    else -> "Partly Cloudy"
+                }
+            ) to celestialType
             3 -> "Overcast" to WeatherVisualType.CLOUDY
             45, 48 -> "Foggy" to WeatherVisualType.CLOUDY
             51, 53, 55 -> "Light Drizzle" to WeatherVisualType.RAIN
@@ -382,6 +547,7 @@ object AuraWeatherRepository {
             95, 96, 99 -> "Thunderstorm" to WeatherVisualType.THUNDERSTORM
             else -> celestialLabel to celestialType
         }
+        return MappedWeather(label = label, visualType = visual, isDay = effectiveIsDay)
     }
 
     fun moodPillsFor(visualType: WeatherVisualType, isDay: Boolean): List<String> = when (visualType) {
@@ -395,8 +561,21 @@ object AuraWeatherRepository {
         WeatherVisualType.CLEAR_NIGHT -> listOf("Midnight Ambient", "Night Drive", "Deep Focus", "Piano Dreams")
     }
 
-    private fun isDayTime(): Boolean {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    private fun localHourFor(nowEpochMs: Long, utcOffsetSeconds: Int?): Int {
+        val cal = if (utcOffsetSeconds != null) {
+            Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                timeInMillis = nowEpochMs + utcOffsetSeconds * 1000L
+            }
+        } else {
+            Calendar.getInstance().apply {
+                timeInMillis = nowEpochMs
+            }
+        }
+        return cal.get(Calendar.HOUR_OF_DAY)
+    }
+
+    private fun isDayTime(nowEpochMs: Long = System.currentTimeMillis(), utcOffsetSeconds: Int? = null): Boolean {
+        val hour = localHourFor(nowEpochMs, utcOffsetSeconds)
         return hour in 6..18
     }
 
