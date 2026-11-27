@@ -1026,6 +1026,90 @@ object StreamResolver {
         throw failure ?: IllegalStateException("Track unavailable: no audio streams")
     }
 
+    /** Universal YouTube video metadata resolved via NewPipe when YT Music watch metadata isn't available. */
+    data class LinkMetadata(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String?,
+        val durationSeconds: Long?,
+        val isLive: Boolean,
+        val chapters: List<com.music.bitchord.data.link.VideoChapter> = emptyList(),
+    )
+
+    /**
+     * Fetches title, channel name, best thumbnail, duration, chapters, and live status for any
+     * public or unlisted YouTube video so pasted links work even outside YouTube Music's catalog.
+     */
+    suspend fun fetchLinkMetadata(videoId: String): Result<LinkMetadata> {
+        init
+        unplayableReason(videoId)?.let { reason ->
+            return Result.failure(PermanentlyUnplayableException(reason))
+        }
+        return try {
+            val metadata = extractionGate.withLock {
+                withContext(Dispatchers.IO) {
+                    val extractor = ServiceList.YouTube.getStreamExtractor(
+                        "https://www.youtube.com/watch?v=$videoId",
+                    )
+                    extractor.fetchPage()
+                    val streamType = extractor.streamType
+                    val live = streamType == StreamType.LIVE_STREAM ||
+                        streamType == StreamType.AUDIO_LIVE_STREAM
+                    val thumb = extractor.thumbnails
+                        .maxByOrNull { it.width.coerceAtLeast(0) * it.height.coerceAtLeast(0) }
+                        ?.url
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    val lengthSec = extractor.length.takeIf { !live && it > 0L }
+                    val title = extractor.name.trim().ifEmpty { "YouTube Video ($videoId)" }
+                    val channel = extractor.uploaderName.trim()
+                    val segments = runCatching { extractor.streamSegments }.getOrNull().orEmpty()
+                        .mapNotNull { seg ->
+                            val segTitle = seg.title?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                            val startSec = seg.startTimeSeconds.toLong().coerceAtLeast(0L)
+                            com.music.bitchord.data.link.VideoChapter(
+                                title = segTitle,
+                                startSeconds = startSec,
+                                formattedTime = com.music.bitchord.data.link.YouTubeLinkParser.formatChapterTime(startSec),
+                            )
+                        }
+                        .distinctBy { it.startSeconds }
+                        .sortedBy { it.startSeconds }
+                        .take(60)
+                    val chapters = if (segments.isNotEmpty()) {
+                        segments
+                    } else if (!live) {
+                        val desc = runCatching { extractor.description?.content }.getOrNull().orEmpty()
+                        com.music.bitchord.data.link.YouTubeLinkParser.parseChaptersFromDescription(desc)
+                    } else {
+                        emptyList()
+                    }
+                    LinkMetadata(
+                        videoId = videoId,
+                        title = title,
+                        artist = channel,
+                        thumbnailUrl = thumb,
+                        durationSeconds = lengthSec,
+                        isLive = live,
+                        chapters = chapters,
+                    )
+                }
+            }
+            Result.success(metadata)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LinkageError) {
+            Result.failure(IOException("Stream resolution cannot run on this device: $e", e))
+        } catch (e: Exception) {
+            permanentReason(e)?.let { reason ->
+                rememberUnplayable(videoId, reason)
+                return Result.failure(PermanentlyUnplayableException(reason))
+            }
+            Result.failure(e)
+        }
+    }
+
     /**
      * Whether [url] is a window onto a live broadcast. googlevideo marks those
      * with `live=1` and `source=yt_live_broadcast`; a finished video has neither.

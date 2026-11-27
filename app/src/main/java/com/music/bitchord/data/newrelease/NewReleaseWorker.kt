@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import com.music.bitchord.data.innertube.Innertube
 import com.music.bitchord.data.settings.AppSettings
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * Background worker that periodically checks for new music from artists the user follows
@@ -42,6 +43,8 @@ class NewReleaseWorker(
                 )
             }
             Result.success()
+        } catch (c: CancellationException) {
+            throw c
         } catch (e: Exception) {
             Result.retry()
         }

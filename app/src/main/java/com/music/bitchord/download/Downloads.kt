@@ -311,6 +311,11 @@ object Downloads {
         record(saved = { it - videoId }, meta = { it - videoId })
     }
 
+    private fun forgetAll(videoIds: Set<String>) {
+        if (videoIds.isEmpty()) return
+        record(saved = { it - videoIds }, meta = { it - videoIds })
+    }
+
     /**
      * Drop the record for [videoId] because a read of the file it names has
      * just failed.
@@ -632,6 +637,7 @@ object Downloads {
         val seenUris = mutableSetOf<String>()
         val migratedAddedByUri = mutableMapOf<String, Long>()
         val migratedFormatByUri = mutableMapOf<String, String>()
+        val staleIds = mutableSetOf<String>()
 
         for ((_, meta) in metaMap) {
             // A downloaded music video and the catalogue track it resolved to
@@ -671,12 +677,11 @@ object Downloads {
                     )
                 )
             } else {
-                // Clear every id for the shared file. Leaving its second alias
-                // behind would make a later menu claim the missing download
-                // still exists.
-                metaMap.filterValues { it.uri == meta.uri }.keys.forEach(::forget)
+                // Clear every id for the shared file in a single persistence pass.
+                staleIds.addAll(metaMap.filterValues { it.uri == meta.uri }.keys)
             }
         }
+        forgetAll(staleIds)
         if (migratedAddedByUri.isNotEmpty() || migratedFormatByUri.isNotEmpty()) {
             record(
                 saved = { it },
@@ -713,16 +718,16 @@ object Downloads {
             val saved = _saved.value
             val metadataByUri = metadata.values.associateBy { it.uri }
             val seenUris = HashSet<String>()
+            val staleIds = mutableSetOf<String>()
 
-            record.videoIds.mapNotNull { videoId ->
+            val songs = record.videoIds.mapNotNull { videoId ->
                 val uriString = saved[videoId] ?: metadata[videoId]?.uri ?: return@mapNotNull null
                 if (!seenUris.add(uriString)) return@mapNotNull null
                 val uri = uriString.toUri()
                 if (!DownloadStore.exists(context, uri)) {
-                    // Both a video id and its catalogue replacement can name
-                    // this file. Prune every alias now that the one disk check
-                    // has established that the shared file is gone.
-                    saved.filterValues { it == uriString }.keys.forEach(::forget)
+                    // Prune every alias across saved and metadata records after scanning.
+                    staleIds.addAll(saved.filterValues { it == uriString }.keys)
+                    staleIds.addAll(metadata.filterValues { it.uri == uriString }.keys)
                     return@mapNotNull null
                 }
 
@@ -749,6 +754,8 @@ object Downloads {
                     localDateModifiedSeconds = dateModifiedSeconds,
                 )
             }
+            forgetAll(staleIds)
+            songs
         }
 
     private fun String.toUri(): Uri = Uri.parse(this)
@@ -1007,6 +1014,7 @@ object Downloads {
                         )
                     }
                     remember(song, track, savedUri, route.downloadFormat)
+                    com.music.bitchord.data.telemetry.AuraAnalytics.trackDownloadCompleted(route.extension)
                     DownloadSession.done(id)
                     clear(id)
                     Log.d(TAG, "saved offline ${if (manifest.dash) "DASH" else "HLS"} package for $name")
@@ -1031,6 +1039,7 @@ object Downloads {
                 val savedUri = destination.commit()
                 pending = null
                 remember(song, track, savedUri, route.downloadFormat, artworkUri)
+                com.music.bitchord.data.telemetry.AuraAnalytics.trackDownloadCompleted(route.extension)
                 DownloadSession.done(id)
                 clear(id)
                 Log.d(TAG, "saved $name")

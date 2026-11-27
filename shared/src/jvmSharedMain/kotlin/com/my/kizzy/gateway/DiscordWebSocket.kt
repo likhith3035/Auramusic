@@ -39,7 +39,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -84,12 +83,12 @@ open class DiscordWebSocket(
 ) : CoroutineScope {
     private val logger = Logger.getLogger(DiscordWebSocket::class.java.name)
     private val gatewayUrl = "wss://gateway.discord.gg/?v=9&encoding=json"
-    private var websocket: DefaultClientWebSocketSession? = null
-    private var sequence = 0
-    private var sessionId: String? = null
-    private var heartbeatInterval = 0L
-    private var resumeGatewayUrl: String? = null
-    private var heartbeatJob: Job? = null
+    @Volatile private var websocket: DefaultClientWebSocketSession? = null
+    @Volatile private var sequence = 0
+    @Volatile private var sessionId: String? = null
+    @Volatile private var heartbeatInterval = 0L
+    @Volatile private var resumeGatewayUrl: String? = null
+    @Volatile private var heartbeatJob: Job? = null
     private var client: HttpClient = HttpClient {
         install(WebSockets)
     }
@@ -176,8 +175,8 @@ open class DiscordWebSocket(
 
     /** Starts the connection loop if it isn't already running. */
     fun connect() {
-        if (closed) return
         synchronized(loopLock) {
+            if (closed) return
             if (connectionLoop?.isActive == true) {
                 logger.info("Gateway connection loop already running.")
                 return
@@ -320,7 +319,8 @@ open class DiscordWebSocket(
     open fun Payload.handleDispatch() {
         when (this.t.toString()) {
             "READY" -> {
-                val ready = json.decodeFromJsonElement<Ready>(this.d!!)
+                val data = this.d ?: return
+                val ready = json.decodeFromJsonElement<Ready>(data)
                 sessionId = ready.sessionId
                 resumeGatewayUrl = ready.resumeGatewayUrl + "/?v=9&encoding=json"
                 logger.info(
@@ -368,7 +368,8 @@ open class DiscordWebSocket(
     }
 
     private suspend fun Payload.handleHello() {
-        heartbeatInterval = json.decodeFromJsonElement<Heartbeat>(this.d!!).heartbeatInterval
+        val data = this.d ?: return
+        heartbeatInterval = json.decodeFromJsonElement<Heartbeat>(data).heartbeatInterval.coerceAtLeast(1_000L)
         logger.info("Gateway: Setting heartbeatInterval=$heartbeatInterval")
         // Handshake first, then heartbeats — the order Discord's own client uses,
         // and not worth deviating from. A gateway that answers the handshake with
@@ -432,6 +433,7 @@ open class DiscordWebSocket(
         heartbeatJob?.cancel()
         awaitingAck = false
         lastAckAt = elapsedRealtimeMs()
+        val safeInterval = interval.coerceAtLeast(1_000L)
         heartbeatJob = launch {
             while (isActive) {
                 if (awaitingAck) {
@@ -439,8 +441,15 @@ open class DiscordWebSocket(
                     return@launch
                 }
                 awaitingAck = true
-                sendHeartBeat()
-                delay(interval)
+                try {
+                    sendHeartBeat()
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (e: Exception) {
+                    dropSocket("heartbeat send failed: ${e.message}")
+                    return@launch
+                }
+                delay(safeInterval)
             }
         }
     }
@@ -484,28 +493,29 @@ open class DiscordWebSocket(
     }
 
     fun close() {
-        closed = true
-        sessionReady.value = false
-        lastPresence = null
-        heartbeatJob?.cancel()
-        heartbeatJob = null
-        connectionLoop?.cancel()
-        connectionLoop = null
-        forgetSession()
-        val socket = websocket
-        websocket = null
-        // Closed rather than cancelled, and waited on: a presence-clear was very
-        // likely queued a moment ago by KizzyRPC.close(), and only a graceful
-        // close flushes the outgoing frames before the connection goes. Bounded
-        // so a socket that is already unreachable can't hold up a teardown.
-        runBlocking {
+        val socket: DefaultClientWebSocketSession?
+        synchronized(loopLock) {
+            if (closed) return
+            closed = true
+            sessionReady.value = false
+            lastPresence = null
+            heartbeatJob?.cancel()
+            heartbeatJob = null
+            connectionLoop?.cancel()
+            connectionLoop = null
+            forgetSession()
+            socket = websocket
+            websocket = null
+            supervisor.cancel()
+        }
+        val activeClient = client
+        CoroutineScope(Dispatchers.IO).launch {
             withTimeoutOrNull(CLOSE_TIMEOUT) {
                 runCatching { socket?.close(CloseReason(CloseReason.Codes.NORMAL, "Client closed")) }
             }
+            runCatching { socket?.cancel() }
+            runCatching { activeClient.close() }
         }
-        socket?.cancel()
-        supervisor.cancel()
-        runCatching { client.close() }
         logger.info("Gateway: Connection to gateway closed")
     }
 

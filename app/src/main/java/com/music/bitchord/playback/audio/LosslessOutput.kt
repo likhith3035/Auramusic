@@ -10,6 +10,7 @@ import com.music.bitchord.data.TrackLog
 import com.music.bitchord.playback.audio.bluetooth.BluetoothAudioTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,6 +65,7 @@ object LosslessOutput {
 
     private var audioManager: AudioManager? = null
     private var tracker: BluetoothAudioTracker? = null
+    private var collectJob: Job? = null
 
     private val callback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = refresh()
@@ -83,9 +85,20 @@ object LosslessOutput {
         tracker = bluetooth
         // Made here, not as a field: plain-JVM tests read [capable] through
         // the source registry, and have no main dispatcher to build one on.
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        collectJob?.cancel()
+        collectJob = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             .launch { bluetooth.telemetry.collect { recompute() } }
         recompute()
+    }
+
+    @Suppress("unused")
+    fun release() {
+        runCatching { audioManager?.unregisterAudioDeviceCallback(callback) }
+        tracker?.stop()
+        collectJob?.cancel()
+        collectJob = null
+        tracker = null
+        audioManager = null
     }
 
     /** Asks Bluetooth again — after the Nearby devices permission is granted, say. */

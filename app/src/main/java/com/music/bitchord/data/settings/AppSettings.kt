@@ -409,11 +409,20 @@ object AppSettings {
     /** Chosen launcher icon aesthetic (Default Aura or one of the 5 Liquid Glass styles). */
     val appIcon = MutableStateFlow(AppIcon.DEFAULT)
 
-    /** Whether the first-launch interactive onboarding tour has been completed. */
+    /** Whether the interactive first-launch onboarding tour has been completed. */
     val onboardingCompleted = MutableStateFlow(true)
 
     /** Highest version code of the "What's New" showcase seen by the user. */
     val lastSeenWhatsNewVersion = MutableStateFlow(0)
+
+    /** Warm sonic chime & haptic pulse played during launch splash. */
+    val startupChimeEnabled = MutableStateFlow(true)
+
+    /** Optional nickname set during onboarding or taste personalization. */
+    val listenerNickname = MutableStateFlow("")
+
+    /** Epoch millis of the most recent successful backup export on this device. */
+    val lastBackupTimestampMs = MutableStateFlow(0L)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -452,6 +461,9 @@ object AppSettings {
 
     /** Swiping a song row plays it next instead of adding it to the end of the queue. */
     val swipeToPlayNext = MutableStateFlow(false)
+
+    /** Automatically start playing a pasted YouTube link in Search without waiting on the preview card. */
+    val autoPlayPastedLinks = MutableStateFlow(false)
 
     /** Once a song has been suggested or played this session, AutoPlay won't offer it again. */
     val dontRepeatSuggestions = MutableStateFlow(false)
@@ -658,6 +670,7 @@ object AppSettings {
     val downloadedMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     /** Layout used by the Recents shelf on Play; compact tracks are the default. */
     val homeRecentsViewType = MutableStateFlow(LibraryViewType.LIST)
+    val homeClockStyleIndex = MutableStateFlow(0)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
 
     /**
@@ -967,6 +980,9 @@ object AppSettings {
             prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         }
         lastSeenWhatsNewVersion.value = prefs.getInt(KEY_LAST_SEEN_WHATS_NEW_VERSION, 0)
+        startupChimeEnabled.value = prefs.getBoolean(KEY_STARTUP_CHIME, true)
+        listenerNickname.value = prefs.getString(KEY_LISTENER_NICKNAME, "") ?: ""
+        lastBackupTimestampMs.value = prefs.getLong(KEY_LAST_BACKUP_TIMESTAMP_MS, 0L)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         val savedShuffleModeStr = prefs.getString(KEY_SHUFFLE_MODE, null)
         val restoredShuffleMode = if (savedShuffleModeStr != null) {
@@ -990,6 +1006,7 @@ object AppSettings {
         hideStatusBarInPlayer.value = prefs.getBoolean(KEY_HIDE_STATUS_BAR_IN_PLAYER, false)
         hideSongStatus.value = prefs.getBoolean(KEY_HIDE_SONG_STATUS, false)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
+        autoPlayPastedLinks.value = prefs.getBoolean(KEY_AUTO_PLAY_PASTED_LINKS, false)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
         userPrefersVideoMode.value = prefs.getBoolean(KEY_USER_PREFERS_VIDEO_MODE, false)
         enablePipPopup.value = prefs.getBoolean(KEY_ENABLE_PIP_POPUP, false)
@@ -1041,15 +1058,23 @@ object AppSettings {
         lyricsSources.value = readLyricsSources()
         lyricsSourceOrder.value = readLyricsSourceOrder()
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
-        paxSenixApiKey.value = prefs.getString(KEY_PAXSENIX_API_KEY, "").orEmpty()
+        paxSenixApiKey.value = readEncryptedSecret(KEY_PAXSENIX_API_KEY, authStore::paxSenixApiKey) {
+            authStore.paxSenixApiKey = it
+        }
         com.music.bitchord.data.lyrics.PaxSenix.setApiKey(paxSenixApiKey.value)
         audioCacheLimitBytes.value = clampCacheLimit(prefs.getLong(KEY_CACHE_LIMIT, DEFAULT_CACHE_LIMIT_BYTES))
         showCacheFolder.value = prefs.getBoolean(KEY_SHOW_CACHE_FOLDER, false)
         lastfmEnabled.value = prefs.getBoolean(KEY_LASTFM_ENABLED, false)
         lastfmUsername.value = prefs.getString(KEY_LASTFM_USERNAME, "").orEmpty()
-        lastfmSessionKey.value = prefs.getString(KEY_LASTFM_SESSION_KEY, "").orEmpty()
-        lastfmApiKey.value = prefs.getString(KEY_LASTFM_API_KEY, "").orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
-        lastfmSecret.value = prefs.getString(KEY_LASTFM_SECRET, "").orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
+        lastfmSessionKey.value = readEncryptedSecret(KEY_LASTFM_SESSION_KEY, authStore::lastfmSessionKey) {
+            authStore.lastfmSessionKey = it
+        }
+        lastfmApiKey.value = readEncryptedSecret(KEY_LASTFM_API_KEY, authStore::lastfmApiKey) {
+            authStore.lastfmApiKey = it
+        }.ifBlank { BuildConfig.LASTFM_API_KEY }
+        lastfmSecret.value = readEncryptedSecret(KEY_LASTFM_SECRET, authStore::lastfmSecret) {
+            authStore.lastfmSecret = it
+        }.ifBlank { BuildConfig.LASTFM_SECRET }
         lastfmEndpoint.value = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
@@ -1058,9 +1083,13 @@ object AppSettings {
         scrobbleDelayPercent.value = prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f)
         scrobbleDelaySeconds.value = prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180)
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
-        listenBrainzToken.value = prefs.getString(KEY_LISTENBRAINZ_TOKEN, "").orEmpty()
+        listenBrainzToken.value = readEncryptedSecret(KEY_LISTENBRAINZ_TOKEN, authStore::listenBrainzToken) {
+            authStore.listenBrainzToken = it
+        }
         listenBrainzPrimaryArtistOnly.value = prefs.getBoolean(KEY_LISTENBRAINZ_PRIMARY_ARTIST_ONLY, false)
-        spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
+        spotifySpdcToken.value = readEncryptedSecret(KEY_SPOTIFY_SPDC_TOKEN, authStore::spotifySpdcToken) {
+            authStore.spotifySpdcToken = it
+        }
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
         skippedUpdateVersion.value = prefs.getString(KEY_SKIPPED_UPDATE_VERSION, "").orEmpty()
@@ -1070,6 +1099,7 @@ object AppSettings {
         localMusicViewType.value = readLibraryViewType(KEY_LOCAL_MUSIC_VIEW_TYPE)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE)
         homeRecentsViewType.value = readLibraryViewType(KEY_HOME_RECENTS_VIEW_TYPE)
+        homeClockStyleIndex.value = prefs.getInt(KEY_HOME_CLOCK_STYLE_INDEX, 0).coerceAtLeast(0)
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
@@ -1472,6 +1502,22 @@ object AppSettings {
         prefs.edit().putInt(KEY_LAST_SEEN_WHATS_NEW_VERSION, value).apply()
     }
 
+    fun setStartupChimeEnabled(value: Boolean) {
+        startupChimeEnabled.value = value
+        prefs.edit().putBoolean(KEY_STARTUP_CHIME, value).apply()
+    }
+
+    fun setListenerNickname(value: String) {
+        val cleaned = value.trim()
+        listenerNickname.value = cleaned
+        prefs.edit().putString(KEY_LISTENER_NICKNAME, cleaned).apply()
+    }
+
+    fun setLastBackupTimestampMs(value: Long) {
+        lastBackupTimestampMs.value = value
+        prefs.edit().putLong(KEY_LAST_BACKUP_TIMESTAMP_MS, value).apply()
+    }
+
     fun setReduceAnimation(value: Boolean) {
         reduceAnimation.value = value
         if (value) highPerformanceMode.value = false
@@ -1503,6 +1549,11 @@ object AppSettings {
     fun setSwipeToPlayNext(value: Boolean) {
         swipeToPlayNext.value = value
         prefs.edit().putBoolean(KEY_SWIPE_TO_PLAY_NEXT, value).apply()
+    }
+
+    fun setAutoPlayPastedLinks(value: Boolean) {
+        autoPlayPastedLinks.value = value
+        prefs.edit().putBoolean(KEY_AUTO_PLAY_PASTED_LINKS, value).apply()
     }
 
     fun setDontRepeatSuggestions(value: Boolean) {
@@ -1830,10 +1881,29 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, value).apply()
     }
 
+    private inline fun readEncryptedSecret(
+        legacyPrefKey: String,
+        getEncrypted: () -> String?,
+        setEncrypted: (String?) -> Unit,
+    ): String {
+        val legacy = prefs.getString(legacyPrefKey, null)
+        val stored = getEncrypted()
+        if (!legacy.isNullOrBlank()) {
+            val resolved = stored?.takeIf { it.isNotBlank() } ?: legacy
+            if (stored.isNullOrBlank()) setEncrypted(resolved)
+            prefs.edit().remove(legacyPrefKey).apply()
+            return resolved
+        } else if (legacy != null) {
+            prefs.edit().remove(legacyPrefKey).apply()
+        }
+        return stored.orEmpty()
+    }
+
     fun setPaxSenixApiKey(value: String) {
         val normalized = com.music.bitchord.data.lyrics.normalizePaxSenixApiKey(value)
         paxSenixApiKey.value = normalized
-        prefs.edit().putString(KEY_PAXSENIX_API_KEY, normalized).apply()
+        authStore.paxSenixApiKey = normalized.ifEmpty { null }
+        prefs.edit().remove(KEY_PAXSENIX_API_KEY).apply()
         com.music.bitchord.data.lyrics.PaxSenix.setApiKey(normalized)
     }
 
@@ -1915,17 +1985,20 @@ object AppSettings {
 
     fun setLastfmSessionKey(value: String) {
         lastfmSessionKey.value = value
-        prefs.edit().putString(KEY_LASTFM_SESSION_KEY, value).apply()
+        authStore.lastfmSessionKey = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_SESSION_KEY).apply()
     }
 
     fun setLastfmApiKey(value: String) {
         lastfmApiKey.value = value
-        prefs.edit().putString(KEY_LASTFM_API_KEY, value).apply()
+        authStore.lastfmApiKey = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_API_KEY).apply()
     }
 
     fun setLastfmSecret(value: String) {
         lastfmSecret.value = value
-        prefs.edit().putString(KEY_LASTFM_SECRET, value).apply()
+        authStore.lastfmSecret = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LASTFM_SECRET).apply()
     }
 
     fun setLastfmEndpoint(value: String) {
@@ -1935,7 +2008,8 @@ object AppSettings {
 
     fun setSpotifySpdcToken(value: String) {
         spotifySpdcToken.value = value
-        prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+        authStore.spotifySpdcToken = value.ifEmpty { null }
+        prefs.edit().remove(KEY_SPOTIFY_SPDC_TOKEN).apply()
         SpotifyToken.invalidate()
     }
 
@@ -2029,7 +2103,8 @@ object AppSettings {
 
     fun setListenBrainzToken(value: String) {
         listenBrainzToken.value = value
-        prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, value).apply()
+        authStore.listenBrainzToken = value.ifEmpty { null }
+        prefs.edit().remove(KEY_LISTENBRAINZ_TOKEN).apply()
     }
 
     fun setListenBrainzPrimaryArtistOnly(value: Boolean) {
@@ -2160,6 +2235,12 @@ object AppSettings {
     fun setHomeRecentsViewType(value: LibraryViewType) {
         homeRecentsViewType.value = value
         prefs.edit().putString(KEY_HOME_RECENTS_VIEW_TYPE, value.name).apply()
+    }
+
+    fun setHomeClockStyleIndex(index: Int) {
+        val normalized = index.coerceAtLeast(0)
+        homeClockStyleIndex.value = normalized
+        prefs.edit().putInt(KEY_HOME_CLOCK_STYLE_INDEX, normalized).apply()
     }
 
     fun setLocalMusicFolderUri(value: String) {
@@ -2394,6 +2475,7 @@ object AppSettings {
         KEY_LOCAL_MUSIC_FOLDER_URI,
         KEY_LAST_VERSION_CODE,
         KEY_LAST_SEEN_WHATS_NEW_VERSION,
+        KEY_LAST_BACKUP_TIMESTAMP_MS,
     )
 
     const val DEFAULT_CACHE_LIMIT_BYTES = 512L * 1024 * 1024
@@ -2524,6 +2606,8 @@ private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"
     private const val KEY_DOWNLOADED_MUSIC_VIEW_TYPE = "downloaded_music_view_type"
     private const val KEY_HOME_RECENTS_VIEW_TYPE = "home_recents_view_type"
+    private const val KEY_HOME_CLOCK_STYLE_INDEX = "home_clock_style_index"
+    private const val KEY_AUTO_PLAY_PASTED_LINKS = "auto_play_pasted_links"
     private const val KEY_LOCAL_MUSIC_FOLDER_URI = "local_music_folder_uri"
     private const val KEY_WEBDAV_URL = "webdav_url"
     private const val KEY_WEBDAV_USERNAME = "webdav_username"
@@ -2570,6 +2654,11 @@ private const val KEY_PREFER_MUSIC_ONLY = "prefer_music_only"
     private const val KEY_NEW_RELEASE_ALERT_FREQUENCY = "new_release_alert_frequency_hours"
     private const val KEY_SKIPPED_UPDATE_VERSION = "skipped_update_version"
     private const val KEY_INCLUDE_BETA_UPDATES = "include_beta_updates"
+    private const val KEY_STARTUP_CHIME = "startup_chime_enabled"
+    private const val KEY_LISTENER_NICKNAME = "listener_nickname"
+    private const val KEY_LAST_BACKUP_TIMESTAMP_MS = "last_backup_timestamp_ms"
+
+    const val CURRENT_WHATS_NEW_VERSION = 5
 }
 
 

@@ -11,11 +11,17 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.net.URI
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.Locale
 
@@ -102,10 +108,71 @@ internal object QuickJsExecutor {
     fun isLoaded(moduleId: String): Boolean =
         synchronized(engineLock) { pools.containsKey(moduleId) }
 
+    private fun isDisallowedAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress ||
+            address.isLoopbackAddress ||
+            address.isLinkLocalAddress ||
+            address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) return true
+        val bytes = address.address
+        if (address is Inet4Address && bytes.size == 4) {
+            val first = bytes[0].toInt() and 0xFF
+            val second = bytes[1].toInt() and 0xFF
+            // CGNAT 100.64.0.0/10, 0.0.0.0/8, benchmark 198.18.0.0/15, link-local 169.254.0.0/16
+            if (first == 0 || first == 127) return true
+            if (first == 100 && second in 64..127) return true
+            if (first == 169 && second == 254) return true
+            if (first == 198 && (second == 18 || second == 19)) return true
+        } else if (address is Inet6Address && bytes.size == 16) {
+            val first = bytes[0].toInt() and 0xFF
+            // Unique Local Addresses fc00::/7
+            if ((first and 0xFE) == 0xFC) return true
+        }
+        return false
+    }
+
+    private fun validateFetchUrl(rawUrl: String) {
+        val uri = runCatching { URI(rawUrl.trim()) }.getOrNull()
+            ?: throw SecurityException("Invalid module URL")
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        if (scheme != "http" && scheme != "https") {
+            throw SecurityException("Unsupported module request scheme")
+        }
+        if (!uri.userInfo.isNullOrEmpty()) {
+            throw SecurityException("Embedded credentials in module URLs are blocked")
+        }
+        val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.')
+            ?: throw SecurityException("Module URL missing host")
+        if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+            throw SecurityException("Local module fetch targets are blocked")
+        }
+    }
+
+    private val safePublicDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val normalized = hostname.trim().lowercase(Locale.ROOT).trimEnd('.')
+            if (normalized == "localhost" ||
+                normalized.endsWith(".localhost") ||
+                normalized.endsWith(".local") ||
+                normalized.endsWith(".internal")
+            ) {
+                throw UnknownHostException("Blocked local host: $hostname")
+            }
+            val resolved = Dns.SYSTEM.lookup(hostname)
+            if (resolved.any(::isDisallowedAddress)) {
+                throw UnknownHostException("Blocked non-public address for host: $hostname")
+            }
+            return resolved
+        }
+    }
+
     private val syncHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(25, TimeUnit.SECONDS)
+            .dns(safePublicDns)
             .build()
     }
 
@@ -153,7 +220,9 @@ internal object QuickJsExecutor {
     /** A fresh interpreter with [jsCode] evaluated into it, or a throw saying why not. */
     private suspend fun newEngine(jsCode: String, fetchBase: String): QuickJs {
         val qjs = QuickJs.create(Dispatchers.Default)
+        qjs.memoryLimit = 32L * 1024L * 1024L
         qjs.maxStackSize = 512 * 1024L
+        qjs.evaluationTimeoutMillis = 15_000L
         try {
             bindConsole(qjs)
             bindAsyncFetch(qjs, fetchBase)
@@ -381,7 +450,7 @@ internal object QuickJsExecutor {
         qjs.define("__spine") {
             asyncFunction("fetch", object : AsyncFunctionBinding<String> {
                 override suspend fun invoke(args: Array<Any?>): String {
-                    val rawUrl = args[0]?.toString()
+                    val rawUrl = args.getOrNull(0)?.toString()
                         ?: throw IllegalArgumentException("fetch requires a URL")
                     val method = args[1]?.toString() ?: "GET"
                     val headersJson = args[2]?.toString() ?: "{}"
@@ -479,6 +548,7 @@ internal object QuickJsExecutor {
         headersJson: String,
         body: String?,
     ): Pair<Int, String> {
+        validateFetchUrl(url)
         val builder = Request.Builder().url(url)
 
         var hasUserAgent = false

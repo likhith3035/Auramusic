@@ -76,7 +76,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // share one keystore master key and a first launch must not have two
         // threads racing to create it. Joined before onCreate returns, so
         // nothing that runs after startup can see any of them half open.
-        thread(name = "startup-init", priority = Thread.NORM_PRIORITY) {
+        val startupInit = thread(name = "startup-init", priority = Thread.NORM_PRIORITY) {
             SourceRegistry.init(this)
             AndroidStreamHooks.initInnerTubeX(this)
             CanvasCache.init(this)
@@ -85,6 +85,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
             ArtistFacts.init(this)
             SpotifyToken.init(this)
             AudioCache.init(this)
+            com.music.bitchord.data.link.YouTubeResumeStore.init(filesDir)
+            com.music.bitchord.data.taste.MusicTasteStore.init(filesDir)
         }
         // Migration-safe: an old single cookie becomes the first encrypted
         // session, while newer installs restore the profile the listener chose.
@@ -117,7 +119,6 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // and the clock offset are not restored — both are re-established on
         // the next connect, which is the only way to be sure they are current.
         ListenTogether.init(this)
-        SearchHistory.init(this)
         LastPlayed.init(this)
         com.music.bitchord.playback.PartyPersonalQueueStash.init(this)
         // Which tracks the listener has reverted to YouTube's own upload. Read
@@ -127,6 +128,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // What's already saved to Downloads, so the song menu can say so
         // without a media-store query per row.
         Downloads.init(this)
+        // Complete parallel startup-init before checking AudioCache.clear() or returning from onCreate.
+        startupInit.join()
         // The device's own listening record. Opened here rather than in
         // PlaybackService because the Replay page reads it from the UI side and
         // both live in this process — one owner, one directory.
@@ -137,10 +140,12 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // format or key change between builds can't serve stale or mismatched
         // bytes from a cache the new code didn't write.
         if (AppSettings.consumeVersionUpdate(BuildConfig.VERSION_CODE)) {
-            AudioCache.clear()
             SingletonImageLoader.get(this).let { loader ->
                 loader.memoryCache?.clear()
-                loader.diskCache?.clear()
+                CoroutineScope(Dispatchers.IO).launch {
+                    AudioCache.clear()
+                    loader.diskCache?.clear()
+                }
             }
         }
         // Initialize LastFM with saved settings if available
@@ -150,11 +155,23 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
 
         // Anonymous daily heartbeat telemetry for active users counter
         com.music.bitchord.data.telemetry.AuraTelemetryClient.init(filesDir)
+        com.music.bitchord.data.weather.AuraWeatherRepository.init(filesDir)
         com.music.bitchord.data.telemetry.AuraTelemetryClient.ping(
             version = BuildConfig.VERSION_NAME,
             platform = "Android",
             osVersion = android.os.Build.VERSION.RELEASE ?: "Unknown",
         )
+
+        // Privacy-strict PostHog event telemetry (active only when POSTHOG_API_KEY is configured)
+        com.music.bitchord.data.telemetry.AuraAnalytics.init(
+            directory = filesDir,
+            buildPosthogApiKey = BuildConfig.POSTHOG_API_KEY,
+            buildPosthogHost = BuildConfig.POSTHOG_HOST,
+            version = BuildConfig.VERSION_NAME,
+            platform = "Android",
+            osVersion = android.os.Build.VERSION.RELEASE ?: "Unknown",
+        )
+        com.music.bitchord.data.telemetry.AuraAnalytics.trackAppLaunch()
     }
 
     /**

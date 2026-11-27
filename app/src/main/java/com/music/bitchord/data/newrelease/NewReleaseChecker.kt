@@ -33,14 +33,21 @@ object NewReleaseChecker {
         context: Context,
         forceAll: Boolean = false,
     ): List<NewRelease> = withContext(Dispatchers.IO) {
-        // 1. Signed-in check
-        if (Innertube.cookie == null) {
+        // 1. Check whether signed in OR user configured taste artists locally
+        val localTasteArtists = com.music.bitchord.data.taste.MusicTasteStore.preferences.value.selectedArtists
+        if (Innertube.cookie == null && localTasteArtists.isEmpty()) {
             return@withContext emptyList()
         }
 
-        // 2. Fetch subscribed artists and new releases in parallel
+        // 2. Fetch subscribed artists (if signed in) and new releases in parallel
         val (subscribedArtists, releaseShelves) = coroutineScope {
-            val subDeferred = async { YtMusicRepository.subscribedArtists().getOrNull().orEmpty() }
+            val subDeferred = async {
+                if (Innertube.cookie != null) {
+                    YtMusicRepository.subscribedArtists().getOrNull().orEmpty()
+                } else {
+                    emptyList()
+                }
+            }
             val releasesDeferred = async {
                 val primary = YtMusicRepository.homeSupplement("FEmusic_new_releases").getOrNull().orEmpty()
                 val explore = YtMusicRepository.homeSupplement("FEmusic_explore").getOrNull().orEmpty()
@@ -49,17 +56,29 @@ object NewReleaseChecker {
             subDeferred.await() to releasesDeferred.await()
         }
 
-        if (subscribedArtists.isEmpty() || releaseShelves.isEmpty()) {
+        if ((subscribedArtists.isEmpty() && localTasteArtists.isEmpty()) || releaseShelves.isEmpty()) {
             return@withContext emptyList()
         }
 
-        // 3. Build lookup maps for followed artists
+        // 3. Build lookup maps for followed artists + picked onboarding/taste artists
         // Normalise names by trimming, lowercasing, and stripping common punctuation
         val followedArtistsByName = HashMap<String, ShelfItem>()
         for (artist in subscribedArtists) {
             val norm = normalize(artist.title)
             if (norm.isNotBlank()) {
                 followedArtistsByName[norm] = artist
+            }
+        }
+        for (picked in localTasteArtists) {
+            val norm = normalize(picked.name)
+            if (norm.isNotBlank() && !followedArtistsByName.containsKey(norm)) {
+                followedArtistsByName[norm] = ShelfItem(
+                    title = picked.name,
+                    subtitle = picked.role.singularLabel,
+                    thumbnailUrl = picked.thumbnailUrl,
+                    videoId = null,
+                    browseId = picked.browseId,
+                )
             }
         }
 

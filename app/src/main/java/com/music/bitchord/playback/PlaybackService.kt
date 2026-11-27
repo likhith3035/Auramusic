@@ -113,7 +113,9 @@ import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.download.Downloads
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.asCoroutineDispatcher
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.NerdStats
@@ -370,8 +372,10 @@ class PlaybackService : MediaLibraryService() {
     /**
      * [YtMusicRepository.browseSongs] for Liked Music cached for Android Auto's browse tree.
      */
-    private var cachedLiked: Pair<Long, List<Song>>? = null
-    private var cachedLikedCookie: String? = null
+    private class CachedCookieSlice<T>(val cookie: String, val at: Long, val value: T)
+
+    @Volatile
+    private var cachedLiked: CachedCookieSlice<List<Song>>? = null
     private val likedMutex = Mutex()
     private val LIKED_CACHE_TTL_MS = 60_000L
 
@@ -379,14 +383,16 @@ class PlaybackService : MediaLibraryService() {
         val cookie = com.music.bitchord.data.innertube.Innertube.cookie
         if (cookie == null) {
             cachedLiked = null
-            cachedLikedCookie = null
             return emptyList()
         }
-        if (cachedLikedCookie != null && cachedLikedCookie != cookie) {
+        val current = cachedLiked
+        if (current != null && current.cookie != cookie) {
             cachedLiked = null
-        }
-        cachedLiked?.let { (at, songs) ->
-            if (SystemClock.elapsedRealtime() - at < LIKED_CACHE_TTL_MS && songs.isNotEmpty()) return songs
+        } else if (current != null &&
+            SystemClock.elapsedRealtime() - current.at < LIKED_CACHE_TTL_MS &&
+            current.value.isNotEmpty()
+        ) {
+            return current.value
         }
         val songs = try {
             withTimeoutOrNull(4000L) {
@@ -408,8 +414,7 @@ class PlaybackService : MediaLibraryService() {
             emptyList()
         }
         if (songs.isNotEmpty()) {
-            cachedLiked = SystemClock.elapsedRealtime() to songs
-            cachedLikedCookie = cookie
+            cachedLiked = CachedCookieSlice(cookie, SystemClock.elapsedRealtime(), songs)
             songs.forEach { songCache[it.videoId] = it }
             LikeState.seedLiked(songs.mapTo(HashSet()) { it.videoId })
         }
@@ -436,8 +441,8 @@ class PlaybackService : MediaLibraryService() {
         feed
     }
 
-    private var cachedPlaylistCards: Pair<Long, List<ShelfItem>>? = null
-    private var cachedPlaylistCookie: String? = null
+    @Volatile
+    private var cachedPlaylistCards: CachedCookieSlice<List<ShelfItem>>? = null
     private val playlistsMutex = Mutex()
     private val PLAYLISTS_CACHE_TTL_MS = 60_000L
 
@@ -462,19 +467,20 @@ class PlaybackService : MediaLibraryService() {
         val cookie = com.music.bitchord.data.innertube.Innertube.cookie
         if (cookie == null) {
             cachedPlaylistCards = null
-            cachedPlaylistCookie = null
             return emptyList()
         }
-        if (cachedPlaylistCookie != null && cachedPlaylistCookie != cookie) {
+        val current = cachedPlaylistCards
+        if (current != null && current.cookie != cookie) {
             cachedPlaylistCards = null
-        }
-        cachedPlaylistCards?.let { (at, cards) ->
-            if (SystemClock.elapsedRealtime() - at < PLAYLISTS_CACHE_TTL_MS && cards.isNotEmpty()) return cards
+        } else if (current != null &&
+            SystemClock.elapsedRealtime() - current.at < PLAYLISTS_CACHE_TTL_MS &&
+            current.value.isNotEmpty()
+        ) {
+            return current.value
         }
         val cards = fetchPlaylistCards()
         if (cards.isNotEmpty()) {
-            cachedPlaylistCards = SystemClock.elapsedRealtime() to cards
-            cachedPlaylistCookie = cookie
+            cachedPlaylistCards = CachedCookieSlice(cookie, SystemClock.elapsedRealtime(), cards)
         }
         cards
     }
@@ -482,12 +488,12 @@ class PlaybackService : MediaLibraryService() {
     private fun snapshotRecents(): List<Song> = cachedRecents?.second.orEmpty()
     private fun snapshotQuickPicks(): List<Song> = cachedQuickPicks?.second.orEmpty()
     private fun snapshotLiked(): List<Song> {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        return if (cookie != null && cookie == cachedLikedCookie) cachedLiked?.second.orEmpty() else emptyList()
+        val cookie = com.music.bitchord.data.innertube.Innertube.cookie ?: return emptyList()
+        return cachedLiked?.takeIf { it.cookie == cookie }?.value.orEmpty()
     }
     private fun snapshotPlaylistCards(): List<ShelfItem> {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        return if (cookie != null && cookie == cachedPlaylistCookie) cachedPlaylistCards?.second.orEmpty() else emptyList()
+        val cookie = com.music.bitchord.data.innertube.Innertube.cookie ?: return emptyList()
+        return cachedPlaylistCards?.takeIf { it.cookie == cookie }?.value.orEmpty()
     }
     private fun snapshotHome(): com.music.bitchord.data.model.HomeFeed? = cachedHome?.second
 
@@ -501,10 +507,10 @@ class PlaybackService : MediaLibraryService() {
         cachedQuickPicks?.let { (at, songs) -> songs.isNotEmpty() && isFresh(at, QUICK_PICKS_CACHE_TTL_MS) } ?: false
 
     private fun isLikedFresh(): Boolean =
-        snapshotLiked().isNotEmpty() && cachedLiked?.let { (at, _) -> isFresh(at, LIKED_CACHE_TTL_MS) } == true
+        snapshotLiked().isNotEmpty() && cachedLiked?.let { isFresh(it.at, LIKED_CACHE_TTL_MS) } == true
 
     private fun isPlaylistsFresh(): Boolean =
-        snapshotPlaylistCards().isNotEmpty() && cachedPlaylistCards?.let { (at, _) -> isFresh(at, PLAYLISTS_CACHE_TTL_MS) } == true
+        snapshotPlaylistCards().isNotEmpty() && cachedPlaylistCards?.let { isFresh(it.at, PLAYLISTS_CACHE_TTL_MS) } == true
 
     private fun refreshFolderInBackground(
         session: MediaLibrarySession,
@@ -715,7 +721,11 @@ class PlaybackService : MediaLibraryService() {
             }
         }
     }
-    private var currentAudioInputFormat: Format? = null
+    @Volatile private var currentAudioInputFormat: Format? = null
+    private val widgetIoExecutor = Executors.newSingleThreadExecutor { Thread(it, "BitChord-WidgetIO") }
+    private val widgetIoScope = CoroutineScope(SupervisorJob() + widgetIoExecutor.asCoroutineDispatcher())
+    @Volatile private var cachedVerifiedLocalId: String? = null
+    @Volatile private var cachedVerifiedLocalResult: Boolean = false
     private val outputDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
             // Plugging something in moves the music to it. Always — a choice
@@ -2094,6 +2104,7 @@ class PlaybackService : MediaLibraryService() {
                 return@launch
             }
             if (related.isEmpty()) return@launch
+            val stationItems = withContext(Dispatchers.Default) { related.map { it.toMediaItem() } }
 
             val activePlayer = player ?: return@launch
             val activeManualQueue = (0 until activePlayer.mediaItemCount)
@@ -2112,7 +2123,7 @@ class PlaybackService : MediaLibraryService() {
                 activePlayer.removeMediaItems(currentIndex + 1, activePlayer.mediaItemCount)
             }
             if (currentIndex > 0) activePlayer.removeMediaItems(0, currentIndex)
-            activePlayer.addMediaItems(1, related.map { it.toMediaItem() })
+            activePlayer.addMediaItems(1, stationItems)
             saveQueueSnapshotImmediately(activePlayer)
         }
     }
@@ -2162,6 +2173,7 @@ class PlaybackService : MediaLibraryService() {
         versionSwapJob = scope.launch(Dispatchers.Main) {
             val mediaId = targetMediaItem.mediaId
             swappingMediaId = mediaId
+            var committed = false
             if (smartAlignEnabled) {
                 AppSettings.versionAlignmentInProgress.value = true
             }
@@ -2194,6 +2206,7 @@ class PlaybackService : MediaLibraryService() {
                     activePlayer.replaceMediaItem(currentIndex, targetMediaItem)
                     activePlayer.seekTo(currentIndex, pos)
                     if (wasPlaying) activePlayer.play()
+                    committed = true
                     onSwapCommitted?.invoke()
                     refreshCustomLayouts()
                     swappingMediaId = null
@@ -2228,7 +2241,8 @@ class PlaybackService : MediaLibraryService() {
             var isReady = false
             while (isActive && SystemClock.elapsedRealtime() < timeoutAt) {
                 if (player !== activePlayer ||
-                    activePlayer.currentMediaItemIndex != currentIndex
+                    activePlayer.currentMediaItemIndex != currentIndex ||
+                    activePlayer.currentMediaItem?.mediaId != sourceSong.videoId
                 ) {
                     // Active player moved to another track or was changed
                     standbyPlayer.stop()
@@ -2258,6 +2272,7 @@ class PlaybackService : MediaLibraryService() {
                 activePlayer.replaceMediaItem(currentIndex, targetMediaItem)
                 activePlayer.seekTo(currentIndex, pos)
                 if (wasPlaying) activePlayer.play()
+                committed = true
                 onSwapCommitted?.invoke()
                 onTrackBecameCurrent(
                     targetMediaItem,
@@ -2324,7 +2339,10 @@ class PlaybackService : MediaLibraryService() {
                     val elapsed = SystemClock.elapsedRealtime() - fadeStart
                     val progress = (elapsed.toFloat() / swapCrossfadeMs).coerceIn(0f, 1f)
 
-                    if (player !== activePlayer || activePlayer.currentMediaItemIndex != currentIndex) {
+                    if (player !== activePlayer ||
+                        activePlayer.currentMediaItemIndex != currentIndex ||
+                        activePlayer.currentMediaItem?.mediaId != sourceSong.videoId
+                    ) {
                         standbyPlayer.stop()
                         standbyPlayer.clearMediaItems()
                         standbyPlayer.volume = 1f
@@ -2354,6 +2372,7 @@ class PlaybackService : MediaLibraryService() {
 
                 // Adopt incoming player cleanly
                 adoptPlayerForVersionSwap(outgoing = activePlayer, incoming = standbyPlayer)
+                committed = true
                 onSwapCommitted?.invoke()
             } finally {
                 loudnessA.setBlendTrim(1f)
@@ -2363,6 +2382,17 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
             } finally {
+                if (!committed) {
+                    if (swappingMediaId == mediaId) swappingMediaId = null
+                    if (player === activePlayer) activePlayer.volume = 1f
+                    spare?.takeIf { it !== player }?.let { sb ->
+                        runCatching {
+                            sb.stop()
+                            sb.clearMediaItems()
+                            sb.volume = 1f
+                        }
+                    }
+                }
                 if (generation == versionSwapGeneration) {
                     AppSettings.versionAlignmentInProgress.value = false
                 }
@@ -2642,6 +2672,9 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         val current = exoPlayer.currentMediaItem?.toSong() ?: return
+        if (com.music.bitchord.data.link.YouTubeResumeStore.isStandaloneSharedMedia(current, exoPlayer.duration)) {
+            return
+        }
         if (AppSettings.dontRepeatSuggestions.value) sessionSongHistory += current
         // In a party the server's queue is the one being topped up, and this
         // player's copy of it lags behind by however long reconcile is held off
@@ -3998,10 +4031,11 @@ class PlaybackService : MediaLibraryService() {
             if (shelved != null) {
                 TrackLog.d("BitChord", "re-offering the upgrade already proved for $mediaId")
                 NerdStats.onLosslessRaceStart(mediaId)
+                var continuingRace = false
                 try {
-                    swapIn(mediaId, shelved)
+                    continuingRace = swapIn(mediaId, shelved)
                 } finally {
-                    NerdStats.onLosslessRaceEnd(mediaId)
+                    if (!continuingRace) NerdStats.onLosslessRaceEnd(mediaId)
                 }
                 return@launch
             }
@@ -4041,8 +4075,9 @@ class PlaybackService : MediaLibraryService() {
             val better = withContext(Dispatchers.IO) {
                 QualityUpgrade.lookAgain(mediaId, playingSeconds)
             } ?: return@launch
+            var continuingRace = false
             try {
-                swapIn(mediaId, better)
+                continuingRace = swapIn(mediaId, better)
             } finally {
                 // The badge comes down when the upgrade is done, not when the
                 // search that found it was — including the deliberate wait in
@@ -4050,7 +4085,7 @@ class PlaybackService : MediaLibraryService() {
                 // [QualityUpgrade.lookAgain]. In `finally` because a queue
                 // that moves on cancels this job, and a cancelled swap has to
                 // put the badge out as surely as a completed one.
-                NerdStats.onLosslessRaceEnd(mediaId)
+                if (!continuingRace) NerdStats.onLosslessRaceEnd(mediaId)
             }
         }
     }
@@ -4238,11 +4273,11 @@ class PlaybackService : MediaLibraryService() {
      * playback URI differs, so an item rebuilt identically would be accepted
      * and quietly keep playing the old stream.
      */
-    private suspend fun swapIn(mediaId: String, stream: SourceStream) {
-        val at = withContext(Dispatchers.Main) { swapPointFor(mediaId) } ?: return
+    private suspend fun swapIn(mediaId: String, stream: SourceStream): Boolean {
+        val at = withContext(Dispatchers.Main) { swapPointFor(mediaId) } ?: return false
         if (at.duration > 0 && at.duration - at.position < UPGRADE_MIN_REMAINING_MS) {
             TrackLog.d("BitChord", "upgrade abandoned: only ${at.duration - at.position}ms of the track left")
-            return
+            return false
         }
 
         val upgradedUri = QualityUpgrade.upgradedUri(at.uri)
@@ -4268,7 +4303,7 @@ class PlaybackService : MediaLibraryService() {
             // to prove itself.
             QualityUpgrade.forget(mediaId)
             withContext(Dispatchers.IO) { AudioCache.discardRendition(Uri.parse(upgradedUri)) }
-            return
+            return false
         }
 
         // There used to be an unconditional five-second hold here, keyed off the
@@ -4337,7 +4372,7 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        withContext(Dispatchers.Main) {
+        return withContext(Dispatchers.Main) {
             val now = swapPointFor(mediaId)
             if (crossfade?.isTransitioning() == true) {
                 // Caught right before the swap that would have broken it —
@@ -4346,7 +4381,7 @@ class PlaybackService : MediaLibraryService() {
                 // "queue moved on" case just below.
                 QualityUpgrade.shelve(mediaId, stream)
                 TrackLog.d("BitChord", "upgrade for $mediaId shelved: a crossfade was still running")
-                return@withContext
+                return@withContext false
             }
             if (now == null) {
                 // The queue moved on between the upgrade being proved and the
@@ -4358,13 +4393,13 @@ class PlaybackService : MediaLibraryService() {
                 // was indistinguishable from never having looked.
                 QualityUpgrade.shelve(mediaId, stream)
                 TrackLog.d("BitChord", "upgrade for $mediaId proved but the queue moved on; shelved")
-                return@withContext
+                return@withContext false
             }
-            val player = player ?: return@withContext
+            val player = player ?: return@withContext false
             if (now.duration > 0 && now.duration - now.position < UPGRADE_MIN_REMAINING_MS) {
                 TrackLog.d("BitChord", "upgrade abandoned: only ${now.duration - now.position}ms of the track left")
                 QualityUpgrade.forget(mediaId)
-                return@withContext
+                return@withContext false
             }
             // The parked stream can be taken away underneath a swap in flight:
             // a playback failure on the *old* stream runs [recoverFrom], which
@@ -4375,7 +4410,7 @@ class PlaybackService : MediaLibraryService() {
             // one key, which is the corruption the audition exists to avoid.
             if (QualityUpgrade.forcedStream(Uri.parse(upgradedUri)) == null) {
                 TrackLog.d("BitChord", "upgrade abandoned: its stream was dropped while it was being proved")
-                return@withContext
+                return@withContext false
             }
             // Not fatal, just slower than intended, and worth being able to see
             // in a log: the audition buffers ahead of a moving target and can
@@ -4415,7 +4450,8 @@ class PlaybackService : MediaLibraryService() {
             QualityUpgrade.unshelve(mediaId)
             TrackLog.d("BitChord", "upgraded to ${stream.format.summary} at ${now.position}ms ($upgradedSourceName)")
             watchUpgrade(mediaId, now.uri, now.position, now.duration, previousFormat)
-            if (QualityUpgrade.continueAfterLossySwap(mediaId)) {
+            val scheduledFollowUp = QualityUpgrade.continueAfterLossySwap(mediaId)
+            if (scheduledFollowUp) {
                 // The immediate JioSaavn improvement stays audible while a
                 // slower lossless source is checked against its higher-quality
                 // floor. Wait for this pass to release `upgradeJob`; otherwise
@@ -4427,34 +4463,12 @@ class PlaybackService : MediaLibraryService() {
                     lookForBetterCopy(player)
                 }
             }
-            // The opening again, this time sized for Automix rather than for
-            // a container header.
-            //
-            // An upgraded rendition is only ever fetched from the swap point
-            // onward, so its first seconds are the one region nothing downloads
-            // on its own — [UPGRADE_HEADER_BYTES] covers the header and stops
-            // well short of enough *audio* to measure. A megabyte of lossless is
-            // four seconds, against the twelve the analyzer needs, so a track
-            // that upgrades early could never be analysed from any rendition:
-            // the lossless copy had no audio at its head and the copy it
-            // replaced was discarded.
-            //
-            // After the swap and off the main thread, because nothing waits on
-            // it — the upgrade is already audible and this only decides whether
-            // the *next* transition can be a real mix.
-            //
-            // Which in a party it cannot be: the transition there is the plain
-            // one everybody moves through together, and nothing is analysed for
-            // it — see [CrossfadeController] and
-            // [com.music.bitchord.playback.smart.TrackAnalyzer]. This is the one
-            // fetch Automix makes that neither of those two gates, and a
-            // megabyte pulled for an analysis that will not run is a megabyte
-            // taken off the connection the party is syncing over.
             if (!ListenTogether.state.value.inParty) {
-                launch(Dispatchers.IO) {
+                scope.launch(Dispatchers.IO) {
                     AudioCache.warmRange(Uri.parse(upgradedUri), 0, ANALYSIS_HEAD_BYTES)
                 }
             }
+            scheduledFollowUp
         }
     }
 
@@ -5200,8 +5214,15 @@ class PlaybackService : MediaLibraryService() {
         if (!localPath.isNullOrBlank()) {
             return true
         }
-        if (Downloads.verifiedSavedUri(mediaId) != null) {
-            return true
+        if (Downloads.saved.value.containsKey(mediaId)) {
+            if (cachedVerifiedLocalId != mediaId) {
+                cachedVerifiedLocalId = mediaId
+                cachedVerifiedLocalResult = true
+                scope.launch(Dispatchers.IO) {
+                    cachedVerifiedLocalResult = Downloads.verifiedSavedUri(mediaId) != null
+                }
+            }
+            if (cachedVerifiedLocalResult) return true
         }
         return false
     }
@@ -5424,6 +5445,12 @@ class PlaybackService : MediaLibraryService() {
             index = player.currentMediaItemIndex,
             positionMs = player.currentPosition,
         )
+        com.music.bitchord.data.link.YouTubeResumeStore.recordSongProgress(
+            song = player.currentMediaItem?.toSong(),
+            positionMs = player.currentPosition,
+            playerDurationMs = player.duration,
+            forceFlush = true,
+        )
     }
 
     /** Drop every service-side reference that could resurrect the former queue. */
@@ -5445,6 +5472,11 @@ class PlaybackService : MediaLibraryService() {
         LastPlayed.savePlaybackState(
             index = player.currentMediaItemIndex - persistedQueueStart,
             positionMs = player.currentPosition,
+        )
+        com.music.bitchord.data.link.YouTubeResumeStore.recordSongProgress(
+            song = player.currentMediaItem?.toSong(),
+            positionMs = player.currentPosition,
+            playerDurationMs = player.duration,
         )
     }
 
@@ -5498,24 +5530,26 @@ class PlaybackService : MediaLibraryService() {
         // it. Unknown is not "not liked", so keep what was last published for
         // this same track rather than emptying a heart that was right.
         val liked = LikeState.overrides.value[song.videoId]?.let { it == LikeStatus.LIKE }
-            ?: MediaWidgetSnapshot.load(this).takeIf { it.mediaId == song.videoId }?.isLiked
-            ?: false
-        MediaWidgetSnapshot.save(
-            this,
-            MediaWidgetSnapshot(
-                mediaId = song.videoId,
-                title = song.title,
-                artist = song.artist,
-                artworkUrl = song.thumbnailUrl,
-                // playWhenReady, not isPlaying — see MediaWidgetSnapshot.isPlaying.
-                isPlaying = playing ?: exoPlayer.playWhenReady,
-                hasPrevious = exoPlayer.hasPreviousMediaItem(),
-                hasNext = exoPlayer.hasNextMediaItem(),
-                isLiked = liked,
-                shuffleEnabled = QueueShuffle.enabled.value,
-            ),
+        val snapshot = MediaWidgetSnapshot(
+            mediaId = song.videoId,
+            title = song.title,
+            artist = song.artist,
+            artworkUrl = song.thumbnailUrl,
+            // playWhenReady, not isPlaying — see MediaWidgetSnapshot.isPlaying.
+            isPlaying = playing ?: exoPlayer.playWhenReady,
+            hasPrevious = exoPlayer.hasPreviousMediaItem(),
+            hasNext = exoPlayer.hasNextMediaItem(),
+            isLiked = liked ?: false,
+            shuffleEnabled = QueueShuffle.enabled.value,
         )
-        MediaWidget.refresh(this)
+        val appContext = applicationContext
+        widgetIoScope.launch {
+            val resolvedLike = liked
+                ?: MediaWidgetSnapshot.load(appContext).takeIf { it.mediaId == snapshot.mediaId }?.isLiked
+                ?: false
+            MediaWidgetSnapshot.save(appContext, snapshot.copy(isLiked = resolvedLike))
+            MediaWidget.refresh(appContext)
+        }
     }
 
     private var foreignCachePurgeJob: Job? = null
@@ -6105,6 +6139,9 @@ class PlaybackService : MediaLibraryService() {
         val shuffleMode = oldActive.shuffleModeEnabled
 
         oldActive.playWhenReady = false
+        versionSwapJob?.cancel()
+        versionSwapJob = null
+        swappingMediaId = null
         crossfade?.release()
         oldActive.removeListener(playbackListener)
         oldActive.removeAnalyticsListener(formatListener)
@@ -6913,10 +6950,14 @@ class PlaybackService : MediaLibraryService() {
         AudioOutputStatus.reset()
         NerdStats.forgetLastSession()
         localBitrateCache.clear()
+        UsbDirectDevices.onChanged = null
+        widgetIoExecutor.shutdown()
         super.onDestroy()
     }
 
     private fun loadLyricsForCurrentTrack() {
+        serviceLyricsJob?.cancel()
+        serviceLyricsJob = null
         val currentSong = player?.currentMediaItem?.toSong() ?: run {
             serviceLyrics = null
             stopLyricsTicker()
@@ -6931,7 +6972,6 @@ class PlaybackService : MediaLibraryService() {
 
         val trackDurationMs = (player?.duration ?: 0L).takeIf { it > 0 } ?: 0L
 
-        serviceLyricsJob?.cancel()
         serviceLyricsJob = scope.launch(Dispatchers.IO) {
             val localUri = currentSong.localUri
             var lines: List<LyricLine>? = null
@@ -6952,6 +6992,11 @@ class PlaybackService : MediaLibraryService() {
                 lines = found?.lines
             }
             withContext(Dispatchers.Main) {
+                if (!isActive || !AppSettings.syncedLyrics.value ||
+                    player?.currentMediaItem?.mediaId != currentSong.videoId
+                ) {
+                    return@withContext
+                }
                 serviceLyrics = lines
                 if (player?.isPlaying == true) {
                     updateLyricSubtitle()

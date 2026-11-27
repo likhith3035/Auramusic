@@ -2557,13 +2557,15 @@ class CrossfadeController(
 
     /** Puts the easing player on the listener's own speed and forgets it. Idempotent. */
     private fun endEase(clickless: Boolean = true) {
+        if (!clickless) {
+            softSpeedJob?.cancel()
+            softSpeedJob = null
+        }
         val player = easing ?: return
         easing = null
         if (clickless) {
             setPlaybackSpeedClickless(player, AppSettings.playbackSpeed.value)
         } else {
-            softSpeedJob?.cancel()
-            softSpeedJob = null
             player.volume = 1f
             player.setPlaybackSpeed(AppSettings.playbackSpeed.value)
         }

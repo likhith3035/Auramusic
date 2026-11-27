@@ -80,7 +80,10 @@ object ListeningRecorder {
             PLAY_FLOOR_MS
         }
         val counts = !playCounted && playedThisTrack >= threshold
-        if (counts) playCounted = true
+        if (counts) {
+            playCounted = true
+            com.music.bitchord.data.telemetry.AuraAnalytics.trackPlayCounted()
+        }
 
         ListeningStats.record(enriched(song), step, counts)
 

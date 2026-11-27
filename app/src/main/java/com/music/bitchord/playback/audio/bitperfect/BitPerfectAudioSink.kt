@@ -614,6 +614,7 @@ internal class BitPerfectAudioSink(
 
     private fun resetCounters() {
         converter?.reset()
+        pendingFailure = null
         output.clear().limit(0)
         writtenFrames = 0
         transportFrames = 0

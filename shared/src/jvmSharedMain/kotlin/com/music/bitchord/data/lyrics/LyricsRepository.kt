@@ -184,7 +184,13 @@ object LyricsRepository {
                 // If we already found a line-synced or better result, skip Genius completely
                 if (lineSynced != null && source == LyricsSource.GENIUS) continue
 
-                val found = runCatching { job.await() }.getOrNull() ?: continue
+                val found = try {
+                    job.await()
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Exception) {
+                    null
+                } ?: continue
                 if (found.lines.any { it.isWordSynced }) {
                     bestResult = found
                     break
@@ -334,6 +340,7 @@ object LyricsRepository {
         fun cancel() = inFlight.values.forEach { it.cancel() }
     }
 
+    @Volatile
     var cacheDir: File? = null
 
     private const val MAX_MEMORY_CACHE = 200
@@ -362,8 +369,10 @@ object LyricsRepository {
             val file = File(File(root, CACHE_DIRECTORY), "$key.json.gz")
             if (!file.isFile) return@withLock null
             runCatching {
-                val data = GZIPInputStream(FileInputStream(file)).bufferedReader().use {
-                    json.decodeFromString<CachedLyricsData>(it.readText())
+                val data = FileInputStream(file).use { fis ->
+                    GZIPInputStream(fis).bufferedReader().use {
+                        json.decodeFromString<CachedLyricsData>(it.readText())
+                    }
                 }
                 file.setLastModified(System.currentTimeMillis())
                 data.toResult()
@@ -380,8 +389,10 @@ object LyricsRepository {
             val temporary = File(directory, "$key.tmp")
             runCatching {
                 val cached = result.toCached()
-                GZIPOutputStream(FileOutputStream(temporary)).bufferedWriter().use {
-                    it.write(json.encodeToString(cached))
+                FileOutputStream(temporary).use { fos ->
+                    GZIPOutputStream(fos).bufferedWriter().use {
+                        it.write(json.encodeToString(cached))
+                    }
                 }
                 if (!temporary.renameTo(destination)) {
                     temporary.copyTo(destination, overwrite = true)

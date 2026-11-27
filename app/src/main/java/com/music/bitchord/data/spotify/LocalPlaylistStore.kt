@@ -3,10 +3,16 @@ package com.music.bitchord.data.spotify
 import android.content.Context
 import android.content.SharedPreferences
 import com.music.bitchord.data.model.Song
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 
 data class LocalPlaylist(
     val id: String,
@@ -21,13 +27,17 @@ object LocalPlaylistStore {
     private const val KEY_PLAYLISTS = "playlists_json"
 
     private lateinit var prefs: SharedPreferences
+    private val lock = Any()
+    private val writer = CoroutineScope(
+        SupervisorJob() + Executors.newSingleThreadExecutor { Thread(it, "LocalPlaylistStore-IO") }.asCoroutineDispatcher(),
+    )
 
     private val _playlists = MutableStateFlow<List<LocalPlaylist>>(emptyList())
     val playlists = _playlists.asStateFlow()
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        load()
+        prefs = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        writer.launch { load() }
     }
 
     private fun load() {
@@ -59,39 +69,57 @@ object LocalPlaylistStore {
                 }
                 list.add(LocalPlaylist(id, title, songs))
             }
-            _playlists.value = list
+            synchronized(lock) {
+                if (_playlists.value.isEmpty()) {
+                    _playlists.value = list
+                }
+            }
         }
     }
 
     fun savePlaylist(title: String, songs: List<Song>): LocalPlaylist {
         val id = "sp_local_" + System.currentTimeMillis()
         val playlist = LocalPlaylist(id = id, title = title, songs = songs)
-        val updated = listOf(playlist) + _playlists.value.filterNot { it.id == id }
-        _playlists.value = updated
-        persist(updated)
+        val updated = synchronized(lock) {
+            val next = listOf(playlist) + _playlists.value.filterNot { it.id == id }
+            _playlists.value = next
+            next
+        }
+        persistAsync(updated)
         return playlist
     }
 
     fun deletePlaylist(id: String) {
-        val updated = _playlists.value.filterNot { it.id == id || it.browseId == id || it.id == id.removePrefix("local:playlist:") }
-        _playlists.value = updated
-        persist(updated)
+        val updated = synchronized(lock) {
+            val next = _playlists.value.filterNot { it.id == id || it.browseId == id || it.id == id.removePrefix("local:playlist:") }
+            _playlists.value = next
+            next
+        }
+        persistAsync(updated)
     }
 
     fun renamePlaylist(id: String, newTitle: String) {
         val cleanId = id.removePrefix("local:playlist:").removePrefix("VL")
-        val updated = _playlists.value.map {
-            if (it.id == cleanId || it.id == id || it.browseId == id) {
-                it.copy(title = newTitle)
-            } else it
+        val updated = synchronized(lock) {
+            val next = _playlists.value.map {
+                if (it.id == cleanId || it.id == id || it.browseId == id) {
+                    it.copy(title = newTitle)
+                } else it
+            }
+            _playlists.value = next
+            next
         }
-        _playlists.value = updated
-        persist(updated)
+        persistAsync(updated)
     }
 
     fun getPlaylist(id: String): LocalPlaylist? {
         val cleanId = id.removePrefix("local:playlist:").removePrefix("VL")
         return _playlists.value.firstOrNull { it.id == cleanId || it.id == id || it.browseId == id }
+    }
+
+    private fun persistAsync(list: List<LocalPlaylist>) {
+        if (!this::prefs.isInitialized) return
+        writer.launch { persist(list) }
     }
 
     private fun persist(list: List<LocalPlaylist>) {

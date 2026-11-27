@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
+import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -126,7 +127,7 @@ object YtMusicRepository {
      */
     private suspend fun recentlyPlayed(): HomeShelf? {
         val ytSongs = if (Innertube.cookie != null) {
-            runCatching { fetchHistory() }.getOrDefault(emptyList())
+            safeSubCall { fetchHistory() }.orEmpty()
         } else {
             emptyList()
         }
@@ -206,7 +207,7 @@ object YtMusicRepository {
      * Recommended discovery tracks for Quick Picks, strictly excluding listening history and recents.
      */
     suspend fun quickPicks(excludeSongIds: Set<String> = emptySet()): Result<List<Song>> = call("quickPicks") {
-        val homeRaw = runCatching { Innertube.browse("FEmusic_home") }.getOrNull()
+        val homeRaw = safeSubCall { Innertube.browse("FEmusic_home") }
         val shelves = if (homeRaw != null) InnertubeParser.parseHome(homeRaw) else emptyList()
 
         // 1. Direct "Quick picks" or "Mix" or "Recommendations" shelf
@@ -270,7 +271,7 @@ object YtMusicRepository {
         if (uniqueAllHome.isNotEmpty()) return@call uniqueAllHome
 
         // 4. Explore / New releases
-        val explore = runCatching { shelvesOf("FEmusic_new_releases") }.getOrDefault(emptyList())
+        val explore = safeSubCall { shelvesOf("FEmusic_new_releases") }.orEmpty()
         val exploreSongs = explore.flatMap { shelf ->
             shelf.items.mapNotNull { item ->
                 item.videoId?.takeUnless { it in excludeSongIds }?.let { vid ->
@@ -563,11 +564,14 @@ object YtMusicRepository {
      * treated the same as a failure and the other route is tried.
      */
     suspend fun accountChannels(): Result<List<AccountChannel>> = call("channels") {
-        val viaInnertube = runCatching {
+        val viaInnertube = try {
             InnertubeParser.parseAccountChannels(Innertube.accountsList())
-        }.onFailure { Log.w(TAG, "accounts_list unavailable: ${it.message}") }
-            .getOrNull()
-            .orEmpty()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (e: Exception) {
+            Log.w(TAG, "accounts_list unavailable: ${e.message}")
+            emptyList()
+        }
         if (viaInnertube.isNotEmpty()) return@call viaInnertube
         InnertubeParser.parseAccountChannels(Innertube.accountSwitcher())
     }
@@ -590,11 +594,11 @@ object YtMusicRepository {
             // liked without holding this page open behind the whole list —
             // see [syncLikedMusic] and MainViewModel's fetchLibrary.
             val liked = async { browseSongs(LIKED_MUSIC).getOrNull() }
-            val added = async { runCatching { songsPaged(LIBRARY_SONGS) }.getOrDefault(emptyList()) }
+            val added = async { safeSubCall { songsPaged(LIBRARY_SONGS) }.orEmpty() }
             val shelves = LIBRARY_FEEDS
                 .map { (title, browseId) ->
                     async {
-                        HomeShelf(title, runCatching { libraryItemsPaged(browseId) }.getOrDefault(emptyList()))
+                        HomeShelf(title, safeSubCall { libraryItemsPaged(browseId) }.orEmpty())
                     }
                 }
                 .awaitAll()
@@ -818,7 +822,8 @@ object YtMusicRepository {
 
     /** The page [SongPage.continuation] points at. */
     suspend fun moreSongs(token: String): Result<SongPage> = call("browse:more") {
-        pageOf(Innertube.browseContinuation(token), showByToken[token])
+        val show = synchronized(showByTokenLock) { showByToken[token] }
+        pageOf(Innertube.browseContinuation(token), show)
     }
 
     /**
@@ -830,7 +835,11 @@ object YtMusicRepository {
      * fill-in, the playback service's own paging — and each of them only ever
      * calls [moreSongs] with it.
      */
-    private val showByToken = ConcurrentHashMap<String, String>()
+    private val showByTokenLock = Any()
+    private val showByToken = object : LinkedHashMap<String, String>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
+            size > 64
+    }
 
     /**
      * Whether [browseId] is a playlist the account made — see
@@ -859,7 +868,9 @@ object YtMusicRepository {
         }
         val podcast = InnertubeParser.podcastShow(response) ?: show
         val continuation = InnertubeParser.continuationToken(response)
-        if (podcast != null && continuation != null) showByToken[continuation] = podcast
+        if (podcast != null && continuation != null) {
+            synchronized(showByTokenLock) { showByToken[continuation] = podcast }
+        }
         return SongPage(
             // One response can name the same track twice — an album page that
             // also carries a "you might also like" shelf, say. Collecting into a
@@ -917,7 +928,7 @@ object YtMusicRepository {
             (shelf?.songs ?: InnertubeParser.collectSongsDeep(response, show)).forEach { out[it.videoId] = it }
             val token = shelf?.continuation ?: InnertubeParser.continuationToken(response)
             if (token == null || page++ >= MAX_PAGES) break
-            response = runCatching { Innertube.browseContinuation(token) }.getOrNull() ?: break
+            response = safeSubCall { Innertube.browseContinuation(token) } ?: break
         }
         return out.values.toList()
     }
@@ -943,7 +954,7 @@ object YtMusicRepository {
             }
             val token = parsed.continuation ?: break
             if (page++ >= MAX_PAGES) break
-            response = runCatching { Innertube.browseContinuation(token) }.getOrNull() ?: break
+            response = safeSubCall { Innertube.browseContinuation(token) } ?: break
         }
         return out.values.toList()
     }
@@ -1149,16 +1160,16 @@ object YtMusicRepository {
         coroutineScope {
             val fullSongsDeferred = async {
                 page.moreSongsBrowseId?.let { playlistId ->
-                    runCatching { songsPaged(playlistId) }.getOrNull()
+                    safeSubCall { songsPaged(playlistId) }
                 }
             }
             val shelvesDeferred = page.sections.map { shelf ->
                 async {
                     val moreBrowseId = shelf.moreBrowseId
                     if (moreBrowseId != null) {
-                        val fullItems = runCatching {
+                        val fullItems = safeSubCall {
                             itemsPaged(moreBrowseId, shelf.moreParams)
-                        }.getOrNull()
+                        }
                         if (!fullItems.isNullOrEmpty()) {
                             shelf.copy(items = fullItems)
                         } else {
@@ -1248,6 +1259,14 @@ object YtMusicRepository {
     private var historyMemo: HistoryMemo? = null
 
     private const val HISTORY_MEMO_MS = 120_000L
+
+    private inline fun <T> safeSubCall(block: () -> T): T? = try {
+        block()
+    } catch (c: CancellationException) {
+        throw c
+    } catch (_: Exception) {
+        null
+    }
 
     private suspend fun <T> call(label: String, block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {

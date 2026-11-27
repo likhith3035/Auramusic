@@ -10,10 +10,11 @@ import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.Executors
 
 /**
  * Which receivers are out there, and which one the music is on.
@@ -120,8 +121,9 @@ object CastController {
         }
         try {
             // The task form, so the framework's start-up work is not on the
-            // main thread of whichever screen happened to ask first.
-            CastContext.getSharedInstance(app, Executors.newSingleThreadExecutor())
+            // main thread of whichever screen happened to ask first, using the
+            // shared IO pool instead of allocating an ad-hoc executor.
+            CastContext.getSharedInstance(app, Dispatchers.IO.asExecutor())
                 .addOnSuccessListener { ctx -> onReady(app, ctx) }
                 .addOnFailureListener { Log.w(TAG, "Cast framework unavailable", it) }
         } catch (e: Exception) {

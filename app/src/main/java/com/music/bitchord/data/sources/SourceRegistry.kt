@@ -429,6 +429,13 @@ object SourceRegistry {
         publish(configs.value.map { if (it.id == configId) it.copy(enabled = enabled) else it })
     }
 
+    /** Records the user's chosen quality option for an addon and rebuilds its client. */
+    fun setPickedQuality(configId: String, quality: String) {
+        val current = config(configId) ?: return
+        if (current.pickedQuality == quality) return
+        publish(configs.value.map { if (it.id == configId) it.copy(pickedQuality = quality) else it })
+    }
+
     /**
      * Puts the addons in [orderedIds], which is the order they will be asked in.
      *

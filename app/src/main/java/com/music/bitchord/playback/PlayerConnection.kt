@@ -786,7 +786,11 @@ fun mediaIdIn(uri: Uri): String? = if (uri.authority == "source") {
  * starts. Built off the main thread and handed to the player back on it, which
  * is where Media3 requires the call to be made.
  */
-suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
+suspend fun MediaController.playSongs(
+    songs: List<Song>,
+    startIndex: Int,
+    initialPositionMs: Long = 0L,
+) {
     if (songs.isEmpty()) return
     // A queue started while shuffle is on goes in shuffled rather than being
     // played out of order — see [QueueShuffle]. The track the user picked still
@@ -800,7 +804,11 @@ suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
         }
         queue.map { it.toMediaItem() }
     }
-    setMediaItems(items, queueStartIndex(startIndex, items.size, shuffled), 0L)
+    setMediaItems(
+        items,
+        queueStartIndex(startIndex, items.size, shuffled),
+        initialPositionMs.coerceAtLeast(0L),
+    )
     prepare()
     play()
 }

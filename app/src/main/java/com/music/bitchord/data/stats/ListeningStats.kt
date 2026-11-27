@@ -6,6 +6,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.SongPlayStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -80,6 +81,7 @@ object ListeningStats {
 
     /** 24-hour rolling daily playback events for Library daily highlights and Today replay. */
     private val dailyPlays = mutableListOf<DailyPlayRecord>()
+    @Volatile
     private var dailyDirty = false
 
     /**
@@ -101,6 +103,7 @@ object ListeningStats {
     private var version = 0L
 
     /** The last summary handed out, and what it was computed from. */
+    @Volatile
     private var cached: Cached? = null
 
     private class Cached(
@@ -252,20 +255,19 @@ object ListeningStats {
      * than re-serialising a month every time a track ticks over.
      */
     fun flush() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) } }
-        if (dailyDirty) {
-            writer.launch { writeLock.withLock { writeDailyLocked() } }
+        writer.launch {
+            writeLock.withLock {
+                pending()?.let { (key, snapshot) -> writeLocked(key, snapshot) }
+                writeDailyLocked()
+            }
         }
     }
 
     /** As [flush], for a caller that is about to read back what it wrote. */
-    private suspend fun flushAndAwait() {
-        val p = pending()
-        if (p != null) {
-            writer.launch { write(p.first, p.second) }.join()
-        }
-        if (dailyDirty) {
-            writer.launch { writeLock.withLock { writeDailyLocked() } }.join()
+    private suspend fun flushAndAwait() = withContext(NonCancellable) {
+        writeLock.withLock {
+            pending()?.let { (key, snapshot) -> writeLocked(key, snapshot) }
+            writeDailyLocked()
         }
     }
 
@@ -281,9 +283,11 @@ object ListeningStats {
     }
 
     private fun writeDailyLocked() {
-        if (!dailyDirty) return
-        dailyDirty = false
-        val snapshot = synchronized(lock) { dailyPlays.toList() }
+        val snapshot = synchronized(lock) {
+            if (!dailyDirty) return
+            dailyDirty = false
+            dailyPlays.toList()
+        }
         runCatching {
             directory.mkdirs()
             val file = File(directory, "daily_log.json")
@@ -296,18 +300,9 @@ object ListeningStats {
     }
 
     /**
-     * Serialises a month and swaps it into place.
-     *
-     * Never on the caller's thread. The caller is the playback service's
-     * sampler, which runs on the main thread — see its `reportProgress` — so
-     * encoding a month of listening and writing it there was a JSON pass and a
-     * file write on the UI thread every thirty seconds of playback, growing
-     * with the size of the month.
-     *
-     * Written aside and renamed, so a kill mid-write leaves the previous
-     * month rather than a truncated one.
+     * Serialises a month and swaps it into place. Must hold [writeLock].
      */
-    private suspend fun write(key: String, snapshot: StoredBucket) = writeLock.withLock {
+    private fun writeLocked(key: String, snapshot: StoredBucket) {
         runCatching {
             directory.mkdirs()
             val file = File(directory, "$key.json")
@@ -331,7 +326,7 @@ object ListeningStats {
         // has to reach disk before it is dropped on the floor.
         open?.let { previous ->
             val stale = previous.snapshot()
-            writer.launch { write(previous.key, stale) }
+            writer.launch { writeLock.withLock { writeLocked(previous.key, stale) } }
         }
         val loaded = read(key) ?: StoredBucket(month = key)
         return OpenBucket.of(key, loaded).also {
@@ -501,14 +496,15 @@ object ListeningStats {
             }
         }
 
-        val currentMonthKey = open?.key
-        months().forEach { month ->
-            if (month.toString() != currentMonthKey) {
-                read(month.toString())?.tracks?.find { it.id == videoId }?.let { entry ->
-                    totalPlays += entry.plays
-                    totalMs += entry.ms
-                    if (entry.last > lastPlayed) lastPlayed = entry.last
-                }
+        val currentMonthKey = synchronized(lock) { open?.key }
+        val diskSnapshots = writeLock.withLock {
+            months().filter { it.toString() != currentMonthKey }.mapNotNull { read(it.toString()) }
+        }
+        diskSnapshots.forEach { bucket ->
+            bucket.tracks.find { it.id == videoId }?.let { entry ->
+                totalPlays += entry.plays
+                totalMs += entry.ms
+                if (entry.last > lastPlayed) lastPlayed = entry.last
             }
         }
 
@@ -579,8 +575,10 @@ object ListeningStats {
         }
 
         val merged = MergedBucket()
-        months().filter { period.covers(it, today) }
-            .forEach { month -> read(month.toString())?.let(merged::add) }
+        writeLock.withLock {
+            months().filter { period.covers(it, today) }
+                .forEach { month -> read(month.toString())?.let(merged::add) }
+        }
         merged.toSummary(period, today).also {
             cached = Cached(period, version, facts, today, it)
         }
@@ -666,7 +664,7 @@ object ListeningStats {
     suspend fun exportAll(): List<StoredBucket> {
         if (!ready) return emptyList()
         flushAndAwait()
-        return months().mapNotNull { read(it.toString()) }
+        return writeLock.withLock { months().mapNotNull { read(it.toString()) } }
     }
 
     /**
@@ -676,22 +674,24 @@ object ListeningStats {
      * onto a new device, and two copies of the same month added together would
      * silently double every number on the page with no way to tell afterwards.
      */
-    fun importAll(buckets: List<StoredBucket>) {
+    suspend fun importAll(buckets: List<StoredBucket>) {
         if (!ready) return
-        synchronized(lock) {
-            open = null
-            dirty = false
-            directory.listFiles()?.forEach { it.delete() }
-            directory.mkdirs()
-            version++
-            cached = null
-            buckets.forEach { bucket ->
-                val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                    ?: return@forEach
-                runCatching {
-                    File(directory, "$key.json")
-                        .writeText(json.encodeToString(StoredBucket.serializer(), bucket))
-                }.onFailure { Log.w(TAG, "Could not import bucket $key", it) }
+        writeLock.withLock {
+            synchronized(lock) {
+                open = null
+                dirty = false
+                directory.listFiles()?.forEach { it.delete() }
+                directory.mkdirs()
+                version++
+                cached = null
+                buckets.forEach { bucket ->
+                    val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
+                        ?: return@forEach
+                    runCatching {
+                        File(directory, "$key.json")
+                            .writeText(json.encodeToString(StoredBucket.serializer(), bucket))
+                    }.onFailure { Log.w(TAG, "Could not import bucket $key", it) }
+                }
             }
         }
     }

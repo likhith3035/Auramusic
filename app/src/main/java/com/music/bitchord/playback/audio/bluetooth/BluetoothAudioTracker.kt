@@ -84,6 +84,7 @@ class BluetoothAudioTracker(private val context: Context) {
     private val _telemetry = MutableStateFlow(BluetoothTelemetry())
     val telemetry: StateFlow<BluetoothTelemetry> = _telemetry.asStateFlow()
 
+    @Volatile private var started: Boolean = false
     private var a2dpProfile: BluetoothA2dp? = null
     private var isReceiverRegistered: Boolean = false
 
@@ -101,6 +102,10 @@ class BluetoothAudioTracker(private val context: Context) {
     private val profileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
             if (profile == BluetoothProfile.A2DP) {
+                if (!started) {
+                    runCatching { BluetoothAdapter.getDefaultAdapter()?.closeProfileProxy(profile, proxy) }
+                    return
+                }
                 a2dpProfile = proxy as? BluetoothA2dp
                 refreshCurrentDevice()
             }
@@ -148,6 +153,7 @@ class BluetoothAudioTracker(private val context: Context) {
      * Starts monitoring Bluetooth codec and connection broadcasts.
      */
     fun start() {
+        started = true
         if (!isReceiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(ACTION_CODEC_CONFIG_CHANGED)
@@ -183,6 +189,7 @@ class BluetoothAudioTracker(private val context: Context) {
      * Stops monitoring and releases profile proxies.
      */
     fun stop() {
+        started = false
         if (isReceiverRegistered) {
             try {
                 context.unregisterReceiver(receiver)
