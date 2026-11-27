@@ -1485,10 +1485,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .collect { reloadRemoteDetail(com.music.bitchord.data.smb.SmbConfig.BROWSE_ID) }
         }
         viewModelScope.launch {
-            // A leftover APK only means "Install Now" for the session that
-            // downloaded it — see AppUpdateChecker.clearCache.
-            AppUpdateChecker.clearCache(getApplication())
-            AppUpdateChecker.check()
+            // Check for updates, then see if a matching APK is already cached
+            // from a previous download — saves the user from re-downloading.
+            val update = AppUpdateChecker.check()
+            if (update != null) {
+                AppUpdateChecker.clearCache(getApplication())
+            } else {
+                // No update available — wipe stale cached APKs.
+                java.io.File(getApplication<android.app.Application>().cacheDir, "updates")
+                    .listFiles()?.forEach { it.delete() }
+            }
         }
     }
 

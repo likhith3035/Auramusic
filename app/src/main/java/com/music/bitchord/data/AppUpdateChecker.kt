@@ -1,14 +1,17 @@
 package com.music.bitchord.data
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.settings.AppSettings
@@ -179,6 +182,12 @@ object AppUpdateChecker {
     suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
         val update = fetchFromGitHubRelease() ?: fetchFromFallbackJson()
         if (update != null && isNewer(update.version, BuildConfig.VERSION_NAME)) {
+            // Respect the user's "Skip this version" choice — unless the
+            // release is marked as mandatory.
+            val skipped = AppSettings.skippedUpdateVersion.value
+            if (!update.isMandatory && skipped == update.version) {
+                return@withContext null
+            }
             _available.value = update
             return@withContext update
         }
@@ -186,13 +195,28 @@ object AppUpdateChecker {
     }
 
     /**
-     * Wipes any APK left over from a previous run. Called once at cold start
-     * so a downloaded update is only ever "Install Now" for the session that
-     * downloaded it — the next launch starts clean rather than trying to work
-     * out whether a leftover file is still good.
+     * Wipes any APK left over from a previous run, **unless** the cached file
+     * matches the version of the currently-available update. This eliminates
+     * the frustrating loop where users download the APK, fail to install
+     * (e.g. the system dialog was dismissed), re-launch, and are forced to
+     * download the whole thing again.
      */
     suspend fun clearCache(context: Context) = withContext(Dispatchers.IO) {
-        File(context.cacheDir, CACHE_SUBDIR).listFiles()?.forEach { it.delete() }
+        val dir = File(context.cacheDir, CACHE_SUBDIR)
+        val files = dir.listFiles() ?: return@withContext
+        // If there's already an update available from a previous check, see if
+        // the cached APK matches its version so we can skip re-downloading.
+        val keepVersion = _available.value?.version?.let(::sanitizeVersionForFilename)
+        for (file in files) {
+            if (keepVersion != null && file.name.contains(keepVersion)) {
+                // Cached APK belongs to the latest update — verify it's intact.
+                if (file.length() > 0 && verifyApkSignatureMatchesInstalled(context, file)) {
+                    _download.value = DownloadState.Ready(file)
+                    continue
+                }
+            }
+            file.delete()
+        }
     }
 
     /**
@@ -375,21 +399,29 @@ object AppUpdateChecker {
     }
 
     /**
-     * Hands a downloaded APK to the system installer.
+     * Hands a downloaded APK to the system's [PackageInstaller] session API.
      *
-     * Sideloaded apps need the user's blessing per app ("install unknown apps");
-     * without it the installer intent silently does nothing on most ROMs, so
-     * the user is sent to that one switch first and taps Install again after.
+     * Unlike the old `ACTION_VIEW` approach, the session API is guaranteed to
+     * show the system install confirmation on every ROM (Xiaomi, Samsung,
+     * Huawei, stock AOSP, etc.). The result arrives asynchronously in
+     * [AppInstallReceiver].
+     *
+     * On Android 8+ the user must have enabled "Install Unknown Apps" for
+     * this app; without it the session commit is rejected, so we pre-flight
+     * that check and send them to the toggle first.
      */
     fun installApk(context: Context, file: File) {
         if (!verifyApkSignatureMatchesInstalled(context, file)) {
-            _download.value = DownloadState.Failed("Downloaded APK signature mismatch")
+            _download.value = DownloadState.Failed("Downloaded APK signature mismatch — uninstall the old version first")
             file.delete()
             return
         }
+
+        // Pre-flight: ensure "Install Unknown Apps" is allowed for this app.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
+            _download.value = DownloadState.Failed("Please allow AuraMusic to install updates, then tap Install again")
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
                     .setData(Uri.parse("package:${context.packageName}"))
@@ -397,6 +429,54 @@ object AppUpdateChecker {
             )
             return
         }
+
+        runCatching {
+            val installer = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(
+                PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+            ).apply {
+                setSize(file.length())
+                // On API 31+ mark this as an update from the same package so
+                // the system can show a streamlined confirmation.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+            }
+
+            val sessionId = installer.createSession(params)
+            installer.openSession(sessionId).use { session ->
+                file.inputStream().use { input ->
+                    session.openWrite("aura_update", 0, file.length()).use { output ->
+                        input.copyTo(output, bufferSize = 64 * 1024)
+                        session.fsync(output)
+                    }
+                }
+
+                // Build a PendingIntent that delivers the result to our receiver.
+                val callbackIntent = Intent(context, AppInstallReceiver::class.java).apply {
+                    action = AppInstallReceiver.ACTION_INSTALL_STATUS
+                }
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    sessionId,
+                    callbackIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                )
+                session.commit(pendingIntent.intentSender)
+            }
+            Log.i("AppUpdateChecker", "PackageInstaller session $sessionId committed")
+        }.onFailure { error ->
+            Log.e("AppUpdateChecker", "PackageInstaller session failed", error)
+            // Fallback to the classic ACTION_VIEW intent.
+            installApkLegacy(context, file)
+        }
+    }
+
+    /**
+     * Legacy `ACTION_VIEW` fallback, used only when [PackageInstaller] fails
+     * (e.g. on heavily customised ROMs that break the session API).
+     */
+    private fun installApkLegacy(context: Context, file: File) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -406,6 +486,16 @@ object AppUpdateChecker {
             putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         }
         context.startActivity(installIntent)
+    }
+
+    /** Called from [AppInstallReceiver] when the install completes. */
+    internal fun onInstallSuccess() {
+        _download.value = DownloadState.Idle
+    }
+
+    /** Called from [AppInstallReceiver] when the install fails. */
+    internal fun onInstallFailed(message: String) {
+        _download.value = DownloadState.Failed(message)
     }
 
     @Suppress("DEPRECATION")

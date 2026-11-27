@@ -331,7 +331,8 @@ fun BitChordDialogs(
                 onInstall = {
                     val ready = AppUpdateChecker.download.value as? AppUpdateChecker.DownloadState.Ready
                     ready?.let { AppUpdateChecker.installApk(context, it.file) }
-                    onDismissUpdateDialog()
+                    // Don't dismiss — the dialog stays up so the user sees
+                    // the PackageInstaller result or the system confirmation.
                 },
                 onOpenReleasePage = {
                     AppUpdateChecker.resetDownload(context)
