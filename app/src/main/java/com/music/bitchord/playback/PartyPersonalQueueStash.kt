@@ -77,7 +77,7 @@ object PartyPersonalQueueStash {
         val encoded = runCatching {
             json.encodeToString(StoredQueue.serializer(), stored)
         }.getOrNull() ?: return
-        prefs.edit().putString(KEY_STASH, encoded).commit()
+        prefs.edit().putString(KEY_STASH, encoded).apply()
     }
 
     fun hasStash(): Boolean {
@@ -102,7 +102,7 @@ object PartyPersonalQueueStash {
 
     fun clear() {
         if (!::prefs.isInitialized) return
-        prefs.edit().remove(KEY_STASH).commit()
+        prefs.edit().remove(KEY_STASH).apply()
     }
 
     @Serializable

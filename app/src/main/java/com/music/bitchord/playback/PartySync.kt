@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -187,6 +188,8 @@ class PartySync(
     @Volatile
     private var rejoining = false
 
+    private var loadJob: Job? = null
+
     /** Consecutive over-limit readings. See the drift branch of [reconcile]. */
     private var driftStrikes = 0
 
@@ -277,6 +280,9 @@ class PartySync(
         restoreBaseSpeed(player())
         jobs.forEach(Job::cancel)
         jobs.clear()
+        loadJob?.cancel()
+        loadJob = null
+        loadingVideoId = null
         publishJob?.cancel()
         startJob?.cancel()
     }
@@ -715,59 +721,69 @@ class PartySync(
      */
     private fun load(party: ListenTogether.State) {
         val track = party.playback.track ?: return
-        if (loadingVideoId == track.videoId) return
+        if (loadingVideoId == track.videoId && loadJob?.isActive == true) return
+        loadJob?.cancel()
         loadingVideoId = track.videoId
 
-        scope.launch {
-            // The queue is only usable if the track is actually in it. It may
-            // not be: the queue and the track are two controls, and between them
-            // the party holds a new running order with the old song still
-            // current. `indexOfFirst(...).coerceAtLeast(0)` turned that
-            // not-found into index 0 and played whatever happened to be first —
-            // a different song entirely, with nothing on screen to explain it.
-            // Falling back to the track alone is always right; falling back to
-            // position zero never is.
-            val partyQueue = party.queue.items
-            val index = partyQueueIndexOf(party.queue, party.playback, track.videoId)
-            val queue = if (index >= 0) partyQueue else listOf(track)
-            val startIndex = if (index >= 0) index else 0
-            // Off the main thread: building an item resolves artwork sizes and
-            // asks [com.music.bitchord.download.Downloads] whether each track is
-            // already on disk, which is a stat per downloaded song. See
-            // [MediaController.playSongs], which moves it for the same reason.
-            val items = withContext(Dispatchers.Default) { queue.map { it.toSong().toMediaItem() } }
-            val exo = player()
-            if (exo == null) {
-                // Nothing was applied, so the next tick has to be free to try
-                // again rather than believing this track is already on its way.
-                loadingVideoId = null
-                return@launch
+        loadJob = scope.launch {
+            try {
+                // The queue is only usable if the track is actually in it. It may
+                // not be: the queue and the track are two controls, and between them
+                // the party holds a new running order with the old song still
+                // current. `indexOfFirst(...).coerceAtLeast(0)` turned that
+                // not-found into index 0 and played whatever happened to be first —
+                // a different song entirely, with nothing on screen to explain it.
+                // Falling back to the track alone is always right; falling back to
+                // position zero never is.
+                val partyQueue = party.queue.items
+                val index = partyQueueIndexOf(party.queue, party.playback, track.videoId)
+                val queue = if (index >= 0) partyQueue else listOf(track)
+                val startIndex = if (index >= 0) index else 0
+                // Off the main thread: building an item resolves artwork sizes and
+                // asks [com.music.bitchord.download.Downloads] whether each track is
+                // already on disk, which is a stat per downloaded song. See
+                // [MediaController.playSongs], which moves it for the same reason.
+                val items = withContext(Dispatchers.Default) { queue.map { it.toSong().toMediaItem() } }
+                val latestParty = ListenTogether.state.value
+                if (!isActive || !latestParty.inParty || latestParty.playback.track?.videoId != track.videoId) {
+                    return@launch
+                }
+                val exo = player()
+                if (exo == null) {
+                    // Nothing was applied, so the next tick has to be free to try
+                    // again rather than believing this track is already on its way.
+                    return@launch
+                }
+                // Read after the build, not before: assembling a long queue takes
+                // real time, and the party's playhead has moved on by exactly that
+                // much. Taken beforehand, every track change would start this device
+                // a little behind and then be hauled forward by a correcting seek.
+                val startAt = ListenTogether.partyPositionMs() ?: latestParty.playback.positionMs
+                exo.setMediaItems(items, startIndex, startAt)
+                exo.prepare()
+                // Not started here even when the party is playing: the resume may be
+                // scheduled a moment out, and [reconcile] owns that wait. Preparing
+                // now is what makes this device ready to hit that instant.
+                //
+                // Nor started on an unmeasured clock, which is the state a device
+                // joining a playing party is in: [ListenTogether.partyPositionMs]
+                // falls back to the server's reading at the moment it sent the frame
+                // and [ListenTogether.msUntilStart] answers 0, so starting here would
+                // begin at a position nobody has checked. The track is loaded and on
+                // screen either way; the pong is moments out, and the [reconcile]
+                // below starts it the instant the clock lands.
+                if (latestParty.playback.isPlaying &&
+                    latestParty.clockSynced &&
+                    ListenTogether.msUntilStart() <= 0L
+                ) {
+                    exo.play()
+                }
+                reconcile()
+            } finally {
+                if (loadingVideoId == track.videoId) {
+                    loadingVideoId = null
+                }
             }
-            // Read after the build, not before: assembling a long queue takes
-            // real time, and the party's playhead has moved on by exactly that
-            // much. Taken beforehand, every track change would start this device
-            // a little behind and then be hauled forward by a correcting seek.
-            val startAt = ListenTogether.partyPositionMs() ?: party.playback.positionMs
-            exo.setMediaItems(items, startIndex, startAt)
-            exo.prepare()
-            // Not started here even when the party is playing: the resume may be
-            // scheduled a moment out, and [reconcile] owns that wait. Preparing
-            // now is what makes this device ready to hit that instant.
-            //
-            // Nor started on an unmeasured clock, which is the state a device
-            // joining a playing party is in: [ListenTogether.partyPositionMs]
-            // falls back to the server's reading at the moment it sent the frame
-            // and [ListenTogether.msUntilStart] answers 0, so starting here would
-            // begin at a position nobody has checked. The track is loaded and on
-            // screen either way; the pong is moments out, and the [reconcile]
-            // below starts it the instant the clock lands.
-            if (party.playback.isPlaying &&
-                party.clockSynced &&
-                ListenTogether.msUntilStart() <= 0L
-            ) {
-                exo.play()
-            }
-            reconcile()
         }
     }
 
@@ -973,6 +989,8 @@ class PartySync(
     private fun onLeftParty() {
         Log.i(TAG, "left party, restoring personal queue if stashed")
         restoreBaseSpeed(player())
+        loadJob?.cancel()
+        loadJob = null
         loadingVideoId = null
         focusLost = false
         rejoining = false

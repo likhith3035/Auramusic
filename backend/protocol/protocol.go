@@ -61,7 +61,6 @@ const (
 	ActionSetHostOnlyControl = "setHostOnlyControl"
 	ActionSetAuxMember = "setAuxMember"
 	ActionClearAuxMember = "clearAuxMember"
-	ActionDevElevate     = "devElevate"
 )
 
 // ControlActions are the actions a party's HostOnlyControl setting restricts to
@@ -85,12 +84,13 @@ var ControlActions = map[string]bool{
 
 // JoinRequest is the identity submitted when creating or joining a party.
 type JoinRequest struct {
-	UserId      string  `json:"userId"`
-	DeviceId    string  `json:"deviceId"`
-	DisplayName string  `json:"displayName"`
-	AvatarUrl   *string `json:"avatarUrl,omitempty"`
-	MaxMembers  *int    `json:"maxMembers,omitempty"`
-	AutoplayEnabled *bool `json:"autoplayEnabled,omitempty"`
+	UserId          string  `json:"userId"`
+	DeviceId        string  `json:"deviceId"`
+	DisplayName     string  `json:"displayName"`
+	AvatarUrl       *string `json:"avatarUrl,omitempty"`
+	PriorToken      *string `json:"priorToken,omitempty"`
+	MaxMembers      *int    `json:"maxMembers,omitempty"`
+	AutoplayEnabled *bool   `json:"autoplayEnabled,omitempty"`
 }
 
 // Validate ensures all required identity fields are present and safe.

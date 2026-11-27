@@ -108,19 +108,16 @@ class PartyHostOnlyControlTest {
     }
 
     @Test
-    fun `secret developer command triggers elevation workflow`() {
-        val trigger = "likhith3035."
-        assertTrue(trigger.trim().equals("likhith3035.", ignoreCase = true))
-
-        val dob1 = "29 07 2005".filter(Char::isDigit)
-        val dob2 = "29072005".filter(Char::isDigit)
-        val dob3 = "29-07-2005".filter(Char::isDigit)
-        assertEquals("29072005", dob1)
-        assertEquals("29072005", dob2)
-        assertEquals("29072005", dob3)
-
-        val confirm = "iam".trim().lowercase()
-        assertEquals("iam", confirm)
+    fun `join request preserves priorToken when reconnecting`() {
+        val req = com.music.bitchord.data.listentogether.JoinRequest(
+            userId = "u1",
+            deviceId = "d1",
+            displayName = "Host",
+            priorToken = "tok-123",
+        )
+        val encoded = json.encodeToString(com.music.bitchord.data.listentogether.JoinRequest.serializer(), req)
+        val decoded = json.decodeFromString(com.music.bitchord.data.listentogether.JoinRequest.serializer(), encoded)
+        assertEquals("tok-123", decoded.priorToken)
     }
 
     @Test

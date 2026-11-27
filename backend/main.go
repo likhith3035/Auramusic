@@ -32,6 +32,7 @@ var (
 	store    = party.NewPartyStore()
 	hubInst  = hub.NewHub()
 	createLimiter = newIPRateLimiter(time.Minute, config.CreateRatePerMinute, config.RateLimitMaxEntries)
+	joinLimiter   = newIPRateLimiter(time.Minute, config.JoinRatePerMinute, config.RateLimitMaxEntries)
 	presenceTracker = presence.NewTracker(
 		time.Duration(config.PresenceIntervalSec+config.PresenceGraceSec)*time.Second,
 		config.PresenceMaxEntries,
@@ -1095,6 +1096,10 @@ func handleCreateParty(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleJoinParty(w http.ResponseWriter, r *http.Request) {
+	if !joinLimiter.Allow(clientIP(r)) {
+		jsonError(w, http.StatusTooManyRequests, "join_rate_limited", "Too many party join attempts. Please try again shortly.")
+		return
+	}
 	code := r.PathValue("code")
 	var req protocol.JoinRequest
 	if !decodeJSONBody(w, r, &req) {
@@ -1115,8 +1120,12 @@ func handleJoinParty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	priorToken := ""
+	if req.PriorToken != nil {
+		priorToken = strings.TrimSpace(*req.PriorToken)
+	}
 	p.Lock()
-	m, err := p.Join(req.UserId, req.DeviceId, req.DisplayName, req.AvatarUrl)
+	m, err := p.JoinWithToken(req.UserId, req.DeviceId, req.DisplayName, req.AvatarUrl, priorToken)
 	if err != nil {
 		p.Unlock()
 		if pe, ok := err.(*party.PartyError); ok {
@@ -1859,15 +1868,30 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type socketBroadcast struct {
+	payload interface{}
+	skip    string
+}
+
+type socketDirect struct {
+	targetID string
+	payload  interface{}
+	close    bool
+}
+
 func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, frame map[string]interface{}) {
 	kind, _ := frame["type"].(string)
 	if kind == "" {
 		return
 	}
 
+	var reply interface{}
+	var broadcasts []socketBroadcast
+	var directs []socketDirect
+
 	p.Lock()
-	defer p.Unlock()
 	if !p.SpendFrameBudget(member) {
+		p.Unlock()
 		_ = sc.WriteJSON(map[string]interface{}{
 			"type": protocol.FrameError, "error": "rate_limited", "message": "Too many messages at once.",
 		})
@@ -1878,17 +1902,17 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 
 	switch kind {
 	case protocol.FramePing:
-		_ = sc.WriteJSON(map[string]interface{}{
+		reply = map[string]interface{}{
 			"type":     protocol.FramePong,
 			"clientMs": frame["clientMs"],
 			"serverMs": clock.NowMs(),
-		})
+		}
 
 	case protocol.FrameSync:
-		_ = sc.WriteJSON(stateFrame(p))
+		reply = stateFrame(p)
 
 	case protocol.FrameSyncQueue:
-		_ = sc.WriteJSON(queueFrame(p))
+		reply = queueFrame(p)
 
 	case protocol.FrameReport:
 		// Playhead position report from client for monitoring
@@ -1901,156 +1925,224 @@ func handleSocketFrame(p *party.Party, member *party.Member, sc *hub.SafeConn, f
 
 	case protocol.FrameControl:
 		if !p.SpendControlBudget(member) {
-			_ = sc.WriteJSON(map[string]interface{}{
+			reply = map[string]interface{}{
 				"type":    protocol.FrameError,
 				"error":   "rate_limited",
 				"message": "Too many controls at once.",
-			})
-			return
+			}
+			break
 		}
 
 		queueBefore := p.Playback.QueueSeq
 		action, _ := frame["action"].(string)
-		success, errCode, errMsg := applyControl(p, member, action, frame)
+		success, errCode, errMsg, kickTarget := applyControl(p, member, action, frame)
 		if success {
 			p.Touch()
-			// If queue changed, broadcast queue first
-			if p.Playback.QueueSeq != queueBefore {
-				hubInst.Broadcast(p.Code, queueFrame(p), "")
+			if kickTarget != "" {
+				directs = append(directs, socketDirect{
+					targetID: kickTarget,
+					payload: map[string]interface{}{
+						"type":    protocol.FrameBye,
+						"reason":  "kicked",
+						"message": "The host removed you from this party.",
+					},
+					close: true,
+				})
 			}
-			hubInst.Broadcast(p.Code, stateFrame(p), "")
+			if p.Playback.QueueSeq != queueBefore {
+				broadcasts = append(broadcasts, socketBroadcast{payload: queueFrame(p)})
+			}
+			broadcasts = append(broadcasts, socketBroadcast{payload: stateFrame(p)})
 			if action == protocol.ActionKick ||
 				action == protocol.ActionSetMaxMembers ||
 				action == protocol.ActionSetHostOnlyControl ||
 				action == protocol.ActionSetAuxMember ||
-				action == protocol.ActionClearAuxMember ||
-				action == protocol.ActionDevElevate {
-				hubInst.Broadcast(p.Code, membersFrame(p), "")
+				action == protocol.ActionClearAuxMember {
+				broadcasts = append(broadcasts, socketBroadcast{payload: membersFrame(p)})
 			}
-			hubInst.Broadcast(p.Code, activityFrame(member, action, frame), "")
+			broadcasts = append(broadcasts, socketBroadcast{payload: activityFrame(member, action, frame)})
 		} else if errCode != "" {
-			_ = sc.WriteJSON(map[string]interface{}{
+			reply = map[string]interface{}{
 				"type":    protocol.FrameError,
 				"error":   errCode,
 				"message": errMsg,
-			})
+			}
 		}
 
 	case protocol.FrameTyping:
 		isTyping, _ := frame["isTyping"].(bool)
-		hubInst.Broadcast(p.Code, map[string]interface{}{
-			"type":       protocol.FrameTyping,
-			"senderId":   member.MemberId,
-			"senderName": member.DisplayName,
-			"isTyping":   isTyping,
-		}, member.MemberId)
+		broadcasts = append(broadcasts, socketBroadcast{
+			payload: map[string]interface{}{
+				"type":       protocol.FrameTyping,
+				"senderId":   member.MemberId,
+				"senderName": member.DisplayName,
+				"isTyping":   isTyping,
+			},
+			skip: member.MemberId,
+		})
 
 	case protocol.FrameChat:
-		// Check for Democracy Queue auto-enqueue on upvoted songs
-		if songMap, ok := frame["song"].(map[string]interface{}); ok && songMap != nil {
-			autoQueued, _ := frame["autoQueued"].(bool)
-			upvotes, _ := frame["upvotes"].(float64)
-			if int(upvotes) >= 2 && !autoQueued {
-				track := party.TrackFromWire(map[string]interface{}{
-					"videoId":      songMap["videoId"],
-					"title":        songMap["title"],
-					"artist":       songMap["artist"],
-					"thumbnailUrl": songMap["coverUrl"],
-					"durationMs":   songMap["durationSec"],
-				})
-				if track != nil {
-					ok, _ := p.Playback.AddUpcoming(&member.MemberId, []*party.Track{track}, false)
-					if ok {
-						frame["autoQueued"] = true
-						p.Touch()
-						hubInst.Broadcast(p.Code, queueFrame(p), "")
-						hubInst.Broadcast(p.Code, stateFrame(p), "")
-						act := activityFrame(member, "democracy_queue", map[string]interface{}{
-							"detail": fmt.Sprintf("Auto-queued \"%s\" (%d upvotes)", track.Title, int(upvotes)),
-						})
-						hubInst.Broadcast(p.Code, act, "")
-					}
-				}
+		sanitized, autoTrack, ok := p.ApplyChatFrame(member, frame)
+		if ok {
+			p.Touch()
+			if autoTrack != nil {
+				broadcasts = append(broadcasts,
+					socketBroadcast{payload: queueFrame(p)},
+					socketBroadcast{payload: stateFrame(p)},
+					socketBroadcast{payload: activityFrame(member, "democracy_queue", map[string]interface{}{
+						"detail": fmt.Sprintf("Auto-queued \"%s\"", autoTrack.Title),
+					})},
+				)
 			}
+			totalChatMessages.Add(1)
+			broadcasts = append(broadcasts, socketBroadcast{payload: sanitized})
 		}
-		// Broadcast in-party chat message / song suggestion to all connected members
-		totalChatMessages.Add(1)
-		hubInst.Broadcast(p.Code, frame, "")
 
 	case protocol.FrameClientChatDelete:
-		// Broadcast in-party chat message deletion to all connected members
-		totalChatMessages.Add(1)
-		hubInst.Broadcast(p.Code, frame, "")
+		id, _ := frame["id"].(string)
+		if p.DeleteChatMessage(id, member) {
+			p.Touch()
+			totalChatMessages.Add(1)
+			broadcasts = append(broadcasts, socketBroadcast{
+				payload: map[string]interface{}{
+					"type":     protocol.FrameChatDelete,
+					"id":       id,
+					"senderId": member.MemberId,
+				},
+			})
+		} else {
+			reply = map[string]interface{}{
+				"type":    protocol.FrameError,
+				"error":   "forbidden",
+				"message": "Only the message author or host can delete that message.",
+			}
+		}
 
 	case protocol.FrameReaction:
 		reactionEmoji, _ := frame["emoji"].(string)
-		if reactionEmoji != "" {
+		if reactionEmoji != "" && len(reactionEmoji) <= 32 {
 			totalChatMessages.Add(1)
-			hubInst.Broadcast(p.Code, map[string]interface{}{
-				"type":        protocol.FrameReaction,
-				"emoji":       reactionEmoji,
-				"senderId":    member.MemberId,
-				"senderName":  member.DisplayName,
-				"timestampMs": clock.NowMs(),
-			}, "")
+			broadcasts = append(broadcasts, socketBroadcast{
+				payload: map[string]interface{}{
+					"type":        protocol.FrameReaction,
+					"emoji":       reactionEmoji,
+					"senderId":    member.MemberId,
+					"senderName":  member.DisplayName,
+					"timestampMs": clock.NowMs(),
+				},
+			})
 		}
 
 	case protocol.FrameSoundbite:
 		sound, _ := frame["sound"].(string)
-		if sound != "" {
+		if sound != "" && len(sound) <= 64 {
 			totalChatMessages.Add(1)
-			hubInst.Broadcast(p.Code, map[string]interface{}{
-				"type":        protocol.FrameSoundbite,
-				"sound":       sound,
-				"senderId":    member.MemberId,
-				"senderName":  member.DisplayName,
-				"timestampMs": clock.NowMs(),
-			}, "")
+			broadcasts = append(broadcasts, socketBroadcast{
+				payload: map[string]interface{}{
+					"type":        protocol.FrameSoundbite,
+					"sound":       sound,
+					"senderId":    member.MemberId,
+					"senderName":  member.DisplayName,
+					"timestampMs": clock.NowMs(),
+				},
+			})
 		}
 
 	case protocol.FrameVoteSkip:
 		active, needed, reached := p.ToggleSkipVote(member.MemberId)
-		skipStateFrame := map[string]interface{}{
-			"type":        protocol.FrameVoteSkip,
-			"activeVotes": active,
-			"totalNeeded": needed,
-			"voterId":     member.MemberId,
-		}
-		hubInst.Broadcast(p.Code, skipStateFrame, "")
+		broadcasts = append(broadcasts, socketBroadcast{
+			payload: map[string]interface{}{
+				"type":        protocol.FrameVoteSkip,
+				"activeVotes": active,
+				"totalNeeded": needed,
+				"voterId":     member.MemberId,
+			},
+		})
 		if reached {
-			// Room reached majority (>50%) veto threshold! Skip to next track
-			applyControl(p, member, protocol.ActionNext, frame)
-			p.ClearSkipVotes()
-			p.Touch()
-			hubInst.Broadcast(p.Code, stateFrame(p), "")
+			success, _, _, _ := applyControl(p, member, protocol.ActionNext, frame)
+			if success {
+				p.ClearSkipVotes()
+				p.Touch()
+				broadcasts = append(broadcasts, socketBroadcast{payload: stateFrame(p)})
+			}
 		}
 
 	case protocol.FrameSyncEq:
-		// Broadcast host soundstage & visualizer theme
-		hubInst.Broadcast(p.Code, frame, "")
+		if !p.MayControl(member) {
+			reply = map[string]interface{}{
+				"type":    protocol.FrameError,
+				"error":   "host_only",
+				"message": "Only the host can change the party EQ theme.",
+			}
+			break
+		}
+		presetName, _ := frame["presetName"].(string)
+		palette, _ := frame["palette"].(string)
+		if len(presetName) > 64 {
+			presetName = presetName[:64]
+		}
+		if len(palette) > 64 {
+			palette = palette[:64]
+		}
+		broadcasts = append(broadcasts, socketBroadcast{
+			payload: map[string]interface{}{
+				"type":       protocol.FrameSyncEq,
+				"presetName": presetName,
+				"palette":    palette,
+				"senderId":   member.MemberId,
+			},
+		})
 
 	case protocol.FrameClientGodAnnouncement:
-		// Broadcast developer / founder room-wide god announcement
-		announcementText, _ := frame["message"].(string)
-		senderName, _ := frame["senderName"].(string)
-		if announcementText != "" {
-			hubInst.Broadcast(p.Code, map[string]interface{}{
-				"type":        protocol.FrameGodAnnouncement,
-				"message":     announcementText,
-				"senderName":  senderName,
-				"timestampMs": clock.NowMs(),
-			}, "")
+		if !member.IsHost {
+			reply = map[string]interface{}{
+				"type":    protocol.FrameError,
+				"error":   "host_only",
+				"message": "Only the host can broadcast room announcements.",
+			}
+			break
 		}
+		announcementText, _ := frame["message"].(string)
+		announcementText = strings.TrimSpace(announcementText)
+		if announcementText != "" {
+			if len(announcementText) > 500 {
+				announcementText = announcementText[:500]
+			}
+			broadcasts = append(broadcasts, socketBroadcast{
+				payload: map[string]interface{}{
+					"type":        protocol.FrameGodAnnouncement,
+					"message":     announcementText,
+					"senderName":  member.DisplayName,
+					"timestampMs": clock.NowMs(),
+				},
+			})
+		}
+	}
+	p.Unlock()
+
+	if reply != nil {
+		_ = sc.WriteJSON(reply)
+	}
+	for _, d := range directs {
+		if d.payload != nil {
+			hubInst.Send(p.Code, d.targetID, d.payload)
+		}
+		if d.close {
+			hubInst.CloseMember(p.Code, d.targetID)
+		}
+	}
+	for _, b := range broadcasts {
+		hubInst.Broadcast(p.Code, b.payload, b.skip)
 	}
 }
 
-func applyControl(p *party.Party, member *party.Member, action string, frame map[string]interface{}) (bool, string, string) {
+func applyControl(p *party.Party, member *party.Member, action string, frame map[string]interface{}) (bool, string, string, string) {
 	// Enforced here rather than left to the clients. An app that hides its own
 	// next button is a courtesy; this is what actually stops a listener's
 	// device — a stale build, a backgrounded one still echoing an old intent,
 	// or something else entirely — from moving the music for everybody.
 	if protocol.ControlActions[action] && !p.MayControl(member) {
-		return false, "host_only", "Only the host can control the music in this party."
+		return false, "host_only", "Only the host can control the music in this party.", ""
 	}
 
 	var posPtr *int64
@@ -2062,24 +2154,24 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 	switch action {
 	case protocol.ActionPlay:
 		p.Playback.Play(&member.MemberId, posPtr)
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionPause:
 		p.Playback.Pause(&member.MemberId, posPtr)
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSeek:
 		if posPtr == nil {
-			return false, "missing_position", "seek requires positionMs"
+			return false, "missing_position", "seek requires positionMs", ""
 		}
 		p.Playback.Seek(&member.MemberId, *posPtr)
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetTrack:
 		trackMap, _ := frame["track"].(map[string]interface{})
 		t := party.TrackFromWire(trackMap)
 		if t == nil {
-			return false, "invalid_track", "Track must include videoId"
+			return false, "invalid_track", "Track must include videoId", ""
 		}
 		pos := int64(0)
 		if posPtr != nil {
@@ -2096,7 +2188,7 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 		}
 		p.Playback.SetTrack(&member.MemberId, t, pos, isPlaying, qIndexPtr, &member.DisplayName)
 		p.ClearSkipVotes()
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetQueue:
 		itemsRaw, _ := frame["queue"].([]interface{})
@@ -2113,7 +2205,7 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 			qIdx = int(idxNum)
 		}
 		p.Playback.SetQueue(&member.MemberId, tracks, qIdx)
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionQueueAdd:
 		var tracksToAdd []*party.Track
@@ -2134,11 +2226,11 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 		ok, reason := p.Playback.AddUpcoming(&member.MemberId, tracksToAdd, playNext)
 		if !ok {
 			if reason == "queue_full" {
-				return false, "queue_full", fmt.Sprintf("Queue is full (maximum %d upcoming songs).", config.MaxUpcomingQueue)
+				return false, "queue_full", fmt.Sprintf("Queue is full (maximum %d upcoming songs).", config.MaxUpcomingQueue), ""
 			}
-			return false, reason, "Could not add track to queue."
+			return false, reason, "Could not add track to queue.", ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionQueueRemove:
 		vid, _ := frame["videoId"].(string)
@@ -2151,131 +2243,101 @@ func applyControl(p *party.Party, member *party.Member, action string, frame map
 			}
 		}
 		if vid == "" {
-			return false, "missing_track", "queueRemove requires videoId or index"
+			return false, "missing_track", "queueRemove requires videoId or index", ""
 		}
 		if !p.Playback.RemoveUpcoming(&member.MemberId, vid) {
-			return false, "not_found", "Track is not in the upcoming queue"
+			return false, "not_found", "Track is not in the upcoming queue", ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionQueueClear:
 		if !p.Playback.ClearUpcoming(&member.MemberId) {
-			return false, "no_upcoming", "No upcoming tracks to clear"
+			return false, "no_upcoming", "No upcoming tracks to clear", ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionQueueMove:
 		fromNum, okFrom := frame["fromIndex"].(float64)
 		toNum, okTo := frame["toIndex"].(float64)
 		if !okFrom || !okTo {
-			return false, "missing_indices", "queueMove requires fromIndex and toIndex"
+			return false, "missing_indices", "queueMove requires fromIndex and toIndex", ""
 		}
 		var videoId string
 		if v, ok := frame["videoId"].(string); ok {
 			videoId = v
 		}
 		if !p.Playback.MoveUpcoming(&member.MemberId, int(fromNum), int(toNum), videoId) {
-			return false, "invalid_move", "Invalid queue move indices"
+			return false, "invalid_move", "Invalid queue move indices", ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionNext:
 		if !p.Playback.Step(&member.MemberId, 1, &member.DisplayName) {
-			return false, "end_of_queue", "Already at the end of the queue."
+			return false, "end_of_queue", "Already at the end of the queue.", ""
 		}
 		p.ClearSkipVotes()
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionPrevious:
 		if !p.Playback.Step(&member.MemberId, -1, &member.DisplayName) {
-			return false, "start_of_queue", "Already at the beginning of the queue."
+			return false, "start_of_queue", "Already at the beginning of the queue.", ""
 		}
 		p.ClearSkipVotes()
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetMaxMembers:
 		value, ok := frame["maxMembers"].(float64)
-		if !ok { return false, "invalid_capacity", "Choose a party size between 2 and 10." }
+		if !ok { return false, "invalid_capacity", "Choose a party size between 2 and 10.", "" }
 		if err := p.SetMaxMembers(member, int(value)); err != nil {
 			pe := err.(*party.PartyError)
-			return false, pe.Code, pe.Message
+			return false, pe.Code, pe.Message, ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetAutoplay:
 		enabled, ok := frame["enabled"].(bool)
 		if !ok {
-			return false, "invalid_autoplay", "AutoPlay must be enabled or disabled."
+			return false, "invalid_autoplay", "AutoPlay must be enabled or disabled.", ""
 		}
 		p.Playback.SetAutoplay(&member.MemberId, enabled)
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetHostOnlyControl:
 		enabled, ok := frame["enabled"].(bool)
 		if !ok {
-			return false, "invalid_control_policy", "Host-only control must be enabled or disabled."
+			return false, "invalid_control_policy", "Host-only control must be enabled or disabled.", ""
 		}
 		if err := p.SetHostOnlyControl(member, enabled); err != nil {
 			pe := err.(*party.PartyError)
-			return false, pe.Code, pe.Message
+			return false, pe.Code, pe.Message, ""
 		}
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionSetAuxMember:
-		if !member.IsHost { return false, "host_only", "Only the host can pass the AUX." }
+		if !member.IsHost { return false, "host_only", "Only the host can pass the AUX.", "" }
 		targetID, _ := frame["memberId"].(string)
 		if targetID != "" {
 			if _, exists := p.Members[targetID]; !exists {
-				return false, "not_found", "Target listener is not in this party."
+				return false, "not_found", "Target listener is not in this party.", ""
 			}
 		}
 		p.AuxMemberId = targetID
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionClearAuxMember:
-		if !member.IsHost { return false, "host_only", "Only the host can reclaim the AUX." }
+		if !member.IsHost { return false, "host_only", "Only the host can reclaim the AUX.", "" }
 		p.AuxMemberId = ""
-		return true, "", ""
+		return true, "", "", ""
 
 	case protocol.ActionKick:
 		targetID, _ := frame["memberId"].(string)
-		if !member.IsHost { return false, "host_only", "Only the host can remove listeners." }
-		if targetID == "" || targetID == member.MemberId { return false, "invalid_member", "Choose another listener to remove." }
-		if p.Remove(targetID) == nil { return false, "not_found", "That listener is no longer in this party." }
-		hubInst.Send(p.Code, targetID, map[string]interface{}{
-			"type":    protocol.FrameBye,
-			"reason":  "kicked",
-			"message": "The host removed you from this party.",
-		})
-		hubInst.CloseMember(p.Code, targetID)
-		return true, "", ""
-
-	case protocol.ActionDevElevate:
-		dob, _ := frame["dob"].(string)
-		nickname, _ := frame["nickname"].(string)
-		confirm, _ := frame["confirm"].(string)
-
-		cleanDob := ""
-		for _, r := range dob {
-			if r >= '0' && r <= '9' {
-				cleanDob += string(r)
-			}
-		}
-		if cleanDob != "29072005" || strings.ToLower(strings.TrimSpace(confirm)) != "iam" {
-			return false, "unauthorized", "Developer verification failed."
-		}
-
-		if strings.TrimSpace(nickname) == "" {
-			nickname = "likki"
-		}
-
-		if !p.ElevateHost(member.MemberId, strings.TrimSpace(nickname)) {
-			return false, "member_not_found", "Failed to elevate member to host."
-		}
-		return true, "", ""
+		if !member.IsHost { return false, "host_only", "Only the host can remove listeners.", "" }
+		if targetID == "" || targetID == member.MemberId { return false, "invalid_member", "Choose another listener to remove.", "" }
+		if p.Remove(targetID) == nil { return false, "not_found", "That listener is no longer in this party.", "" }
+		return true, "", "", targetID
 
 	default:
-		return false, "unknown_action", fmt.Sprintf("Unknown control action '%s'", action)
+		return false, "unknown_action", fmt.Sprintf("Unknown control action '%s'", action), ""
 	}
 }
 
@@ -2321,7 +2383,12 @@ func activityFrame(member *party.Member, action string, frame map[string]interfa
 	case protocol.ActionSetAutoplay: detail = "Changed AutoPlay"
 	case protocol.ActionSetAuxMember: detail = "Passed the AUX DJ controls"
 	case protocol.ActionClearAuxMember: detail = "Reclaimed the AUX controls"
-	case protocol.ActionDevElevate: detail = "Elevated to Host (Developer Access)"
+	case "democracy_queue":
+		if d, ok := frame["detail"].(string); ok && d != "" {
+			detail = d
+		} else {
+			detail = "Auto-queued from chat upvotes"
+		}
 	}
 	return map[string]interface{}{"type": protocol.FrameActivity, "action": action, "by": member.DisplayName, "detail": detail, "atMs": clock.NowMs()}
 }

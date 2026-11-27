@@ -349,9 +349,6 @@ object ListenTogether {
         }
     }
 
-    private val _showDevModal = MutableStateFlow(false)
-    val showDevModal: StateFlow<Boolean> = _showDevModal.asStateFlow()
-
     private val _showDevConsole = MutableStateFlow(false)
     val showDevConsole: StateFlow<Boolean> = _showDevConsole.asStateFlow()
 
@@ -371,15 +368,8 @@ object ListenTogether {
     val roundTripMs: Long get() = clock.roundTripMs
     val isClockSynced: Boolean get() = clock.synced
 
-    fun setShowDevModal(show: Boolean) {
-        _showDevModal.value = show
-    }
-
-    fun dismissDevModal() {
-        _showDevModal.value = false
-    }
-
     fun setShowDevConsole(show: Boolean) {
+        if (show && _state.value.you?.isHost != true && !_state.value.isFounder) return
         _showDevConsole.value = show
     }
 
@@ -392,10 +382,8 @@ object ListenTogether {
     }
 
     fun openDevSuite() {
-        if (_state.value.isFounder) {
+        if (_state.value.you?.isHost == true || _state.value.isFounder) {
             _showDevConsole.value = true
-        } else {
-            _showDevModal.value = true
         }
     }
 
@@ -417,15 +405,15 @@ object ListenTogether {
     }
 
     fun broadcastGodAnnouncement(text: String) {
+        val you = _state.value.you ?: return
+        if (!you.isHost) return
         val trimmed = text.trim()
         if (trimmed.isBlank()) return
-        val you = _state.value.you
-        val sender = you?.displayName?.ifBlank { "Founder" } ?: "Founder"
+        val sender = you.displayName.ifBlank { "Host" }
         val now = clock.nowMs()
         val frame = buildJsonObject {
             put("type", "god_announcement")
             put("message", trimmed)
-            put("senderName", sender)
             put("timestampMs", now)
         }
         send(frame)
@@ -435,7 +423,7 @@ object ListenTogether {
             senderName = sender,
             timestampMs = now,
         )
-        logDev(DevLogTag.SYS, DevLogLevel.SUCCESS, "⚡ Broadcasted God Announcement: $trimmed", sender)
+        logDev(DevLogTag.SYS, DevLogLevel.SUCCESS, "Broadcasted host announcement: $trimmed", sender)
     }
 
     fun forceSyncRoom() {
@@ -493,39 +481,6 @@ object ListenTogether {
         }
     }
 
-    fun devElevate(dob: String, nickname: String, confirm: String): Boolean {
-        val cleanDob = dob.filter { it.isDigit() }
-        if (cleanDob != "29072005" || !confirm.trim().equals("iam", ignoreCase = true)) {
-            return false
-        }
-        val finalNick = nickname.trim().ifEmpty { "likki" }
-        control("devElevate") {
-            put("dob", cleanDob)
-            put("nickname", finalNick)
-            put("confirm", "iam")
-        }
-        _state.update { current ->
-            current.copy(
-                you = current.you?.copy(
-                    displayName = finalNick,
-                    isHost = true,
-                    isFounder = true
-                ),
-                members = current.members.map { m ->
-                    if (m.memberId == current.you?.memberId) {
-                        m.copy(displayName = finalNick, isHost = true, isFounder = true)
-                    } else {
-                        m.copy(isHost = false)
-                    }
-                }
-            )
-        }
-        _showDevModal.value = false
-        _showDevConsole.value = true
-        logDev(DevLogTag.SYS, DevLogLevel.SUCCESS, "⚡ Elevated developer access granted for $finalNick", "Auth")
-        return true
-    }
-
     private val _typingUsers = MutableStateFlow<List<String>>(emptyList())
     val typingUsers: StateFlow<List<String>> = _typingUsers.asStateFlow()
 
@@ -566,7 +521,7 @@ object ListenTogether {
                         else -> 0f
                     }
                 } ?: 0f
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 0f
             }
 
@@ -852,7 +807,7 @@ object ListenTogether {
     const val CUSTOM_SERVER_TIMEOUT_MS = 6_000L
     const val DEFAULT_SERVER_TIMEOUT_MS = 45_000L
 
-    private var isScreenActive: Boolean = false
+    @Volatile private var isScreenActive: Boolean = false
     private var healthMonitorJob: Job? = null
     private val resolutionMutex = Mutex()
     private var activeResolutionJob: Job? = null
@@ -1014,7 +969,7 @@ object ListenTogether {
     }
 
     private lateinit var prefs: SharedPreferences
-    private var token: String? = null
+    @Volatile private var token: String? = null
 
     @Volatile
     private var session: DefaultClientWebSocketSession? = null
@@ -1144,6 +1099,7 @@ object ListenTogether {
         }
 
         if (attempt.isSuccess) {
+            com.music.bitchord.data.telemetry.AuraAnalytics.trackFeatureUsed("listen_together_create")
             return@withLock Result.success(attempt.getOrThrow())
         }
 
@@ -1173,7 +1129,11 @@ object ListenTogether {
         val membership = post(
             "$serverBase/api/parties",
             JoinRequest(
-                who.userId, who.deviceId, who.name, who.avatar, maxMembers,
+                userId = who.userId,
+                deviceId = who.deviceId,
+                displayName = who.name,
+                avatarUrl = who.avatar,
+                maxMembers = maxMembers,
                 autoplayEnabled = AppSettings.autoplay.value,
             ),
         )
@@ -1216,6 +1176,8 @@ object ListenTogether {
         val targetServer = resolveHttpBase(effectiveIdleServerBase())
         runCatching {
             doJoinOnServer(targetServer, code, nickname)
+        }.onSuccess {
+            com.music.bitchord.data.telemetry.AuraAnalytics.trackFeatureUsed("listen_together_join")
         }.onFailure { failure ->
             Log.w(TAG, "could not enter a party: ${redact(failure.message)}")
             _state.update { it.copy(error = failure.displayMessage()) }
@@ -1230,9 +1192,12 @@ object ListenTogether {
             throw PartyException("bad_code", "A party code is six letters or digits.")
         }
         refuseIfRecentlyKicked(cleaned)
+        val matchingPriorToken = token?.takeIf { _state.value.code.equals(cleaned, ignoreCase = true) }
+            ?: prefs.getString(KEY_CODE, null)?.takeIf { it.equals(cleaned, ignoreCase = true) }
+                ?.let { prefs.getString(KEY_TOKEN, null) }
         val membership = post(
             "$serverBase/api/parties/$cleaned/join",
-            JoinRequest(who.userId, who.deviceId, who.name, who.avatar),
+            JoinRequest(who.userId, who.deviceId, who.name, who.avatar, priorToken = matchingPriorToken),
         )
 
         withContext(NonCancellable) {
@@ -1335,10 +1300,13 @@ object ListenTogether {
             val oldToken = token
 
             // Step 1: Join Target First while old party stays connected & playing
+            val matchingPriorToken = oldToken?.takeIf {
+                oldServerBase == targetBase && oldCode.equals(cleanedTargetCode, ignoreCase = true)
+            }
             val targetJoinResult = runCatching {
                 post(
                     "$targetBase/api/parties/$cleanedTargetCode/join",
-                    JoinRequest(who.userId, who.deviceId, who.name, who.avatar),
+                    JoinRequest(who.userId, who.deviceId, who.name, who.avatar, priorToken = matchingPriorToken),
                 )
             }
 
@@ -1369,8 +1337,9 @@ object ListenTogether {
                 // Commit active party server authority
                 activePartyServerBase = targetBase
 
-                // Commit new server URL setting
-                setCustomServerUrl(normTarget)
+                // Commit new server URL setting without holding switchMutex across /healthz probes
+                prefs.edit().putString(KEY_SERVER, normTarget).apply()
+                _customServer.value = normTarget
 
                 // Commit new party session
                 token = membership.token
@@ -1390,7 +1359,8 @@ object ListenTogether {
                 )
             }
 
-            // Outside NonCancellable: establish socket connection
+            // Outside NonCancellable: refresh server health asynchronously and establish socket connection
+            refreshServerHealth(showChecking = true)
             connect()
 
             SwitchPartyResult.Success(membership.code)
@@ -1508,15 +1478,11 @@ object ListenTogether {
         imageUrl: String? = null,
     ) {
         val trimmed = text.trim()
-        if (trimmed == "likhith3035." || trimmed == "likhith3035" || trimmed == ".likhith3035") {
-            openDevSuite()
-            return
-        }
         val you = _state.value.you ?: return
         if (trimmed.isEmpty() && song == null && imageUrl.isNullOrBlank()) return
         val id = UUID.randomUUID().toString()
         val now = clock.nowMs()
-        val isFounder = you.isFounder || you.displayName.equals("likki", ignoreCase = true)
+        val isFounder = you.isFounder
         val localMsg = PartyChatMessage(
             id = id,
             senderId = you.memberId,
@@ -1570,28 +1536,11 @@ object ListenTogether {
         val alreadyUpvoted = currentMsg.upvoterIds.contains(you.memberId)
         val newUpvoters = if (alreadyUpvoted) currentMsg.upvoterIds - you.memberId else currentMsg.upvoterIds + you.memberId
         val newVotes = newUpvoters.size
-        val shouldAutoQueue = newVotes >= 2 && !currentMsg.autoQueued && currentMsg.song != null
         val updated = currentMsg.copy(
             upvotes = newVotes,
             upvoterIds = newUpvoters,
-            autoQueued = currentMsg.autoQueued || shouldAutoQueue
         )
         sendChatUpdateFrame(updated)
-
-        if (shouldAutoQueue) {
-            val song = currentMsg.song
-            if (song != null) {
-                val track = PartyTrack(
-                    videoId = song.videoId,
-                    title = song.title,
-                    artist = song.artist,
-                    thumbnailUrl = song.coverUrl,
-                    durationMs = song.durationSec?.let { it * 1000L },
-                    fromAutoplay = false
-                )
-                queueAdd(listOf(track), playNext = false)
-            }
-        }
     }
 
     fun reactToChatMessage(messageId: String, emoji: String) {

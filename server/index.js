@@ -1,42 +1,185 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'stats.json');
+const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+);
+const UUID_V4_OR_V1_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const MAX_DAILY_DAYS = 90;
+const MAX_ALL_TIME_DEVICES = 500000;
 
-app.use(cors());
-app.use(express.json());
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(express.json({ limit: '4kb' }));
+
+function createNullDict() {
+  return Object.create(null);
+}
+
+function isSafeKey(key) {
+  return typeof key === 'string' && key.length > 0 && !FORBIDDEN_KEYS.has(key);
+}
+
+function copyIntoNullDict(source) {
+  const out = createNullDict();
+  if (!source || typeof source !== 'object') return out;
+  for (const [k, v] of Object.entries(source)) {
+    if (isSafeKey(k)) out[k] = v;
+  }
+  return out;
+}
+
+// Per-IP fixed-window rate limiter
+function createRateLimiter(windowMs, maxRequests) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    let entry = hits.get(ip);
+    if (!entry || now >= entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs };
+      hits.set(ip, entry);
+      if (hits.size > 10000) {
+        for (const [k, v] of hits) {
+          if (now >= v.resetAt) hits.delete(k);
+        }
+      }
+    }
+    entry.count += 1;
+    if (entry.count > maxRequests) {
+      return res.status(429).json({ error: 'Too many requests' });
+    }
+    next();
+  };
+}
+
+const heartbeatLimiter = createRateLimiter(60_000, 20);
+const adminLimiter = createRateLimiter(60_000, 60);
+
+const adminCors = cors({
+  origin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+});
+
+function isLoopbackIp(req) {
+  const ip = (req.ip || req.socket?.remoteAddress || '').toLowerCase();
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+function constantTimeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_TOKEN) {
+    if (isLoopbackIp(req)) return next();
+    return res.status(503).json({ error: 'Admin access disabled: ADMIN_TOKEN not configured' });
+  }
+  const authHeader = String(req.headers.authorization || '');
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const candidate = bearer || String(req.headers['x-admin-token'] || '').trim();
+  if (!candidate || !constantTimeEquals(candidate, ADMIN_TOKEN)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
 // Load or initialize stats database
 let db = {
-  allTimeUsers: {},
-  daily: {}, // { "2026-11-11": { total: 0, users: [], versions: {}, platforms: {} } }
+  allTimeUsers: createNullDict(),
+  daily: createNullDict(),
   recentEvents: []
 };
+const dailyUserSets = new Map();
 
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf8');
-      db = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      db.allTimeUsers = copyIntoNullDict(parsed.allTimeUsers);
+      db.daily = createNullDict();
+      for (const [day, record] of Object.entries(parsed.daily || {})) {
+        if (!isSafeKey(day) || !record || typeof record !== 'object') continue;
+        const users = Array.isArray(record.users) ? record.users.filter(id => typeof id === 'string') : [];
+        db.daily[day] = {
+          total: Number(record.total) || users.length,
+          users,
+          versions: copyIntoNullDict(record.versions),
+          platforms: copyIntoNullDict(record.platforms)
+        };
+        dailyUserSets.set(day, new Set(users));
+      }
+      db.recentEvents = Array.isArray(parsed.recentEvents) ? parsed.recentEvents.slice(0, 30) : [];
     }
   } catch (err) {
     console.error('Error loading data file:', err);
   }
 }
 
-function saveData() {
+let pendingSaveTimer = null;
+let saveInFlight = false;
+let saveQueued = false;
+
+async function flushData() {
+  if (saveInFlight) {
+    saveQueued = true;
+    return;
+  }
+  saveInFlight = true;
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf8');
+    const tmpFile = `${DATA_FILE}.tmp`;
+    const payload = JSON.stringify(db, null, 2);
+    await fs.promises.writeFile(tmpFile, payload, 'utf8');
+    await fs.promises.rename(tmpFile, DATA_FILE);
   } catch (err) {
     console.error('Error writing data file:', err);
+  } finally {
+    saveInFlight = false;
+    if (saveQueued) {
+      saveQueued = false;
+      void flushData();
+    }
   }
 }
 
+function scheduleSave() {
+  if (pendingSaveTimer) return;
+  pendingSaveTimer = setTimeout(() => {
+    pendingSaveTimer = null;
+    void flushData();
+  }, 1500);
+}
+
 loadData();
+
+function pruneOldDays() {
+  const keys = Object.keys(db.daily).sort();
+  while (keys.length > MAX_DAILY_DAYS) {
+    const oldest = keys.shift();
+    delete db.daily[oldest];
+    dailyUserSets.delete(oldest);
+  }
+}
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -47,17 +190,21 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'AuraMusic Telemetry', timestamp: new Date().toISOString() });
 });
 
-// JSON API endpoint for stats
-app.get('/api/stats', (req, res) => {
+// JSON API endpoint for stats (protected)
+app.get('/api/stats', adminCors, adminLimiter, requireAdmin, (req, res) => {
   const today = getTodayKey();
-  const todayStats = db.daily[today] || { total: 0, versions: {}, platforms: {} };
-  const allTimeCount = Object.keys(db.allTimeUsers || {}).length;
+  const todayStats = db.daily[today] || { total: 0, versions: createNullDict(), platforms: createNullDict() };
+  const allTimeCount = Object.keys(db.allTimeUsers).length;
 
   res.json({
     activeToday: todayStats.total || 0,
     allTimeDevices: allTimeCount,
-    todayBreakdown: todayStats,
-    dailyHistory: Object.keys(db.daily).slice(-14).map(date => ({
+    todayBreakdown: {
+      total: todayStats.total || 0,
+      versions: todayStats.versions || {},
+      platforms: todayStats.platforms || {}
+    },
+    dailyHistory: Object.keys(db.daily).sort().slice(-14).map(date => ({
       date,
       count: db.daily[date].total || 0
     }))
@@ -65,40 +212,52 @@ app.get('/api/stats', (req, res) => {
 });
 
 // Heartbeat endpoint: called once daily per app installation
-app.post('/api/heartbeat', (req, res) => {
+app.post('/api/heartbeat', heartbeatLimiter, (req, res) => {
   const { installId, version, platform, osVersion } = req.body || {};
 
-  if (!installId || typeof installId !== 'string') {
+  if (!installId || typeof installId !== 'string' || !UUID_V4_OR_V1_RE.test(installId.trim())) {
     return res.status(400).json({ error: 'Missing or invalid installId' });
   }
+  const cleanId = installId.trim().toLowerCase();
 
-  const cleanVersion = (version || 'unknown').slice(0, 20);
-  const cleanPlatform = (platform || 'Android').slice(0, 20);
-  const cleanOs = (osVersion || 'unknown').slice(0, 20);
+  const rawVersion = String(version || 'unknown').trim().slice(0, 20);
+  const rawPlatform = String(platform || 'Android').trim().slice(0, 20);
+  const cleanVersion = isSafeKey(rawVersion) ? rawVersion : 'unknown';
+  const cleanPlatform = isSafeKey(rawPlatform) ? rawPlatform : 'Android';
+  const cleanOs = String(osVersion || 'unknown').trim().slice(0, 20) || 'unknown';
   const today = getTodayKey();
 
-  if (!db.allTimeUsers) db.allTimeUsers = {};
-  if (!db.allTimeUsers[installId]) {
-    db.allTimeUsers[installId] = { firstSeen: today, lastSeen: today };
+  if (!Object.prototype.hasOwnProperty.call(db.allTimeUsers, cleanId)) {
+    if (Object.keys(db.allTimeUsers).length < MAX_ALL_TIME_DEVICES) {
+      db.allTimeUsers[cleanId] = { firstSeen: today, lastSeen: today };
+    }
   } else {
-    db.allTimeUsers[installId].lastSeen = today;
+    db.allTimeUsers[cleanId].lastSeen = today;
   }
 
-  if (!db.daily[today]) {
+  if (!Object.prototype.hasOwnProperty.call(db.daily, today)) {
     db.daily[today] = {
       total: 0,
       users: [],
-      versions: {},
-      platforms: {}
+      versions: createNullDict(),
+      platforms: createNullDict()
     };
+    dailyUserSets.set(today, new Set());
+    pruneOldDays();
   }
 
   const dayRecord = db.daily[today];
+  let daySet = dailyUserSets.get(today);
+  if (!daySet) {
+    daySet = new Set(dayRecord.users || []);
+    dailyUserSets.set(today, daySet);
+  }
 
   // Count user only once per calendar day
-  if (!dayRecord.users.includes(installId)) {
-    dayRecord.users.push(installId);
-    dayRecord.total = dayRecord.users.length;
+  if (!daySet.has(cleanId)) {
+    daySet.add(cleanId);
+    dayRecord.users.push(cleanId);
+    dayRecord.total = daySet.size;
 
     // Track app version distribution
     dayRecord.versions[cleanVersion] = (dayRecord.versions[cleanVersion] || 0) + 1;
@@ -118,7 +277,7 @@ app.post('/api/heartbeat', (req, res) => {
       db.recentEvents.pop();
     }
 
-    saveData();
+    scheduleSave();
   }
 
   res.json({
@@ -127,11 +286,13 @@ app.post('/api/heartbeat', (req, res) => {
   });
 });
 
-// Admin Web Dashboard (Obsidian / Nothing OS Dark Aesthetics)
-app.get('/', (req, res) => {
+// Admin Web Dashboard (Obsidian / Nothing OS Dark Aesthetics, protected)
+app.get('/', adminCors, adminLimiter, requireAdmin, (req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   const today = getTodayKey();
-  const todayData = db.daily[today] || { total: 0, versions: {}, platforms: {} };
-  const allTimeCount = Object.keys(db.allTimeUsers || {}).length;
+  const todayData = db.daily[today] || { total: 0, versions: createNullDict(), platforms: createNullDict() };
+  const allTimeCount = Object.keys(db.allTimeUsers).length;
 
   // Past 7 days calculation
   const past7Days = [];
@@ -154,7 +315,7 @@ app.get('/', (req, res) => {
           <div style="margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
               <span>v${escapeHtml(v)}</span>
-              <span style="color: #a1a1aa;">${count} users (${pct}%)</span>
+              <span style="color: #a1a1aa;">${Number(count) || 0} users (${pct}%)</span>
             </div>
             <div style="background: #27272a; height: 6px; border-radius: 999px; overflow: hidden;">
               <div style="background: #e11d48; height: 100%; width: ${pct}%;"></div>
@@ -167,7 +328,7 @@ app.get('/', (req, res) => {
   // Recent events rows
   const recentRows = (db.recentEvents || []).slice(0, 8).map(ev => `
     <tr style="border-bottom: 1px solid #27272a;">
-      <td style="padding: 10px 8px; color: #a1a1aa; font-size: 12px;">${new Date(ev.timestamp).toLocaleTimeString()}</td>
+      <td style="padding: 10px 8px; color: #a1a1aa; font-size: 12px;">${escapeHtml(new Date(ev.timestamp).toLocaleTimeString())}</td>
       <td style="padding: 10px 8px; font-weight: 500;">v${escapeHtml(ev.version)}</td>
       <td style="padding: 10px 8px; color: #a1a1aa;">${escapeHtml(ev.platform)}</td>
       <td style="padding: 10px 8px; color: #71717a; font-size: 12px;">${escapeHtml(ev.osVersion)}</td>
@@ -177,10 +338,10 @@ app.get('/', (req, res) => {
   // Daily bars
   const barsHtml = past7Days.map(d => {
     const heightPct = Math.round((d.count / maxDailyCount) * 85) + 15;
-    const dayLabel = d.date.slice(5);
+    const dayLabel = escapeHtml(d.date.slice(5));
     return `
       <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 120px;">
-        <div style="font-size: 11px; color: #e11d48; margin-bottom: 4px; font-weight: 600;">${d.count}</div>
+        <div style="font-size: 11px; color: #e11d48; margin-bottom: 4px; font-weight: 600;">${Number(d.count) || 0}</div>
         <div style="width: 22px; height: ${heightPct}px; background: linear-gradient(180deg, #e11d48 0%, #881337 100%); border-radius: 4px 4px 0 0;"></div>
         <div style="font-size: 10px; color: #71717a; margin-top: 6px;">${dayLabel}</div>
       </div>
@@ -274,7 +435,7 @@ app.get('/', (req, res) => {
     <div class="grid-2">
       <div class="card" style="margin-bottom: 0;">
         <div class="stat-label">Active Users Today</div>
-        <div class="stat-number" style="color: #e11d48;">${todayData.total || 0}</div>
+        <div class="stat-number" style="color: #e11d48;">${Number(todayData.total) || 0}</div>
         <div style="color: #71717a; font-size: 12px; margin-top: 6px;">Unique devices seen today</div>
       </div>
       <div class="card" style="margin-bottom: 0;">

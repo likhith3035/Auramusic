@@ -108,6 +108,25 @@ data class AuraCommandRequest(
     val session: AuraTransferSession? = null,
 )
 
+@Serializable
+data class AuraPairRequest(
+    val pin: String,
+    val clientId: String,
+    val clientName: String = "Aura Mobile",
+)
+
+@Serializable
+data class AuraPairResponse(
+    val token: String,
+    val device: AuraConnectDevice,
+)
+
+@Serializable
+data class AuraErrorResponse(
+    val error: String,
+    val code: String = "error",
+)
+
 /** Constants for Aura Connect network ports and discovery. */
 object AuraConnectConstants {
     const val DEFAULT_HTTP_PORT = 8765

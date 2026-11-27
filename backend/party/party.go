@@ -535,10 +535,36 @@ type Party struct {
 	HostOnlyControl bool
 	AuxMemberId     string
 	SkipVotes       map[string]bool
+	ChatMsgs        map[string]*ChatMessage
+	ChatOrder       []string
 	CreatedAtMs     int64
 	TouchedAtMs     int64
 	EmptySinceMs    *int64
 }
+
+// ChatMessage holds server-authoritative state for a party chat item so clients
+// cannot spoof sender identity, overwrite another user's text, or forge upvotes.
+type ChatMessage struct {
+	ID            string
+	SenderId      string
+	SenderName    string
+	SenderAvatar  *string
+	TimestampMs   int64
+	Text          string
+	SongWire      map[string]interface{}
+	SongTrack     *Track
+	ImageUrl      *string
+	IsFounder     bool
+	Upvoters      map[string]bool
+	AutoQueued    bool
+	Reactions     map[string]map[string]bool
+	ReplyToId     *string
+	ReplyToSender *string
+	ReplyToText   *string
+	IsPinned      bool
+}
+
+const maxChatHistory = 500
 
 func NewParty(code string) *Party {
 	return NewPartyWithMaxMembers(code, config.MaxMembers)
@@ -556,6 +582,7 @@ func NewPartyWithMaxMembers(code string, maxMembers int) *Party {
 		Playback:     NewPlaybackState(),
 		MaxMembers:   maxMembers,
 		SkipVotes:    make(map[string]bool),
+		ChatMsgs:     make(map[string]*ChatMessage),
 		CreatedAtMs:  now,
 		TouchedAtMs:  now,
 		EmptySinceMs: &empty,
@@ -609,30 +636,25 @@ func (p *Party) Host() *Member {
 	return nil
 }
 
-func (p *Party) ElevateHost(memberId string, newNickname string) bool {
-	m, ok := p.Members[memberId]
-	if !ok {
-		return false
-	}
-	for _, other := range p.Members {
-		other.IsHost = false
-	}
-	m.IsHost = true
-	if newNickname != "" {
-		m.DisplayName = newNickname
-	}
-	if p.AuxMemberId == memberId {
-		p.AuxMemberId = ""
-	}
-	p.Touch()
-	return true
+func (p *Party) Join(userId, deviceId, displayName string, avatarUrl *string) (*Member, error) {
+	return p.JoinWithToken(userId, deviceId, displayName, avatarUrl, "")
 }
 
-func (p *Party) Join(userId, deviceId, displayName string, avatarUrl *string) (*Member, error) {
+// JoinWithToken binds or creates a member slot. Reusing an existing deviceId slot
+// requires proving possession of the slot's active bearer token so another caller
+// cannot hijack an existing session (or host) merely by copying its deviceId.
+func (p *Party) JoinWithToken(userId, deviceId, displayName string, avatarUrl *string, priorToken string) (*Member, error) {
 	now := clock.NowMs()
 	// Rejoining device check
 	for _, m := range p.Members {
 		if m.DeviceId == deviceId {
+			if priorToken == "" || subtle.ConstantTimeCompare([]byte(m.Token), []byte(priorToken)) != 1 {
+				return nil, NewPartyError(
+					409,
+					"device_slot_in_use",
+					"That device already holds a slot in this party; reconnect using your active session token.",
+				)
+			}
 			m.DisplayName = displayName
 			m.AvatarUrl = avatarUrl
 			m.UserId = userId
@@ -666,6 +688,268 @@ func (p *Party) Join(userId, deviceId, displayName string, avatarUrl *string) (*
 	p.Members[m.MemberId] = m
 	p.Touch()
 	return m, nil
+}
+
+// ApplyChatFrame processes new chat messages and per-member updates (upvotes, reactions, host pins)
+// while enforcing server authority over sender identity, song immutability, and vote counting.
+func (p *Party) ApplyChatFrame(member *Member, frame map[string]interface{}) (map[string]interface{}, *Track, bool) {
+	if p.ChatMsgs == nil {
+		p.ChatMsgs = make(map[string]*ChatMessage)
+	}
+	msgId, _ := frame["id"].(string)
+	if msgId == "" || len(msgId) > 128 {
+		return nil, nil, false
+	}
+
+	rec, exists := p.ChatMsgs[msgId]
+	if !exists {
+		msgText, _ := frame["text"].(string)
+		if len(msgText) > 2000 {
+			msgText = msgText[:2000]
+		}
+		var songWire map[string]interface{}
+		var songTrack *Track
+		if rawSong, ok := frame["song"].(map[string]interface{}); ok && rawSong != nil {
+			vid, _ := rawSong["videoId"].(string)
+			title, _ := rawSong["title"].(string)
+			artist, _ := rawSong["artist"].(string)
+			if vid != "" {
+				if len(vid) > 128 {
+					vid = vid[:128]
+				}
+				if len(title) > 300 {
+					title = title[:300]
+				}
+				if len(artist) > 300 {
+					artist = artist[:300]
+				}
+				songWire = map[string]interface{}{
+					"videoId": vid,
+					"title":   title,
+					"artist":  artist,
+				}
+				if cover, ok := rawSong["coverUrl"].(string); ok && cover != "" {
+					if len(cover) > 1000 {
+						cover = cover[:1000]
+					}
+					songWire["coverUrl"] = cover
+				}
+				var durMsPtr *int64
+				if durSec, ok := rawSong["durationSec"].(float64); ok && durSec > 0 {
+					secInt := int64(durSec)
+					songWire["durationSec"] = secInt
+					ms := secInt * 1000
+					durMsPtr = &ms
+				} else if durMs, ok := rawSong["durationMs"].(float64); ok && durMs > 0 {
+					ms := int64(durMs)
+					durMsPtr = &ms
+				}
+				var thumbPtr *string
+				if cover, ok := songWire["coverUrl"].(string); ok && cover != "" {
+					thumbPtr = &cover
+				}
+				songTrack = &Track{
+					VideoId:      vid,
+					Title:        title,
+					Artist:       artist,
+					ThumbnailUrl: thumbPtr,
+					DurationMs:   durMsPtr,
+				}
+			}
+		}
+
+		var imagePtr *string
+		if img, ok := frame["imageUrl"].(string); ok && img != "" && len(img) <= 128*1024 {
+			imagePtr = &img
+		}
+		if msgText == "" && songTrack == nil && imagePtr == nil {
+			return nil, nil, false
+		}
+
+		var replyToId, replyToSender, replyToText *string
+		if v, ok := frame["replyToId"].(string); ok && v != "" && len(v) <= 128 {
+			replyToId = &v
+		}
+		if v, ok := frame["replyToSender"].(string); ok && v != "" && len(v) <= 80 {
+			replyToSender = &v
+		}
+		if v, ok := frame["replyToText"].(string); ok && v != "" {
+			if len(v) > 200 {
+				v = v[:200]
+			}
+			replyToText = &v
+		}
+
+		if len(p.ChatOrder) >= maxChatHistory {
+			evict := p.ChatOrder[0]
+			p.ChatOrder = p.ChatOrder[1:]
+			delete(p.ChatMsgs, evict)
+		}
+
+		rec = &ChatMessage{
+			ID:            msgId,
+			SenderId:      member.MemberId,
+			SenderName:    member.DisplayName,
+			SenderAvatar:  member.AvatarUrl,
+			TimestampMs:   clock.NowMs(),
+			Text:          msgText,
+			SongWire:      songWire,
+			SongTrack:     songTrack,
+			ImageUrl:      imagePtr,
+			IsFounder:     false,
+			Upvoters:      make(map[string]bool),
+			Reactions:     make(map[string]map[string]bool),
+			ReplyToId:     replyToId,
+			ReplyToSender: replyToSender,
+			ReplyToText:   replyToText,
+		}
+		p.ChatMsgs[msgId] = rec
+		p.ChatOrder = append(p.ChatOrder, msgId)
+		return rec.toWire(), nil, true
+	}
+
+	// Update existing message: each member can only toggle their own vote & reactions;
+	// only the host may toggle pin state. Immutable message content cannot be mutated.
+	var autoQueuedTrack *Track
+	if rawUpvoters, hasList := frame["upvoterIds"].([]interface{}); hasList {
+		memberWantsVote := false
+		for _, item := range rawUpvoters {
+			if s, ok := item.(string); ok && s == member.MemberId {
+				memberWantsVote = true
+				break
+			}
+		}
+		if memberWantsVote {
+			rec.Upvoters[member.MemberId] = true
+		} else {
+			delete(rec.Upvoters, member.MemberId)
+		}
+	}
+	if len(rec.Upvoters) >= 2 && !rec.AutoQueued && rec.SongTrack != nil && p.MayControl(member) {
+		if ok, _ := p.Playback.AddUpcoming(&member.MemberId, []*Track{rec.SongTrack}, false); ok {
+			rec.AutoQueued = true
+			autoQueuedTrack = rec.SongTrack
+		}
+	}
+
+	if rawReactions, ok := frame["reactions"].(map[string]interface{}); ok {
+		nextMemberEmojis := make(map[string]bool)
+		for emoji, rawUsers := range rawReactions {
+			if emoji == "" || len(emoji) > 32 || len(nextMemberEmojis) >= 20 {
+				continue
+			}
+			users, ok := rawUsers.([]interface{})
+			if !ok {
+				continue
+			}
+			for _, u := range users {
+				if idStr, ok := u.(string); ok && idStr == member.MemberId {
+					nextMemberEmojis[emoji] = true
+					break
+				}
+			}
+		}
+		for emoji, set := range rec.Reactions {
+			if !nextMemberEmojis[emoji] {
+				delete(set, member.MemberId)
+				if len(set) == 0 {
+					delete(rec.Reactions, emoji)
+				}
+			}
+		}
+		for emoji := range nextMemberEmojis {
+			if len(rec.Reactions) >= 20 {
+				if _, existsEmoji := rec.Reactions[emoji]; !existsEmoji {
+					continue
+				}
+			}
+			set := rec.Reactions[emoji]
+			if set == nil {
+				set = make(map[string]bool)
+				rec.Reactions[emoji] = set
+			}
+			set[member.MemberId] = true
+		}
+	}
+
+	if member.IsHost {
+		if pinned, ok := frame["isPinned"].(bool); ok {
+			rec.IsPinned = pinned
+		}
+	}
+
+	return rec.toWire(), autoQueuedTrack, true
+}
+
+func (c *ChatMessage) toWire() map[string]interface{} {
+	upvoterList := make([]string, 0, len(c.Upvoters))
+	for id := range c.Upvoters {
+		upvoterList = append(upvoterList, id)
+	}
+	sort.Strings(upvoterList)
+
+	reactionsWire := make(map[string][]string, len(c.Reactions))
+	for emoji, members := range c.Reactions {
+		if len(members) == 0 {
+			continue
+		}
+		ids := make([]string, 0, len(members))
+		for id := range members {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		reactionsWire[emoji] = ids
+	}
+
+	out := map[string]interface{}{
+		"type":        "chat",
+		"id":          c.ID,
+		"senderId":    c.SenderId,
+		"senderName":  c.SenderName,
+		"timestampMs": c.TimestampMs,
+		"text":        c.Text,
+		"isFounder":   c.IsFounder,
+		"upvotes":     len(upvoterList),
+		"upvoterIds":  upvoterList,
+		"autoQueued":  c.AutoQueued,
+		"reactions":   reactionsWire,
+		"isPinned":    c.IsPinned,
+	}
+	if c.SenderAvatar != nil {
+		out["senderAvatar"] = *c.SenderAvatar
+	}
+	if c.SongWire != nil {
+		out["song"] = c.SongWire
+	}
+	if c.ImageUrl != nil {
+		out["imageUrl"] = *c.ImageUrl
+	}
+	if c.ReplyToId != nil {
+		out["replyToId"] = *c.ReplyToId
+	}
+	if c.ReplyToSender != nil {
+		out["replyToSender"] = *c.ReplyToSender
+	}
+	if c.ReplyToText != nil {
+		out["replyToText"] = *c.ReplyToText
+	}
+	return out
+}
+
+// DeleteChatMessage validates that only the original sender or room host deletes a chat entry.
+func (p *Party) DeleteChatMessage(msgId string, member *Member) bool {
+	if msgId == "" || p.ChatMsgs == nil {
+		return false
+	}
+	rec, ok := p.ChatMsgs[msgId]
+	if !ok {
+		return false
+	}
+	if rec.SenderId != member.MemberId && !member.IsHost {
+		return false
+	}
+	delete(p.ChatMsgs, msgId)
+	return true
 }
 
 func (p *Party) SetMaxMembers(member *Member, maxMembers int) error {

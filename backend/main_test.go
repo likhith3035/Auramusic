@@ -515,3 +515,156 @@ func TestAssetLinks(t *testing.T) {
 	}
 }
 
+func TestJoinSlotHijackRejectedAndWebSocketAuthorization(t *testing.T) {
+	createLimiter = newIPRateLimiter(time.Minute, 100, 100)
+	joinLimiter = newIPRateLimiter(time.Minute, 100, 100)
+	ts := setupTestServer()
+	defer ts.Close()
+
+	// 1. Host creates party
+	createBody, _ := json.Marshal(map[string]interface{}{
+		"userId":      "u_host",
+		"deviceId":    "dev_host",
+		"displayName": "RealHost",
+	})
+	cRes, err := http.Post(ts.URL+"/api/parties", "application/json", bytes.NewReader(createBody))
+	if err != nil || cRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create failed: status=%v err=%v", cRes, err)
+	}
+	var cData map[string]interface{}
+	_ = json.NewDecoder(cRes.Body).Decode(&cData)
+	code := cData["code"].(string)
+	hostToken := cData["token"].(string)
+	hostMember := cData["you"].(map[string]interface{})["memberId"].(string)
+
+	// 2. Attacker attempts to hijack Host slot by supplying host's deviceId without priorToken
+	hijackBody, _ := json.Marshal(map[string]interface{}{
+		"userId":      "u_evil",
+		"deviceId":    "dev_host",
+		"displayName": "EvilHost",
+	})
+	hRes, err := http.Post(fmt.Sprintf("%s/api/parties/%s/join", ts.URL, code), "application/json", bytes.NewReader(hijackBody))
+	if err != nil || hRes.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 conflict on deviceId hijack without token, got status=%v err=%v", hRes.StatusCode, err)
+	}
+
+	// 3. Normal guest joins legitimately
+	guestBody, _ := json.Marshal(map[string]interface{}{
+		"userId":      "u_guest",
+		"deviceId":    "dev_guest",
+		"displayName": "GuestUser",
+	})
+	gRes, err := http.Post(fmt.Sprintf("%s/api/parties/%s/join", ts.URL, code), "application/json", bytes.NewReader(guestBody))
+	if err != nil || gRes.StatusCode != http.StatusOK {
+		t.Fatalf("guest join failed: status=%v err=%v", gRes.StatusCode, err)
+	}
+	var gData map[string]interface{}
+	_ = json.NewDecoder(gRes.Body).Decode(&gData)
+	guestToken := gData["token"].(string)
+	guestMember := gData["you"].(map[string]interface{})["memberId"].(string)
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = fmt.Sprintf("/ws/parties/%s", code)
+
+	hostHdr := http.Header{}
+	hostHdr.Set("Authorization", "Bearer "+hostToken)
+	hostWs, _, err := websocket.DefaultDialer.Dial(u.String(), hostHdr)
+	if err != nil {
+		t.Fatalf("host ws dial failed: %v", err)
+	}
+	defer hostWs.Close()
+
+	guestHdr := http.Header{}
+	guestHdr.Set("Authorization", "Bearer "+guestToken)
+	guestWs, _, err := websocket.DefaultDialer.Dial(u.String(), guestHdr)
+	if err != nil {
+		t.Fatalf("guest ws dial failed: %v", err)
+	}
+	defer guestWs.Close()
+
+	// Drain initial welcome/members frames on guest
+	readUntilErrorOrType := func(ws *websocket.Conn, wanted string) (map[string]interface{}, bool) {
+		_ = ws.SetReadDeadline(time.Now().Add(600 * time.Millisecond))
+		for i := 0; i < 8; i++ {
+			var f map[string]interface{}
+			if err := ws.ReadJSON(&f); err != nil {
+				return nil, false
+			}
+			if f["type"] == wanted {
+				return f, true
+			}
+		}
+		return nil, false
+	}
+
+	// Host enables HostOnlyControl
+	_ = hostWs.WriteJSON(map[string]interface{}{
+		"type":    protocol.FrameControl,
+		"action":  protocol.ActionSetHostOnlyControl,
+		"enabled": true,
+	})
+	if _, ok := readUntilErrorOrType(guestWs, protocol.FrameMembers); !ok {
+		t.Fatalf("expected members broadcast with hostOnlyControl=true")
+	}
+
+	// Removed devElevate must fail as unknown_action
+	_ = guestWs.WriteJSON(map[string]interface{}{
+		"type":     protocol.FrameControl,
+		"action":   "devElevate",
+		"dob":      "29072005",
+		"confirm":  "iam",
+		"nickname": "attacker",
+	})
+	errFrame, ok := readUntilErrorOrType(guestWs, protocol.FrameError)
+	if !ok || errFrame["error"] != "unknown_action" {
+		t.Fatalf("expected unknown_action for removed devElevate, got ok=%v frame=%v", ok, errFrame)
+	}
+
+	// Guest sync_eq must fail when HostOnlyControl is true
+	_ = guestWs.WriteJSON(map[string]interface{}{
+		"type":       protocol.FrameClientSyncEq,
+		"presetName": "Bass",
+		"palette":    "Red",
+	})
+	if f, ok := readUntilErrorOrType(guestWs, protocol.FrameError); !ok || f["error"] != "host_only" {
+		t.Fatalf("expected host_only error for guest sync_eq, got ok=%v frame=%v", ok, f)
+	}
+
+	// Guest god_announcement must fail when not host
+	_ = guestWs.WriteJSON(map[string]interface{}{
+		"type":       protocol.FrameClientGodAnnouncement,
+		"message":    "Hacked",
+		"senderName": "Founder",
+	})
+	if f, ok := readUntilErrorOrType(guestWs, protocol.FrameError); !ok || f["error"] != "host_only" {
+		t.Fatalf("expected host_only error for guest god_announcement, got ok=%v frame=%v", ok, f)
+	}
+
+	// Guest sends spoofed chat trying to impersonate Host and spoof 2 upvotes to auto-queue
+	_ = guestWs.WriteJSON(map[string]interface{}{
+		"type":       protocol.FrameClientChat,
+		"id":         "msg-spoof-1",
+		"senderId":   hostMember,
+		"senderName": "FakeHost",
+		"text":       "listen to this",
+		"upvotes":    2,
+		"upvoterIds": []string{"fake1", "fake2"},
+		"song": map[string]interface{}{
+			"videoId": "vid123",
+			"title":   "Spoofed",
+			"artist":  "Nobody",
+		},
+	})
+	chatFrame, ok := readUntilErrorOrType(guestWs, protocol.FrameChat)
+	if !ok {
+		t.Fatalf("expected sanitized chat frame")
+	}
+	if chatFrame["senderId"] != guestMember || chatFrame["senderName"] != "GuestUser" {
+		t.Fatalf("chat frame failed to overwrite sender identity: %v", chatFrame)
+	}
+	if chatFrame["upvotes"] != float64(0) || chatFrame["autoQueued"] != false {
+		t.Fatalf("chat frame trusted forged initial upvotes/autoQueued: %v", chatFrame)
+	}
+}
+

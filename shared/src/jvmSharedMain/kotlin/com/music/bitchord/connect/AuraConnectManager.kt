@@ -4,6 +4,9 @@ import com.music.bitchord.data.connect.AuraCommandRequest
 import com.music.bitchord.data.connect.AuraConnectConstants
 import com.music.bitchord.data.connect.AuraConnectDevice
 import com.music.bitchord.data.connect.AuraDeviceType
+import com.music.bitchord.data.connect.AuraErrorResponse
+import com.music.bitchord.data.connect.AuraPairRequest
+import com.music.bitchord.data.connect.AuraPairResponse
 import com.music.bitchord.data.connect.AuraPlaybackState
 import com.music.bitchord.data.connect.AuraStatusResponse
 import com.music.bitchord.data.connect.AuraTransferSession
@@ -12,6 +15,7 @@ import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,12 +29,13 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.HttpURLConnection
 import java.net.InetAddress
-import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Aura Connect Manager: handles zero-configuration local network discovery (UDP)
- * and bidirectional remote control / playback handoff (HTTP / JSON).
+ * and authenticated remote control / playback handoff (HTTP / JSON).
  */
 object AuraConnectManager {
 
@@ -39,7 +44,9 @@ object AuraConnectManager {
         encodeDefaults = true
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + Job())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val clientId: String = "mobile_" + UUID.randomUUID().toString().take(8)
+    private val pairedTokens = ConcurrentHashMap<String, String>()
 
     private val _discoveredDevices = MutableStateFlow<List<AuraConnectDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<AuraConnectDevice>> = _discoveredDevices.asStateFlow()
@@ -49,6 +56,15 @@ object AuraConnectManager {
 
     private val _remotePlaybackState = MutableStateFlow<AuraPlaybackState?>(null)
     val remotePlaybackState: StateFlow<AuraPlaybackState?> = _remotePlaybackState.asStateFlow()
+
+    private val _pairingRequiredForDevice = MutableStateFlow<AuraConnectDevice?>(null)
+    val pairingRequiredForDevice: StateFlow<AuraConnectDevice?> = _pairingRequiredForDevice.asStateFlow()
+
+    private val _pairingError = MutableStateFlow<String?>(null)
+    val pairingError: StateFlow<String?> = _pairingError.asStateFlow()
+
+    private val _connectionError = MutableStateFlow<String?>(null)
+    val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
 
     private var discoveryJob: Job? = null
     private var syncJob: Job? = null
@@ -93,7 +109,7 @@ object AuraConnectManager {
                     socket.receive(packet)
                     val msg = String(packet.data, 0, packet.length, StandardCharsets.UTF_8)
                     if (msg.startsWith(AuraConnectConstants.BEACON_MAGIC)) {
-                        parseBeacon(msg, packet.address.hostAddress ?: "")
+                        parseBeacon(msg, packet.address)
                     }
                 } catch (_: Exception) {
                     // Timeout or network drop; prune expired devices
@@ -103,17 +119,28 @@ object AuraConnectManager {
         }
     }
 
-    private fun parseBeacon(message: String, hostAddress: String) {
+    private fun parseBeacon(message: String, senderAddr: InetAddress) {
+        if (!senderAddr.isSiteLocalAddress && !senderAddr.isLoopbackAddress && !senderAddr.isLinkLocalAddress) {
+            return
+        }
+        val hostAddress = senderAddr.hostAddress ?: return
         // Format: AURA_CONNECT_BEACON|<id>|<name>|<deviceType>|<port>
         val parts = message.split("|")
         if (parts.size < 5) return
 
-        val id = parts[1]
-        val name = parts[2]
-        val typeStr = parts[3]
-        val port = parts[4].toIntOrNull() ?: AuraConnectConstants.DEFAULT_HTTP_PORT
-        val deviceType = runCatching { AuraDeviceType.valueOf(typeStr) }.getOrDefault(AuraDeviceType.DESKTOP)
+        val id = parts[1].trim()
+        val name = parts[2].trim().take(64)
+        val typeStr = parts[3].trim()
+        val port = parts[4].trim().toIntOrNull() ?: return
+        if (id.isBlank() || name.isBlank() || port !in 1..65535) return
 
+        // Pin active session endpoint so spoofed beacons cannot hijack an active connection mid-flight.
+        val active = _connectedDevice.value
+        if (active != null && active.id == id && (active.host != hostAddress || active.port != port)) {
+            return
+        }
+
+        val deviceType = runCatching { AuraDeviceType.valueOf(typeStr) }.getOrDefault(AuraDeviceType.DESKTOP)
         val now = System.currentTimeMillis()
         val device = AuraConnectDevice(
             id = id,
@@ -147,10 +174,74 @@ object AuraConnectManager {
         }
     }
 
+    fun dismissPairingPrompt() {
+        _pairingRequiredForDevice.value = null
+        _pairingError.value = null
+    }
+
+    /**
+     * Pairs with a Desktop host using its displayed 6-digit PIN and establishes connection.
+     */
+    suspend fun pairWithPin(device: AuraConnectDevice, pin: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val cleanPin = pin.trim()
+        if (cleanPin.length != 6 || !cleanPin.all { it.isDigit() }) {
+            val msg = "Enter the 6-digit PIN shown on ${device.name}."
+            _pairingError.value = msg
+            return@withContext Result.failure(IllegalArgumentException(msg))
+        }
+        var conn: HttpURLConnection? = null
+        try {
+            val url = java.net.URI.create("http://${device.host}:${device.port}/api/pair").toURL()
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 3000
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            }
+            val req = AuraPairRequest(pin = cleanPin, clientId = clientId)
+            val body = json.encodeToString(AuraPairRequest.serializer(), req)
+            conn.outputStream.use { os: OutputStream ->
+                os.write(body.toByteArray(StandardCharsets.UTF_8))
+            }
+            val code = conn.responseCode
+            if (code == 200) {
+                val respText = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+                val pairResp = json.decodeFromString(AuraPairResponse.serializer(), respText)
+                pairedTokens[device.id] = pairResp.token
+                _pairingError.value = null
+                _pairingRequiredForDevice.value = null
+                _connectionError.value = null
+                connect(device)
+                Result.success(Unit)
+            } else {
+                val errBody = runCatching { conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } }.getOrNull()
+                val errMsg = errBody?.let {
+                    runCatching { json.decodeFromString(AuraErrorResponse.serializer(), it).error }.getOrNull()
+                } ?: "Pairing failed (HTTP $code)"
+                _pairingError.value = errMsg
+                Result.failure(IllegalStateException(errMsg))
+            }
+        } catch (e: Exception) {
+            val errMsg = e.message ?: "Unable to reach ${device.name}"
+            _pairingError.value = errMsg
+            Result.failure(e)
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     /**
      * Connects to a remote Aura device for playback control and monitoring.
      */
     fun connect(device: AuraConnectDevice) {
+        if (pairedTokens[device.id].isNullOrBlank()) {
+            _pairingError.value = null
+            _pairingRequiredForDevice.value = device
+            return
+        }
+        _pairingRequiredForDevice.value = null
+        _connectionError.value = null
         _connectedDevice.value = device
         syncJob?.cancel()
         syncJob = scope.launch {
@@ -175,23 +266,42 @@ object AuraConnectManager {
      * Fetches current state from the remote device.
      */
     suspend fun fetchStatus(device: AuraConnectDevice): AuraPlaybackState? = withContext(Dispatchers.IO) {
+        val token = pairedTokens[device.id] ?: return@withContext null
+        var conn: HttpURLConnection? = null
         try {
             val url = java.net.URI.create("http://${device.host}:${device.port}/api/status").toURL()
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            conn = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = 2000
                 readTimeout = 2000
                 requestMethod = "GET"
+                setRequestProperty("Authorization", "Bearer $token")
             }
-            if (conn.responseCode == 200) {
-                val body = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-                val status = json.decodeFromString(AuraStatusResponse.serializer(), body)
-                _remotePlaybackState.value = status.playback
-                status.playback
-            } else {
-                null
+            when (val code = conn.responseCode) {
+                200 -> {
+                    val body = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+                    val status = json.decodeFromString(AuraStatusResponse.serializer(), body)
+                    _remotePlaybackState.value = status.playback
+                    _connectionError.value = null
+                    status.playback
+                }
+                401 -> {
+                    pairedTokens.remove(device.id)
+                    _connectedDevice.value = null
+                    _remotePlaybackState.value = null
+                    _pairingRequiredForDevice.value = device
+                    _pairingError.value = "Session expired — enter PIN again."
+                    null
+                }
+                else -> {
+                    _connectionError.value = "Status error (HTTP $code)"
+                    null
+                }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            _connectionError.value = e.message ?: "Connection failed"
             null
+        } finally {
+            conn?.disconnect()
         }
     }
 
@@ -213,15 +323,21 @@ object AuraConnectManager {
         session: AuraTransferSession? = null,
     ) {
         val device = _connectedDevice.value ?: return
-        scope.launch(Dispatchers.IO) {
+        val token = pairedTokens[device.id] ?: run {
+            _pairingRequiredForDevice.value = device
+            return
+        }
+        scope.launch {
+            var conn: HttpURLConnection? = null
             try {
                 val url = java.net.URI.create("http://${device.host}:${device.port}/api/command").toURL()
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 2500
                     readTimeout = 2500
                     requestMethod = "POST"
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setRequestProperty("Authorization", "Bearer $token")
                 }
                 val cmd = AuraCommandRequest(
                     action = action,
@@ -238,16 +354,33 @@ object AuraConnectManager {
                     session = session,
                 )
                 val body = json.encodeToString(AuraCommandRequest.serializer(), cmd)
-                val os: OutputStream = conn.outputStream
-                os.write(body.toByteArray(StandardCharsets.UTF_8))
-                os.close()
-
-                if (conn.responseCode == 200) {
-                    val resp = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-                    val status = json.decodeFromString(AuraStatusResponse.serializer(), resp)
-                    _remotePlaybackState.value = status.playback
+                conn.outputStream.use { os: OutputStream ->
+                    os.write(body.toByteArray(StandardCharsets.UTF_8))
                 }
-            } catch (_: Exception) {}
+
+                when (val code = conn.responseCode) {
+                    200 -> {
+                        val resp = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+                        val status = json.decodeFromString(AuraStatusResponse.serializer(), resp)
+                        _remotePlaybackState.value = status.playback
+                        _connectionError.value = null
+                    }
+                    401 -> {
+                        pairedTokens.remove(device.id)
+                        _connectedDevice.value = null
+                        _remotePlaybackState.value = null
+                        _pairingRequiredForDevice.value = device
+                        _pairingError.value = "Session expired — enter PIN again."
+                    }
+                    else -> {
+                        _connectionError.value = "Command rejected (HTTP $code)"
+                    }
+                }
+            } catch (e: Exception) {
+                _connectionError.value = e.message ?: "Command failed"
+            } finally {
+                conn?.disconnect()
+            }
         }
     }
 

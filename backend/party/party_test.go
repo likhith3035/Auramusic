@@ -41,9 +41,14 @@ func TestPartyCreationAndJoin(t *testing.T) {
 		t.Errorf("First member should be host")
 	}
 
-	// Re-join with same deviceId should return existing member with fresh token
+	// Re-join with wrong or empty token must be rejected so deviceId cannot be hijacked
+	if _, err := p.Join("user_attacker", "device1", "Attacker", &avatar); err == nil {
+		t.Fatalf("Re-join without priorToken should fail")
+	}
+
+	// Re-join with same deviceId and valid priorToken should return existing member with fresh token
 	oldToken := m1.Token
-	m1Again, err := p.Join("user1", "device1", "Alice New", &avatar)
+	m1Again, err := p.JoinWithToken("user1", "device1", "Alice New", &avatar, oldToken)
 	if err != nil {
 		t.Fatalf("Re-join failed: %v", err)
 	}
