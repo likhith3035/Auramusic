@@ -65,6 +65,7 @@ fun AuraTrackHeader(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -95,12 +96,12 @@ fun AuraTrackHeader(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                 ),
-                color = Color.White,
+                color = menuColors.label,
             )
             Text(
                 text = song.artist,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                color = Color.White.copy(alpha = 0.70f),
+                color = menuColors.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -113,7 +114,7 @@ fun AuraTrackHeader(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Close",
-                tint = Color.White.copy(alpha = 0.60f),
+                tint = menuColors.secondaryLabel,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -129,6 +130,7 @@ fun AuraBrowseHeader(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     val isArtist = target.type == BrowseType.ARTIST
     val artShape = if (isArtist) CircleShape else RoundedCornerShape(12.dp).continuous()
 
@@ -162,7 +164,7 @@ fun AuraBrowseHeader(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                 ),
-                color = Color.White,
+                color = menuColors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -176,7 +178,7 @@ fun AuraBrowseHeader(
                     }
                 },
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                color = Color.White.copy(alpha = 0.70f),
+                color = menuColors.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -189,7 +191,7 @@ fun AuraBrowseHeader(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Close",
-                tint = Color.White.copy(alpha = 0.60f),
+                tint = menuColors.secondaryLabel,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -212,7 +214,9 @@ fun AuraQuickActionsBar(
     palette: ArtworkPalette? = null,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     val accentColor = palette?.accent ?: Color(0xFF00F5D4)
+    val defaultTint = menuColors.label.copy(alpha = 0.85f)
 
     Row(
         modifier = modifier
@@ -223,7 +227,7 @@ fun AuraQuickActionsBar(
     ) {
         // Favorite / Like Pill
         val favAnimatedColor by animateColorAsState(
-            targetValue = if (liked) accentColor else Color.White.copy(alpha = 0.85f),
+            targetValue = if (liked) accentColor else defaultTint,
             animationSpec = tween(durationMillis = 200),
             label = "favoriteColor",
         )
@@ -237,7 +241,7 @@ fun AuraQuickActionsBar(
 
         // Dislike Pill (when available)
         if (onToggleDislike != null) {
-            val dislikeColor = if (disliked) accentColor else Color.White.copy(alpha = 0.85f)
+            val dislikeColor = if (disliked) accentColor else defaultTint
             AuraQuickActionPill(
                 icon = if (disliked) Icons.Rounded.ThumbDown else Icons.Rounded.ThumbDownOffAlt,
                 label = "Dislike",
@@ -249,7 +253,7 @@ fun AuraQuickActionsBar(
 
         // Download Pill (when available)
         if (onDownload != null) {
-            val downloadColor = if (downloaded) Color(0xFF00E676) else Color.White.copy(alpha = 0.85f)
+            val downloadColor = if (downloaded) Color(0xFF00E676) else defaultTint
             AuraQuickActionPill(
                 icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
                 label = if (downloaded) "Saved" else "Download",
@@ -264,7 +268,7 @@ fun AuraQuickActionsBar(
             AuraQuickActionPill(
                 icon = Icons.Rounded.Radio,
                 label = "Radio",
-                iconTint = Color.White.copy(alpha = 0.85f),
+                iconTint = defaultTint,
                 onClick = onStartRadio,
                 modifier = Modifier.weight(1f),
             )
@@ -275,7 +279,7 @@ fun AuraQuickActionsBar(
             AuraQuickActionPill(
                 icon = Icons.Rounded.Share,
                 label = "Share",
-                iconTint = Color.White.copy(alpha = 0.85f),
+                iconTint = defaultTint,
                 onClick = onShare,
                 modifier = Modifier.weight(1f),
             )
@@ -291,10 +295,11 @@ private fun AuraQuickActionPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     val pillShape = RoundedCornerShape(14.dp).continuous()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val bgColor = if (pressed) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.07f)
+    val bgColor = if (pressed) menuColors.pressed else menuColors.label.copy(alpha = 0.06f)
 
     Column(
         modifier = modifier
@@ -322,7 +327,7 @@ private fun AuraQuickActionPill(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             ),
-            color = Color.White.copy(alpha = 0.80f),
+            color = menuColors.label.copy(alpha = 0.80f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -343,6 +348,7 @@ fun AuraSuperpowerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     val cardShape = RoundedCornerShape(16.dp).continuous()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -399,7 +405,7 @@ fun AuraSuperpowerCard(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp,
                         ),
-                        color = Color.White,
+                        color = menuColors.label,
                     )
                     Surface(
                         shape = RoundedCornerShape(6.dp).continuous(),
@@ -421,7 +427,7 @@ fun AuraSuperpowerCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = menuColors.secondaryLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -447,16 +453,19 @@ fun AuraActionRow(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     description: String? = null,
-    iconTint: Color = Color.White.copy(alpha = 0.85f),
-    labelColor: Color = Color.White,
+    iconTint: Color? = null,
+    labelColor: Color? = null,
     enabled: Boolean = true,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    val menuColors = iosMenuColors()
+    val resolvedIconTint = iconTint ?: menuColors.label.copy(alpha = 0.85f)
+    val resolvedLabelColor = labelColor ?: menuColors.label
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val alpha = if (enabled) 1f else 0.40f
     val rowShape = RoundedCornerShape(12.dp).continuous()
-    val bgColor = if (pressed && enabled) Color.White.copy(alpha = 0.08f) else Color.Transparent
+    val bgColor = if (pressed && enabled) menuColors.pressed else Color.Transparent
 
     Row(
         modifier = modifier
@@ -488,7 +497,7 @@ fun AuraActionRow(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = iconTint.copy(alpha = alpha),
+                    tint = resolvedIconTint.copy(alpha = alpha),
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -505,7 +514,7 @@ fun AuraActionRow(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 ),
-                color = labelColor.copy(alpha = alpha),
+                color = resolvedLabelColor.copy(alpha = alpha),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -513,7 +522,7 @@ fun AuraActionRow(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = Color.White.copy(alpha = 0.55f * alpha),
+                    color = menuColors.secondaryLabel.copy(alpha = menuColors.secondaryLabel.alpha * alpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -532,12 +541,13 @@ fun AuraActionRow(
  */
 @Composable
 fun AuraActionDivider(modifier: Modifier = Modifier) {
+    val menuColors = iosMenuColors()
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp)
             .height(1.dp)
-            .background(Color.White.copy(alpha = 0.08f)),
+            .background(menuColors.separator),
     )
 }
 
@@ -549,6 +559,7 @@ fun AuraSectionHeading(
     title: String,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     Text(
         text = title.uppercase(),
         style = MaterialTheme.typography.labelSmall.copy(
@@ -556,7 +567,7 @@ fun AuraSectionHeading(
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.8.sp,
         ),
-        color = Color.White.copy(alpha = 0.45f),
+        color = menuColors.secondaryLabel,
         modifier = modifier.padding(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 4.dp),
     )
 }

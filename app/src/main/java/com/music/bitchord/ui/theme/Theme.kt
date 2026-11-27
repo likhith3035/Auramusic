@@ -29,36 +29,80 @@ val NothingBlack = Color(0xFF000000)
 private val NothingDarkColors = darkColorScheme(
     primary = NothingRed,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFF2B1215),
+    onPrimaryContainer = Color(0xFFFFDAD9),
+    secondaryContainer = Color(0xFF1E1E22),
+    onSecondaryContainer = Color.White,
     background = NothingBlack,
     onBackground = Color.White,
     surface = NothingBlack,
     onSurface = Color.White,
     surfaceVariant = Color(0xFF121215),
     onSurfaceVariant = Color(0xFFA1A1AA),
+    surfaceContainer = Color(0xFF101013),
+    surfaceContainerLow = Color(0xFF0A0A0C),
+    surfaceContainerHigh = Color(0xFF18181D),
+    surfaceContainerHighest = Color(0xFF222228),
     outline = Color(0xFF26262B),
+)
+
+private val NothingLightColors = lightColorScheme(
+    primary = NothingRed,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFDAD9),
+    onPrimaryContainer = Color(0xFF410006),
+    secondaryContainer = Color(0xFFEAEAEF),
+    onSecondaryContainer = Color(0xFF111113),
+    background = Color(0xFFFAFAFC),
+    onBackground = Color(0xFF111113),
+    surface = Color(0xFFF3F3F7),
+    onSurface = Color(0xFF111113),
+    surfaceVariant = Color(0xFFE8E8EE),
+    onSurfaceVariant = Color(0xFF52525B),
+    surfaceContainer = Color(0xFFEFEFF4),
+    surfaceContainerLow = Color(0xFFF6F6FA),
+    surfaceContainerHigh = Color(0xFFE7E7EE),
+    surfaceContainerHighest = Color(0xFFDFDFE7),
+    outline = Color(0xFFD4D4DC),
 )
 
 private val DarkColors = darkColorScheme(
     primary = Color.White,
     onPrimary = Color.Black,
+    primaryContainer = Color(0xFF2C2C2E),
+    onPrimaryContainer = Color.White,
+    secondaryContainer = Color(0xFF242426),
+    onSecondaryContainer = Color.White,
     background = Color.Black,
     onBackground = Color.White,
     surface = Color(0xFF0D0D0F),
     onSurface = Color.White,
     surfaceVariant = Color(0xFF1C1C1E),
     onSurfaceVariant = Color(0xFF8E8E93),
+    surfaceContainer = Color(0xFF141416),
+    surfaceContainerLow = Color(0xFF0D0D0F),
+    surfaceContainerHigh = Color(0xFF1C1C1E),
+    surfaceContainerHighest = Color(0xFF262629),
     outline = Color(0xFF2C2C2E),
 )
 
 private val LightColors = lightColorScheme(
     primary = Color.Black,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFE5E5EA),
+    onPrimaryContainer = Color.Black,
+    secondaryContainer = Color(0xFFEBEBF0),
+    onSecondaryContainer = Color(0xFF1C1C1E),
     background = Color.White,
     onBackground = Color.Black,
     surface = Color(0xFFF7F7F9),
     onSurface = Color.Black,
     surfaceVariant = Color(0xFFF2F2F7),
     onSurfaceVariant = Color(0xFF6E6E73),
+    surfaceContainer = Color(0xFFF2F2F7),
+    surfaceContainerLow = Color(0xFFF9F9FB),
+    surfaceContainerHigh = Color(0xFFEBEBF0),
+    surfaceContainerHighest = Color(0xFFE2E2E8),
     outline = Color(0xFFE5E5EA),
 )
 
@@ -114,7 +158,8 @@ fun BitChordTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = when {
-        nothingOs -> NothingDarkColors
+        nothingOs && darkTheme -> NothingDarkColors
+        nothingOs -> NothingLightColors
         darkTheme -> DarkColors
         else -> LightColors
     }

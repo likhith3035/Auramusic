@@ -82,12 +82,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import com.music.bitchord.data.link.ParsedYouTubeLink
+import com.music.bitchord.data.link.ResolvedYouTubeLink
+import com.music.bitchord.data.link.YouTubeLinkKind
+import com.music.bitchord.data.link.YouTubeLinkParser
+import com.music.bitchord.data.link.YouTubeLinkResolver
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.playback.StreamChoice
+import com.music.bitchord.ui.components.DirectLinkUiState
 import com.music.bitchord.ui.screens.CACHE_FOLDER_BROWSE_ID
 import com.music.bitchord.ui.screens.matchesSearch
 import java.util.Locale
@@ -154,6 +160,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _results = MutableStateFlow<UiState<List<SearchResult>>?>(null)
     val results: StateFlow<UiState<List<SearchResult>>?> = _results.asStateFlow()
+
+    private val _directLink = MutableStateFlow<DirectLinkUiState?>(null)
+    val directLink: StateFlow<DirectLinkUiState?> = _directLink.asStateFlow()
+
+    private val _clipboardLinkPrompt = MutableStateFlow<ParsedYouTubeLink?>(null)
+    val clipboardLinkPrompt: StateFlow<ParsedYouTubeLink?> = _clipboardLinkPrompt.asStateFlow()
+
+    data class DirectLinkAutoPlayRequest(
+        val track: Song? = null,
+        val startPositionMs: Long = 0L,
+        val collectionSongs: List<Song> = emptyList(),
+        val collectionTitle: String? = null,
+        val collectionBrowseId: String? = null,
+    )
+
+    private val _directLinkAutoPlay = MutableSharedFlow<DirectLinkAutoPlayRequest>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val directLinkAutoPlay = _directLinkAutoPlay
+
+    private var activeLinkJob: Job? = null
+    private var dismissedClipboardUrl: String? = null
 
     /** The mixed YouTube Music result page is the fast, useful default. */
     private val _filter = MutableStateFlow(SearchFilter.ALL)
@@ -1419,6 +1448,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             PlaybackTracker.registeredPlays.drop(1).collect { homeStale = true }
         }
         viewModelScope.launch {
+            com.music.bitchord.data.taste.MusicTasteStore.tasteRefreshSeq.drop(1).collect { (_, syncSubs) ->
+                refreshTastePersonalization(syncYouTubeSubscriptions = syncSubs)
+            }
+        }
+        viewModelScope.launch {
             AppSettings.filterNonMusicAudio.drop(1).collect {
                 if (_detailStack.value.any { page -> page.browseId == "local:all" }) {
                     reloadLocalDetail("local:all")
@@ -1668,7 +1702,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
-            if (_signedIn.value && AppSettings.newReleaseAlertsEnabled.value) {
+            if ((_signedIn.value || com.music.bitchord.data.taste.MusicTasteStore.preferences.value.selectedArtists.isNotEmpty()) && AppSettings.newReleaseAlertsEnabled.value) {
                 launch {
                     try {
                         val cached = NewReleaseCache.getCachedReleases(getApplication())
@@ -1685,7 +1719,82 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
+            val tastePrefs = com.music.bitchord.data.taste.MusicTasteStore.preferences.value
+            if (tastePrefs.tasteConfigured) {
+                launch {
+                    try {
+                        val tasteShelves = com.music.bitchord.data.taste.MusicTasteRepository
+                            .buildPersonalizedHomeShelves(tastePrefs)
+                        if (tasteShelves.isNotEmpty() && isCurrentHomeLoad(identity, generation)) {
+                            publishTasteShelves(tasteShelves)
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
         }
+    }
+
+    /**
+     * Re-applies personalized shelves after editing Music Taste in Onboarding or Settings,
+     * and optionally subscribes to the picked artists on YouTube Music when signed in.
+     */
+    fun refreshTastePersonalization(syncYouTubeSubscriptions: Boolean = false) {
+        val prefs = com.music.bitchord.data.taste.MusicTasteStore.preferences.value
+        val identity = listenerKey()
+        val generation = homeLoadGeneration.get()
+        viewModelScope.launch {
+            if (syncYouTubeSubscriptions && _signedIn.value && prefs.selectedArtists.isNotEmpty()) {
+                runCatching {
+                    com.music.bitchord.data.taste.MusicTasteRepository
+                        .subscribeToPickedArtists(prefs.selectedArtists)
+                }
+            }
+            if (prefs.tasteConfigured) {
+                runCatching {
+                    val tasteShelves = com.music.bitchord.data.taste.MusicTasteRepository
+                        .buildPersonalizedHomeShelves(prefs)
+                    if (tasteShelves.isNotEmpty() && isCurrentHomeLoad(identity, generation)) {
+                        publishTasteShelves(tasteShelves)
+                    }
+                }
+            } else {
+                val existing = (_home.value as? UiState.Success)?.data.orEmpty()
+                if (existing.isNotEmpty()) {
+                    _home.value = UiState.Success(
+                        existing.filterNot {
+                            it.title == "Picked from your taste" || it.title.endsWith(" Spotlight")
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun publishTasteShelves(tasteShelves: List<HomeShelf>) {
+        if (tasteShelves.isEmpty()) return
+        val titles = tasteShelves.map { it.title.lowercase(Locale.ROOT) }.toSet()
+        homeSeenTitles.addAll(titles)
+        val existing = (_home.value as? UiState.Success)?.data.orEmpty()
+        if (existing.isEmpty()) {
+            _home.value = UiState.Success(tasteShelves)
+            return
+        }
+        val withoutOld = existing.filterNot {
+            it.title.lowercase(Locale.ROOT) in titles ||
+                it.title.equals("Picked from your taste", ignoreCase = true) ||
+                it.title.endsWith(" Spotlight")
+        }
+        val recentsIndex = withoutOld.indexOfFirst {
+            it.title.equals("Recents", ignoreCase = true) ||
+                it.title.equals("Recently played", ignoreCase = true) ||
+                it.title.equals(NEW_FOR_YOU_SHELF, ignoreCase = true)
+        }
+        val insertPos = if (recentsIndex >= 0) (recentsIndex + 1).coerceAtMost(withoutOld.size) else 0
+        val updated = withoutOld.toMutableList().apply {
+            addAll(insertPos, tasteShelves)
+        }
+        _home.value = UiState.Success(updated)
     }
 
     /**
@@ -1764,7 +1873,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         recent?.await()?.onSuccess { shelf ->
             if (identity == listenerKey()) shelf?.let { publishHomeShelves(listOf(it), prepend = true) }
         }
-        if (_signedIn.value && AppSettings.newReleaseAlertsEnabled.value) {
+        if ((_signedIn.value || com.music.bitchord.data.taste.MusicTasteStore.preferences.value.selectedArtists.isNotEmpty()) && AppSettings.newReleaseAlertsEnabled.value) {
             launch {
                 try {
                     val fresh = NewReleaseChecker.checkNewReleases(getApplication(), forceAll = true)
@@ -1773,6 +1882,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         publishNewForYouShelf(fresh)
                     }
                 } catch (_: Exception) {
+                }
+            }
+        }
+        val tastePrefs = com.music.bitchord.data.taste.MusicTasteStore.preferences.value
+        if (tastePrefs.tasteConfigured) {
+            launch {
+                runCatching {
+                    val tasteShelves = com.music.bitchord.data.taste.MusicTasteRepository
+                        .buildPersonalizedHomeShelves(tastePrefs)
+                    if (tasteShelves.isNotEmpty() && identity == listenerKey()) {
+                        publishTasteShelves(tasteShelves)
+                    }
                 }
             }
         }
@@ -1979,6 +2100,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onQueryChange(newValue: String) {
         _query.value = newValue
         if (newValue.isBlank()) {
+            activeLinkJob?.cancel()
+            _directLink.value = null
             searchSubmitted = false
             _suggestions.value = emptyList()
             _typeaheadResults.value = emptyList()
@@ -1990,6 +2113,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _searchScrollReset.value += 1
             return
         }
+        val parsedLink = YouTubeLinkParser.parse(newValue)
+        if (parsedLink != null) {
+            if (_searchSource.value == SearchSource.LIBRARY) {
+                _searchSource.value = SearchSource.YOUTUBE
+            }
+            if (parsedLink.kind == YouTubeLinkKind.SEARCH && !parsedLink.searchQuery.isNullOrBlank()) {
+                _directLink.value = null
+                searchFor(parsedLink.searchQuery!!)
+                return
+            }
+            dismissMatchingClipboardPrompt(parsedLink)
+            resolveDirectLink(parsedLink)
+            return
+        }
+        activeLinkJob?.cancel()
+        _directLink.value = null
         // Reset the submission gate so typeahead pipelines fire again.
         searchSubmitted = false
         // The Library source answers from the device on every keystroke (see
@@ -2006,11 +2145,150 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun submitSearch() {
         val q = _query.value.trim()
+        val parsedLink = YouTubeLinkParser.parse(q)
+        if (parsedLink != null) {
+            if (_searchSource.value == SearchSource.LIBRARY) {
+                _searchSource.value = SearchSource.YOUTUBE
+            }
+            if (parsedLink.kind == YouTubeLinkKind.SEARCH && !parsedLink.searchQuery.isNullOrBlank()) {
+                _directLink.value = null
+                searchFor(parsedLink.searchQuery!!)
+            } else {
+                resolveDirectLink(parsedLink)
+            }
+            return
+        }
         if (q.isEmpty() || _searchSource.value == SearchSource.LIBRARY) return
         searchSubmitted = true
         _suggestions.value = emptyList()
         _typeaheadResults.value = emptyList()
+        com.music.bitchord.data.telemetry.AuraAnalytics.trackSearchSubmitted(
+            _searchSource.value.name.lowercase(),
+        )
         runSearch()
+    }
+
+    private fun resolveDirectLink(link: ParsedYouTubeLink) {
+        activeLinkJob?.cancel()
+        searchSubmitted = true
+        newestRequestId.incrementAndGet()
+        searchSession = null
+        _searchLoadingMore.value = false
+        _suggestions.value = emptyList()
+        _typeaheadResults.value = emptyList()
+        _results.value = null
+        _searchScrollReset.value += 1
+        _directLink.value = DirectLinkUiState.Loading(link)
+        val shouldAutoPlay = AppSettings.autoPlayPastedLinks.value
+        activeLinkJob = viewModelScope.launch {
+            YouTubeLinkResolver.resolve(link).fold(
+                onSuccess = { resolved ->
+                    _directLink.value = DirectLinkUiState.Ready(
+                        resolved = resolved,
+                        useStudioMatch = true,
+                    )
+                    when (resolved) {
+                        is ResolvedYouTubeLink.Track -> {
+                            val studio = YouTubeLinkResolver.findStudioMatch(resolved)
+                            val updated = if (studio != null) resolved.copy(studioMatch = studio) else resolved
+                            val current = _directLink.value
+                            if (studio != null && current is DirectLinkUiState.Ready && current.resolved == resolved) {
+                                _directLink.value = current.copy(resolved = updated)
+                            }
+                            if (shouldAutoPlay) {
+                                val target = studio ?: resolved.videoSong
+                                val startMs = when {
+                                    studio != null -> 0L
+                                    resolved.startPositionMs > 0L -> resolved.startPositionMs
+                                    resolved.resumePositionMs > 0L -> resolved.resumePositionMs
+                                    else -> 0L
+                                }
+                                _directLinkAutoPlay.tryEmit(
+                                    DirectLinkAutoPlayRequest(track = target, startPositionMs = startMs),
+                                )
+                            }
+                            val related = YouTubeLinkResolver.findRelatedTracks(updated)
+                            val afterRelated = _directLink.value
+                            if (
+                                related.isNotEmpty() &&
+                                afterRelated is DirectLinkUiState.Ready &&
+                                afterRelated.resolved.link == resolved.link
+                            ) {
+                                _directLink.value = afterRelated.copy(relatedTracks = related)
+                            }
+                        }
+                        is ResolvedYouTubeLink.Collection -> {
+                            if (shouldAutoPlay && resolved.songs.isNotEmpty()) {
+                                _directLinkAutoPlay.tryEmit(
+                                    DirectLinkAutoPlayRequest(
+                                        collectionSongs = resolved.songs,
+                                        collectionTitle = resolved.title,
+                                        collectionBrowseId = resolved.browseId,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                },
+                onFailure = { failure ->
+                    _directLink.value = DirectLinkUiState.Error(
+                        link = link,
+                        message = failure.message ?: text(R.string.couldnt_open_link),
+                    )
+                },
+            )
+        }
+    }
+
+    fun selectDirectLinkStudioMatch(useStudio: Boolean) {
+        val current = _directLink.value as? DirectLinkUiState.Ready ?: return
+        _directLink.value = current.copy(useStudioMatch = useStudio)
+    }
+
+    fun retryDirectLink() {
+        val link = when (val state = _directLink.value) {
+            is DirectLinkUiState.Error -> state.link
+            is DirectLinkUiState.Ready -> state.resolved.link
+            is DirectLinkUiState.Loading -> state.link
+            null -> YouTubeLinkParser.parse(_query.value)
+        } ?: return
+        resolveDirectLink(link)
+    }
+
+    fun inspectClipboardText(rawText: String?, currentPlayingVideoId: String?) {
+        val parsed = rawText?.let(YouTubeLinkParser::parse) ?: return
+        if (parsed.kind == YouTubeLinkKind.SEARCH) return
+        if (parsed.canonicalUrl == dismissedClipboardUrl) return
+        if (currentPlayingVideoId != null && parsed.videoId == currentPlayingVideoId) return
+        val queryParsed = YouTubeLinkParser.parse(_query.value)
+        if (queryParsed?.canonicalUrl == parsed.canonicalUrl) return
+        _clipboardLinkPrompt.value = parsed
+    }
+
+    fun openClipboardLink(link: ParsedYouTubeLink) {
+        dismissedClipboardUrl = link.canonicalUrl
+        _clipboardLinkPrompt.value = null
+        _searchSource.value = SearchSource.YOUTUBE
+        _query.value = link.rawUrl
+        if (link.kind == YouTubeLinkKind.SEARCH && !link.searchQuery.isNullOrBlank()) {
+            _directLink.value = null
+            searchFor(link.searchQuery!!)
+        } else {
+            resolveDirectLink(link)
+        }
+    }
+
+    fun dismissClipboardPrompt(rememberDismissed: Boolean = true) {
+        val current = _clipboardLinkPrompt.value ?: return
+        if (rememberDismissed) dismissedClipboardUrl = current.canonicalUrl
+        _clipboardLinkPrompt.value = null
+    }
+
+    private fun dismissMatchingClipboardPrompt(link: ParsedYouTubeLink) {
+        if (_clipboardLinkPrompt.value?.canonicalUrl == link.canonicalUrl) {
+            dismissedClipboardUrl = link.canonicalUrl
+            _clipboardLinkPrompt.value = null
+        }
     }
 
     /**
@@ -3275,6 +3553,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun reloadForAccount() {
         viewModelScope.launch {
             Innertube.ensureSessionScope()
+            val tastePrefs = com.music.bitchord.data.taste.MusicTasteStore.preferences.value
+            if (tastePrefs.tasteConfigured && tastePrefs.autoSubscribeOnSignIn && tastePrefs.selectedArtists.isNotEmpty()) {
+                launch {
+                    runCatching {
+                        com.music.bitchord.data.taste.MusicTasteRepository
+                            .subscribeToPickedArtists(tastePrefs.selectedArtists)
+                    }
+                }
+            }
             loadHome()
             loadLibrary()
             loadAccount()

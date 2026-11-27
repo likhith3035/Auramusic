@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
@@ -92,10 +96,17 @@ fun SettingsHubScreen(
     modifier: Modifier = Modifier,
     searchResultsContent: (@Composable () -> Unit)? = null,
     onListenTogether: () -> Unit = {},
+    onOpenTastePicker: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val party by ListenTogether.state.collectAsStateWithLifecycle()
+    val nothingOsMode by com.music.bitchord.data.settings.AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val wifiQuality by com.music.bitchord.data.settings.AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
+    val cellularDataSaver by com.music.bitchord.data.settings.AppSettings.cellularDataSaver.collectAsStateWithLifecycle()
+    val tastePrefs by com.music.bitchord.data.taste.MusicTasteStore.preferences.collectAsStateWithLifecycle()
+    val updateNotice by com.music.bitchord.data.AppUpdateChecker.available.collectAsStateWithLifecycle()
+    val accentColor = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Red else MaterialTheme.colorScheme.primary
 
     Column(
         modifier = modifier
@@ -105,7 +116,7 @@ fun SettingsHubScreen(
     ) {
         SettingsPageTitle(stringResource(R.string.settings))
 
-        // Search Field matching AuraMusic surface style
+        // Search Field matching AuraMusic / Nothing OS style
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -119,14 +130,14 @@ fun SettingsHubScreen(
                     Text(
                         text = stringResource(R.string.settings_search_hint),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.MutedText else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Rounded.Search,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.MutedText else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
                 trailingIcon = {
@@ -143,15 +154,50 @@ fun SettingsHubScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant,
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Border else Color.Transparent,
                 ),
             )
         }
 
-        Spacer(Modifier.height(8.dp))
+        if (searchQuery.isBlank()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    "Audio Quality" to { onNavigate(SettingsRoute.AUDIO) },
+                    "Appearance" to { onNavigate(SettingsRoute.APPEARANCE) },
+                    "Music Taste" to { onOpenTastePicker?.invoke() ?: onNavigate(SettingsRoute.CONTENT) },
+                    "Downloads & Storage" to { onNavigate(SettingsRoute.STORAGE) },
+                    "About & Updates" to { onNavigate(SettingsRoute.ABOUT) },
+                ).forEach { (pillLabel, action) ->
+                    Surface(
+                        color = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(
+                            1.dp,
+                            if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.Border else Color.Transparent,
+                        ),
+                        modifier = Modifier.clickable(onClick = action),
+                    ) {
+                        Text(
+                            text = pillLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (nothingOsMode) com.music.bitchord.ui.theme.NothingThemeTokens.White else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
 
         if (searchResultsContent != null) {
             searchResultsContent()
@@ -227,12 +273,13 @@ fun SettingsHubScreen(
 
         Spacer(Modifier.height(4.dp))
 
-        // Primary 7 Category Domain Cards
+        // Primary Category Domain Cards with live current state values
         SettingsGroup(header = stringResource(R.string.settings_hub_audio_title)) {
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.settings_hub_audio_title),
                 subtitle = stringResource(R.string.settings_hub_audio_subtitle),
+                value = wifiQuality.name.lowercase().replaceFirstChar { it.uppercase() },
                 onClick = { onNavigate(SettingsRoute.AUDIO) },
             )
             RowDivider()
@@ -240,13 +287,18 @@ fun SettingsHubScreen(
                 icon = Icons.Rounded.Palette,
                 title = stringResource(R.string.settings_hub_appearance_title),
                 subtitle = stringResource(R.string.settings_hub_appearance_subtitle),
+                value = if (nothingOsMode) "Nothing OS" else "Liquid Glass",
                 onClick = { onNavigate(SettingsRoute.APPEARANCE) },
             )
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.settings_hub_content_title),
-                subtitle = stringResource(R.string.settings_hub_content_subtitle),
+                subtitle = if (tastePrefs.tasteConfigured) {
+                    "Music taste: ${com.music.bitchord.data.taste.MusicTasteStore.summaryLabel()}"
+                } else {
+                    stringResource(R.string.settings_hub_content_subtitle)
+                },
                 onClick = { onNavigate(SettingsRoute.CONTENT) },
             )
         }
@@ -263,6 +315,7 @@ fun SettingsHubScreen(
                 icon = Icons.Rounded.Wifi,
                 title = stringResource(R.string.settings_hub_network_title),
                 subtitle = stringResource(R.string.settings_hub_network_subtitle),
+                badge = "SAVER ON".takeIf { cellularDataSaver },
                 onClick = { onNavigate(SettingsRoute.NETWORK) },
             )
             RowDivider()
@@ -301,15 +354,15 @@ fun SettingsHubScreen(
                 title = stringResource(R.string.app_language),
                 onClick = onAppLanguage,
             )
-            if (onShowUpdateDialog != null) {
-                RowDivider()
-                SettingsRow(
-                    icon = Icons.Rounded.SystemUpdate,
-                    title = "Check for Software Updates",
-                    subtitle = "Current build: v${BuildConfig.VERSION_NAME}",
-                    onClick = onShowUpdateDialog,
-                )
-            }
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Info,
+                title = "About, What's New & Updates",
+                subtitle = "Welcome tour, changelog, creator & software updates",
+                value = "v${BuildConfig.VERSION_NAME}",
+                badge = "UPDATE".takeIf { updateNotice != null },
+                onClick = { onNavigate(SettingsRoute.ABOUT) },
+            )
         }
 
         // Developer Credit & Architecture Card
@@ -407,12 +460,15 @@ fun SettingsHubScreen(
                             ),
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable {
-                                    val intent = Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/likhith3035"),
-                                    )
-                                    context.startActivity(intent)
+                                .heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) {
+                                    runCatching {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/likhith3035"),
+                                        )
+                                        context.startActivity(intent)
+                                    }
                                 },
                         ) {
                             Row(
@@ -445,12 +501,15 @@ fun SettingsHubScreen(
                             ),
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable {
-                                    val intent = Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/likhith3035/Auramusic"),
-                                    )
-                                    context.startActivity(intent)
+                                .heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) {
+                                    runCatching {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/likhith3035/Auramusic"),
+                                        )
+                                        context.startActivity(intent)
+                                    }
                                 },
                         ) {
                             Row(

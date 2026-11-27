@@ -127,8 +127,9 @@ fun UpdateAvailableDialog(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 320.dp, max = 360.dp)
+                .widthIn(max = 360.dp)
                 .fillMaxWidth(0.92f)
+                .verticalScroll(rememberScrollState())
                 .clip(cardShape)
                 .border(
                     width = 1.dp,

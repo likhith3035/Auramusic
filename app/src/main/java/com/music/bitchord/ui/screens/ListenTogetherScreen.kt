@@ -658,51 +658,6 @@ fun ListenTogetherScreen(
 }
 
 /**
- * Whether the party server is answering, before anything else on the screen.
- *
- * Every other failure in this feature looks the same from the outside — a code
- * that will not create, a join that sits there — and most of the time the
- * answer is simply that the server is asleep or unreachable. Saying so up front
- * is the difference between a feature that looks broken and one that is waiting.
- *
- * Deliberately says nothing about *where* the server is. The address this build
- * uses is not shown here, on the row below, or in any log — see
- * [ListenTogether.customServerUrl].
- */
-@Composable
-private fun ServerHealthRow(
-    status: ListenTogether.ServerStatus,
-    onRecheck: () -> Unit,
-) {
-    SettingsGroup {
-        SettingsRow(
-            icon = when (status.health) {
-                ListenTogether.Health.ONLINE -> Icons.Rounded.CloudDone
-                ListenTogether.Health.OFFLINE -> Icons.Rounded.CloudOff
-                else -> Icons.Rounded.Cloud
-            },
-            title = stringResource(R.string.listen_together_server),
-            subtitle = when (status.health) {
-                ListenTogether.Health.ONLINE ->
-                    if (status.isFallback) {
-                        stringResource(R.string.listen_together_server_online_fallback, status.latencyMs)
-                    } else {
-                        stringResource(R.string.listen_together_server_online, status.latencyMs)
-                    }
-                ListenTogether.Health.OFFLINE ->
-                    stringResource(R.string.listen_together_server_offline)
-                ListenTogether.Health.CHECKING ->
-                    stringResource(R.string.listen_together_server_checking)
-                ListenTogether.Health.UNKNOWN ->
-                    stringResource(R.string.listen_together_server_unknown)
-            },
-            trailing = if (status.health == ListenTogether.Health.CHECKING) ({ Spinner() }) else null,
-            onClick = onRecheck,
-        )
-    }
-}
-
-/**
  * Whether the address that was typed is actually answering.
  *
  * Under the address rather than in a toast, because the interesting case is the
@@ -1396,20 +1351,19 @@ private fun MemberRow(
 @Composable
 private fun PartyActivityList(entries: List<PartyActivity>) {
     if (entries.isEmpty()) return
+    var expanded by remember { mutableStateOf(false) }
+    val visibleEntries = if (expanded || entries.size <= 6) entries else entries.take(6)
     SettingsGroup(
         header = stringResource(R.string.listen_together_activity),
         footer = stringResource(R.string.listen_together_activity_footer),
     ) {
-        val logScroll = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(156.dp)
                 .background(MaterialTheme.colorScheme.surface)
-                .verticalScroll(logScroll)
                 .padding(horizontal = ROW_INSET, vertical = 8.dp),
         ) {
-            entries.forEach { entry ->
+            visibleEntries.forEach { entry ->
                 val timestamp = DateFormat.format("HH:mm:ss", entry.atMs)
                 Text(
                     text = "[$timestamp] ${entry.by}: ${entry.detail.ifBlank { entry.action }}",
@@ -1418,6 +1372,17 @@ private fun PartyActivityList(entries: List<PartyActivity>) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (entries.size > 6) {
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = if (expanded) "Show less" else "Show all (${entries.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }

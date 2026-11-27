@@ -12,13 +12,17 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.NothingThemeTokens
 
 @Composable
 fun SettingsSubPageHeader(
@@ -26,6 +30,10 @@ fun SettingsSubPageHeader(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val accent = if (nothingOsMode) NothingThemeTokens.Red else MaterialTheme.colorScheme.onBackground
+    val titleColor = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onBackground
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -36,7 +44,7 @@ fun SettingsSubPageHeader(
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = stringResource(R.string.back),
-                tint = MaterialTheme.colorScheme.onBackground,
+                tint = accent,
             )
         }
         Spacer(Modifier.width(4.dp))
@@ -44,7 +52,7 @@ fun SettingsSubPageHeader(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = titleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

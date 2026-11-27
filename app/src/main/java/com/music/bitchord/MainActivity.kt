@@ -14,6 +14,10 @@ import com.music.bitchord.ui.components.handleDacVolumeKey
 
 import android.Manifest
 
+import android.content.ClipDescription
+
+import android.content.ClipboardManager
+
 import android.content.Context
 
 import android.content.Intent
@@ -371,6 +375,20 @@ import com.music.bitchord.ui.screens.SpotifyCanvasAuthScreen
 
 import com.music.bitchord.ui.screens.SpotifyLibraryScreen
 
+import com.music.bitchord.data.link.ParsedYouTubeLink
+
+import com.music.bitchord.data.link.ResolvedYouTubeLink
+
+import com.music.bitchord.data.link.YouTubeLinkKind
+
+import com.music.bitchord.data.link.YouTubeLinkResolver
+
+import com.music.bitchord.data.link.YouTubeResumeStore
+
+import com.music.bitchord.data.settings.EqualizerMode
+
+import com.music.bitchord.playback.EqualizerPreset
+
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
 
 import com.music.bitchord.playback.AudioCache
@@ -461,7 +479,11 @@ import com.music.bitchord.ui.components.ReorderPlaylistSheet
 
 import com.music.bitchord.ui.components.LongPressOrigin
 
+import com.music.bitchord.ui.components.CopiedYouTubeLinkBanner
+
 import com.music.bitchord.ui.components.SongActionsMenu
+
+import com.music.bitchord.ui.rememberIsForeground
 
 import com.music.bitchord.ui.player.SongShareSheet
 import com.music.bitchord.ui.player.MusicVideoEngine
@@ -741,6 +763,12 @@ object AuraSignInLauncher {
     val requestedSession = kotlinx.coroutines.flow.MutableStateFlow<WebSessionMode?>(null)
 }
 
+object AuraIntroLauncher {
+    val replayOnboarding = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val openWhatsNew = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val openTastePicker = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
+
 class MainActivity : AppCompatActivity() {
 
     companion object {
@@ -963,15 +991,13 @@ class MainActivity : AppCompatActivity() {
                         }
                     } else {
 
-                    var showWhatsNew by rememberSaveable { mutableStateOf(false) }
-
                     var showSplash by rememberSaveable { mutableStateOf(true) }
 
-                    val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
-
-                    var showOnboarding by rememberSaveable { mutableStateOf(!onboardingCompleted) }
-
                     var mountApp by remember { mutableStateOf(false) }
+
+                    var showOnboarding by rememberSaveable { mutableStateOf(false) }
+
+                    var showWhatsNew by rememberSaveable { mutableStateOf(false) }
 
 
 
@@ -1003,26 +1029,39 @@ class MainActivity : AppCompatActivity() {
 
                     }
 
+                    val onboardingCompleted by AppSettings.onboardingCompleted.collectAsStateWithLifecycle()
+
                     val lastSeenWhatsNewVersion by AppSettings.lastSeenWhatsNewVersion.collectAsStateWithLifecycle()
+
+                    val reduceSplashAnim by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+
+                    val startupChimeEnabled by AppSettings.startupChimeEnabled.collectAsStateWithLifecycle()
+
+                    val replayOnboardingReq by AuraIntroLauncher.replayOnboarding.collectAsStateWithLifecycle()
+
+                    val manualWhatsNewReq by AuraIntroLauncher.openWhatsNew.collectAsStateWithLifecycle()
+
+                    val manualTastePickerReq by AuraIntroLauncher.openTastePicker.collectAsStateWithLifecycle()
+
+                    val pendingPlayerDeepLink by com.music.bitchord.playback.PlayerDeepLink.pending.collectAsStateWithLifecycle()
+
+                    val pendingMusicLink by com.music.bitchord.playback.MusicLink.pending.collectAsStateWithLifecycle()
+
+                    val pendingJamLink by com.music.bitchord.data.listentogether.JamInviteLink.pending.collectAsStateWithLifecycle()
+
+                    val fastTrackSplash = pendingPlayerDeepLink || pendingMusicLink != null || pendingJamLink != null
 
                     if (showSplash) {
 
                         AuraSplashScreen(
 
                             onFinished = {
-
                                 showSplash = false
-
                                 if (!onboardingCompleted) {
-
                                     showOnboarding = true
-
-                                } else if (lastSeenWhatsNewVersion < 4) {
-
+                                } else if (lastSeenWhatsNewVersion < AppSettings.CURRENT_WHATS_NEW_VERSION) {
                                     showWhatsNew = true
-
                                 }
-
                             },
 
                             onPlayIntroCue = {
@@ -1031,25 +1070,35 @@ class MainActivity : AppCompatActivity() {
 
                             },
 
+                            reduceAnimation = reduceSplashAnim,
+
+                            fastTrack = fastTrackSplash,
+
+                            playAudioCue = startupChimeEnabled,
+
                         )
 
-                    } else if (showWhatsNew) {
+                    } else if (showWhatsNew || manualWhatsNewReq) {
 
                         AuraV3WhatsNewDialog(
 
                             onDismissRequest = {
 
-                                AppSettings.setLastSeenWhatsNewVersion(4)
+                                AppSettings.setLastSeenWhatsNewVersion(AppSettings.CURRENT_WHATS_NEW_VERSION)
 
                                 showWhatsNew = false
+
+                                AuraIntroLauncher.openWhatsNew.value = false
 
                             },
 
                             onExploreParty = {
 
-                                AppSettings.setLastSeenWhatsNewVersion(4)
+                                AppSettings.setLastSeenWhatsNewVersion(AppSettings.CURRENT_WHATS_NEW_VERSION)
 
                                 showWhatsNew = false
+
+                                AuraIntroLauncher.openWhatsNew.value = false
 
                             },
 
@@ -1057,9 +1106,19 @@ class MainActivity : AppCompatActivity() {
 
                     }
 
+                    if (manualTastePickerReq) {
+
+                        com.music.bitchord.ui.onboarding.AuraMainTasteEditorOverlay(
+
+                            onDismiss = { AuraIntroLauncher.openTastePicker.value = false },
+
+                        )
+
+                    }
+
                     AnimatedVisibility(
 
-                        visible = !showSplash && showOnboarding && !onboardingCompleted,
+                        visible = !showSplash && (replayOnboardingReq || (showOnboarding && !onboardingCompleted)),
 
                         enter = fadeIn(tween(350)),
 
@@ -1075,13 +1134,13 @@ class MainActivity : AppCompatActivity() {
 
                             onSignInGoogle = {
                                 showOnboarding = false
+                                AuraIntroLauncher.replayOnboarding.value = false
                                 AuraSignInLauncher.requestedSession.value = WebSessionMode.SIGN_IN
                             },
 
                             onSkipSignIn = {
-
                                 showOnboarding = false
-
+                                AuraIntroLauncher.replayOnboarding.value = false
                             },
 
                         )
@@ -1444,13 +1503,11 @@ private fun BitChordApp(
 
     // and the mini player, like every other alert in the app.
 
-    var editingSource by remember { mutableStateOf<SourceConfig?>(null) }
-
-    var confirmJioSaavn by remember { mutableStateOf(false) }
+    var sourceAlert by remember { mutableStateOf<SourceAlertState?>(null) }
 
     var editingPartyServer by remember { mutableStateOf(false) }
 
-    var showHistory by remember { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
 
     // A Library shelf's "Show all" — the shelf it was opened from, so its own
 
@@ -1502,9 +1559,9 @@ private fun BitChordApp(
 
     // to cover the tab bar and mini player, which are drawn after it.
 
-    var showDiscord by remember { mutableStateOf(false) }
+    var showDiscord by rememberSaveable { mutableStateOf(false) }
 
-    var showSpotify by remember { mutableStateOf(false) }
+    var showSpotify by rememberSaveable { mutableStateOf(false) }
 
     var showDiscordLogin by remember { mutableStateOf(false) }
 
@@ -1768,6 +1825,10 @@ private fun BitChordApp(
 
     val libraryResults by viewModel.libraryResults.collectAsStateWithLifecycle()
 
+    val directLink by viewModel.directLink.collectAsStateWithLifecycle()
+
+    val clipboardLinkPrompt by viewModel.clipboardLinkPrompt.collectAsStateWithLifecycle()
+
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
 
     val incomingJamInvite by JamInviteLink.pending.collectAsStateWithLifecycle()
@@ -2000,23 +2061,7 @@ private fun BitChordApp(
 
     val localPlaylists by com.music.bitchord.data.spotify.LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
 
-    val localPlaylistItems = localPlaylists.map { playlist ->
-
-        ShelfItem(
-
-            title = playlist.title,
-
-            subtitle = stringResource(R.string.local_playlist_subtitle, playlist.songs.size),
-
-            thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
-
-            videoId = null,
-
-            browseId = playlist.browseId,
-
-        )
-
-    }
+    val localPlaylistItems = rememberLocalPlaylistShelfItems(localPlaylists)
 
     // What a browse id is recorded under in Downloads.collections, when it names
 
@@ -2097,6 +2142,50 @@ private fun BitChordApp(
 
 
     val player = rememberPlayerState(controller)
+
+    val isForeground = rememberIsForeground()
+
+    var lastCheckedClipTimestamp by remember { mutableStateOf(-1L) }
+
+    var lastCheckedClipKey by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isForeground) {
+
+        if (!isForeground) return@LaunchedEffect
+
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return@LaunchedEffect
+
+        val desc = cm.primaryClipDescription ?: return@LaunchedEffect
+
+        val isText = desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
+
+            desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML)
+
+        if (!isText) return@LaunchedEffect
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
+            val ts = desc.timestamp
+
+            if (ts > 0L && ts == lastCheckedClipTimestamp) return@LaunchedEffect
+
+            lastCheckedClipTimestamp = ts
+
+        }
+
+        val text = runCatching {
+
+            cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+
+        }.getOrNull() ?: return@LaunchedEffect
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && text == lastCheckedClipKey) return@LaunchedEffect
+
+        lastCheckedClipKey = text
+
+        viewModel.inspectClipboardText(text, player.song?.videoId)
+
+    }
 
     // A resume in a party is performed on the instant the server schedules, not
 
@@ -3130,7 +3219,7 @@ private fun BitChordApp(
 
      */
 
-    val playRadio: (Song, QueueSource) -> Unit = { song, source ->
+    val playRadioAt: (Song, QueueSource, Long) -> Unit = { song, source, startPositionMs ->
 
         playRequestGeneration++
 
@@ -3160,11 +3249,19 @@ private fun BitChordApp(
 
             )
 
-            c.playSongs(oneOffQueue, 0)
+            c.playSongs(oneOffQueue, 0, initialPositionMs = startPositionMs)
 
             // Start radio in the mini-player; the user opens the full view by tapping it.
 
         }
+
+    }
+
+
+
+    val playRadio: (Song, QueueSource) -> Unit = { song, source ->
+
+        playRadioAt(song, source, 0L)
 
     }
 
@@ -3760,37 +3857,77 @@ private fun BitChordApp(
 
             is LinkRequest.Track -> {
 
-                val song = YtMusicRepository.trackLinks(request.videoId).getOrNull()
+                val parsed = ParsedYouTubeLink(
 
-                if (song == null) {
+                    kind = when {
 
-                    Toast.makeText(
+                        request.isLive -> YouTubeLinkKind.LIVE
 
-                        context,
+                        request.isShort -> YouTubeLinkKind.SHORTS
 
-                        context.getString(R.string.couldnt_open_link),
+                        else -> YouTubeLinkKind.TRACK
 
-                        Toast.LENGTH_SHORT,
+                    },
 
-                    ).show()
+                    rawUrl = "https://www.youtube.com/watch?v=${request.videoId}",
 
-                } else {
+                    canonicalUrl = "https://www.youtube.com/watch?v=${request.videoId}",
 
-                    // A link is one song named on purpose, which is exactly the
+                    videoId = request.videoId,
 
-                    // case [playRadio] exists for: play it and let AutoPlay
+                    playlistBrowseId = request.playlistBrowseId,
 
-                    // carry on, rather than queueing something around it.
+                    startSeconds = (request.startPositionMs / 1000L).coerceAtLeast(0L),
 
-                    playRadio(
+                )
 
-                        song,
+                YouTubeLinkResolver.resolve(parsed).fold(
 
-                        QueueSource(sharedLinkLabel, PlaybackSourceType.SHARED_LINK, song.videoId),
+                    onSuccess = { resolved ->
 
-                    )
+                        if (resolved is ResolvedYouTubeLink.Track) {
 
-                }
+                            val studio = if (resolved.startPositionMs == 0L) {
+
+                                YouTubeLinkResolver.findStudioMatch(resolved)
+
+                            } else null
+
+                            val targetSong = studio ?: resolved.videoSong
+
+                            val startMs = if (studio != null) 0L else resolved.startPositionMs
+
+                            playRadioAt(
+
+                                targetSong,
+
+                                QueueSource(sharedLinkLabel, PlaybackSourceType.SHARED_LINK, targetSong.videoId),
+
+                                startMs,
+
+                            )
+
+                        }
+
+                    },
+
+                    onFailure = { failure ->
+
+                        Toast.makeText(
+
+                            context,
+
+                            failure.message?.takeIf { it.isNotBlank() }
+
+                                ?: context.getString(R.string.couldnt_open_link),
+
+                            Toast.LENGTH_SHORT,
+
+                        ).show()
+
+                    },
+
+                )
 
             }
 
@@ -4702,6 +4839,22 @@ private fun BitChordApp(
 
     }
 
+    val directLinkBridge = rememberDirectLinkBridge(
+        context = context,
+        viewModel = viewModel,
+        sharedLinkLabel = sharedLinkLabel,
+        currentSong = player.song,
+        positionMs = player.position.positionMs,
+        durationMs = player.durationMs,
+        readClipboardText = { clipboard.getText()?.text?.trim().orEmpty() },
+        playRadioAt = playRadioAt,
+        playFrom = playFrom,
+        playNext = playNext,
+        addToQueue = addToQueue,
+        downloadSong = downloadSong,
+        downloadAllSongs = { songs -> startDownload(songs, null) },
+    )
+
 
 
     // Content padding leaves room for the frosted bar above and the tab bar
@@ -5530,17 +5683,7 @@ private fun BitChordApp(
         // which is what actually closes/minimizes the app.
 
         BackHandler(enabled = showSettings && !showSpotify && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showReplay) {
-
             showSettings = false
-
-            // Only when Settings was the whole of what was on screen. Opened
-
-            // over Replay or over a release page, closing it reveals that again
-
-            // rather than throwing both away.
-
-            if (detail == null && !showReplay) selectedTab = TAB_HOME
-
         }
 
         BackHandler(
@@ -5565,7 +5708,7 @@ private fun BitChordApp(
 
         BackHandler(enabled = discordDialog != null) { discordDialog = null }
 
-        BackHandler(enabled = editingSource != null) { editingSource = null }
+        BackHandler(enabled = sourceAlert != null) { sourceAlert = null }
 
         BackHandler(enabled = editingPartyServer) { editingPartyServer = false }
 
@@ -5986,200 +6129,87 @@ private fun BitChordApp(
 
                         )
 
-                    } else if (key == "discord") {
-
-                        DiscordScreen(
-
-                            song = player.song,
-
-                            positionMs = player.position.positionMs,
-
-                            durationMs = player.durationMs,
-
-                            onOpenLogin = { showDiscordLogin = true },
-
-                            onOpenDialog = { discordDialog = it },
-
-                            contentPadding = listPadding,
-
-                        )
-
-                    } else if (key == "account_scrobbling") {
-
-                        AccountAndScrobblingScreen(
-
-                            signedIn = signedIn,
-
-                            account = account,
-
-                            channelName = selectedChannelName,
-
-                            onSignIn = {
-
-                                showAccountScrobbling = false
-
-                                showSettings = false
-
-                                webSession = WebSessionMode.SIGN_IN
-
-                            },
-
-                            onSwitchChannel = {
-
-                                viewModel.loadChannels()
-
-                                showAccountSelector = true
-
-                            },
-
-                            onSignOut = { viewModel.signOut() },
-
-                            onOpenListenBrainzLogin = { showListenBrainzLogin = true },
-
-                            onOpenLastfmLogin = { showLastfmLogin = true },
-
-                            onOpenDiscord = { showDiscord = true },
-
-                            onOpenSpotify = { showSpotify = true },
-
-                            contentPadding = listPadding,
-
-                        )
-
-                    } else if (key == "sources") {
-
-                        SourcesScreen(
-
-                            contentPadding = listPadding,
-
-                            onEditSource = { editingSource = it },
-
-                            onEditWebDav = { showWebDavEditor = true },
-
-                            onEditSmb = { showSmbEditor = true },
-
-                            onConfirmJioSaavn = { confirmJioSaavn = true },
-
-                        )
-
-                    } else if (key == "listen_together") {
-
-                        ListenTogetherScreen(
-
-                            signedIn = signedIn,
-
-                            inviteCode = activeJamInviteCode,
-
-                            inviteServer = activeJamInviteServer,
-
-                            onInviteHandled = {
-
-                                activeJamInviteCode = null
-
-                                activeJamInviteServer = null
-
-                            },
-
-                            onSignIn = {
-
-                                showListenTogether = false
-
-                                showSettings = false
-
-                                webSession = WebSessionMode.SIGN_IN
-
-                            },
-
-                            contentPadding = listPadding,
-
-                            onEditServer = { editingPartyServer = true },
-
-                            viewModel = viewModel,
-
-                        )
-
-                    } else if (key == "equalizer") {
-
-                        EqualizerScreen(contentPadding = listPadding)
-
-                    } else if (key == "settings") {
-
-                        SettingsScreen(
-
+                    } else if (
+                        key == "discord" ||
+                            key == "account_scrobbling" ||
+                            key == "sources" ||
+                            key == "listen_together" ||
+                            key == "equalizer" ||
+                            key == "settings"
+                    ) {
+                        BitChordUtilityPage(
+                            key = key,
                             windowWidth = windowWidth,
-
                             signedIn = signedIn,
-
                             account = account,
-
-                            initialRoute = settingsInitialRoute,
-
-                            onSignIn = {
-
+                            selectedChannelName = selectedChannelName,
+                            settingsInitialRoute = settingsInitialRoute,
+                            listPadding = listPadding,
+                            playerSong = player.song,
+                            playerPositionMs = player.position.positionMs,
+                            playerDurationMs = player.durationMs,
+                            activeJamInviteCode = activeJamInviteCode,
+                            activeJamInviteServer = activeJamInviteServer,
+                            onInviteHandled = {
+                                activeJamInviteCode = null
+                                activeJamInviteServer = null
+                            },
+                            viewModel = viewModel,
+                            onOpenDiscordLogin = { showDiscordLogin = true },
+                            onOpenDiscordDialog = { discordDialog = it },
+                            onSignInFromScrobbling = {
+                                showAccountScrobbling = false
                                 showSettings = false
-
                                 webSession = WebSessionMode.SIGN_IN
-
                             },
-
-                            onSignOut = { viewModel.signOut() },
-
-                            onAccountScrobbling = {
-
+                            onSwitchChannel = {
+                                viewModel.loadChannels()
+                                showAccountSelector = true
+                            },
+                            onOpenListenBrainzLogin = { showListenBrainzLogin = true },
+                            onOpenLastfmLogin = { showLastfmLogin = true },
+                            onOpenDiscord = { showDiscord = true },
+                            onOpenSpotify = { showSpotify = true },
+                            onEditWebDav = { showWebDavEditor = true },
+                            onEditSmb = { showSmbEditor = true },
+                            onSourceAlert = { sourceAlert = it },
+                            onSignInFromParty = {
+                                showListenTogether = false
+                                showSettings = false
+                                webSession = WebSessionMode.SIGN_IN
+                            },
+                            onEditPartyServer = { editingPartyServer = true },
+                            onSignInFromSettings = {
+                                showSettings = false
+                                webSession = WebSessionMode.SIGN_IN
+                            },
+                            onAccountScrobblingFromSettings = {
                                 settingsSubScreen = "account_scrobbling"
-
                                 showAccountScrobbling = true
-
                             },
-
-                            onEqualizer = {
-
+                            onEqualizerFromSettings = {
                                 settingsSubScreen = "equalizer"
-
                                 showEqualizer = true
-
                             },
-
-                            onOpenReplay = {
-
+                            onOpenReplayFromSettings = {
                                 settingsSubScreen = "replay"
-
                                 replayLandingPage = ReplayStoryPage.INTRO
-
                                 showReplay = true
-
                             },
-
                             onLyricsSources = { showLyricsSources = true },
-
                             onTranslationLanguage = { showTranslationLanguage = true },
-
-                            onSources = {
-
+                            onSourcesFromSettings = {
                                 settingsSubScreen = "sources"
-
                                 showSources = true
-
                             },
-
-                            onListenTogether = {
-
+                            onListenTogetherFromSettings = {
                                 settingsSubScreen = "listen_together"
-
                                 showListenTogether = true
-
                             },
-
                             onSpotifyCanvasAuth = { showSpotifyCanvasAuth = true },
-
                             onAppLanguage = { showAppLanguage = true },
-
                             onShowUpdateDialog = { showUpdateDialog = true },
-
                             onAuraAiChat = { showAuraChat = true },
-
-                            contentPadding = listPadding,
-
                         )
 
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -6793,318 +6823,34 @@ private fun BitChordApp(
 
                         }
 
-                        TAB_SEARCH -> SearchScreen(
-
+                        TAB_SEARCH -> BitChordSearchTabContent(
                             query = query,
-
-                            onQueryChange = viewModel::onQueryChange,
-
                             filter = filter,
-
                             currentSong = player.song,
-
                             isPlaying = player.isPlaying,
-
-                            onFilterChange = viewModel::onFilterChange,
-
                             results = results,
-
                             loadingMore = searchLoadingMore,
-
-                            onLoadMore = viewModel::loadMoreSearchResults,
-
                             listState = searchListState,
-
                             scrollResetTrigger = searchScrollReset,
-
                             focusRequested = searchFocusRequested,
-
                             onFocusHandled = { searchFocusRequested = false },
-
-                            // Search hits are alternatives to each other, not a running
-
-                            // order — play the one tapped and build a station from it.
-
-                            onSongClick = { songs, index ->
-
-                                songs.getOrNull(index)?.let { song ->
-
-                                    viewModel.recordEntity(SearchHistoryEntity(
-
-                                        id = song.videoId,
-
-                                        title = song.title,
-
-                                        subtitle = song.artist.ifEmpty { "" },
-
-                                        artworkUrl = song.thumbnailUrl,
-
-                                        entityType = EntityType.TRACK,
-
-                                    ))
-
-                                    playRadio(song, QueueSource(searchLabel, PlaybackSourceType.SEARCH))
-
-                                }
-
-                            },
-
-                            onSongLongPress = openSongMenu,
-
+                            searchLabel = searchLabel,
+                            playRadio = playRadio,
+                            openSongMenu = openSongMenu,
                             onSongSwipe = onSongSwipe,
-
-                            onTopResultPlay = { song ->
-
-                                viewModel.recordEntity(SearchHistoryEntity(
-
-                                    id = song.videoId,
-
-                                    title = song.title,
-
-                                    subtitle = song.artist.ifEmpty { "" },
-
-                                    artworkUrl = song.thumbnailUrl,
-
-                                    entityType = EntityType.TRACK,
-
-                                ))
-
-                                playRadio(song, QueueSource(searchLabel, PlaybackSourceType.SEARCH))
-
-                            },
-
-                            onTopResultPlaylist = { song ->
-
-                                viewModel.recordEntity(SearchHistoryEntity(
-
-                                    id = song.videoId,
-
-                                    title = song.title,
-
-                                    subtitle = song.artist.ifEmpty { "" },
-
-                                    artworkUrl = song.thumbnailUrl,
-
-                                    entityType = EntityType.TRACK,
-
-                                ))
-
-                                viewModel.loadPlaylists()
-
-                                playlistTarget = song
-
-                            },
-
-                            onBrowseClick = { item ->
-
-                                viewModel.recordEntity(SearchHistoryEntity(
-
-                                    id = item.browseId ?: "",
-
-                                    title = item.title,
-
-                                    subtitle = item.subtitle.ifBlank { "" },
-
-                                    artworkUrl = item.thumbnailUrl,
-
-                                    entityType = when (item.type) {
-
-                                        BrowseType.ALBUM -> EntityType.ALBUM
-
-                                        BrowseType.ARTIST -> EntityType.ARTIST
-
-                                        BrowseType.PLAYLIST -> EntityType.PLAYLIST
-
-                                        else -> EntityType.TRACK
-
-                                    },
-
-                                ))
-
-                                viewModel.openDetail(
-
-                                    browseId = item.browseId,
-
-                                    title = item.title,
-
-                                    subtitle = item.subtitle,
-
-                                    thumbnailUrl = item.thumbnailUrl,
-
-                                    type = item.type,
-
-                                )
-
-                            },
-
-                            onBrowseLongPress = { item ->
-
-                                // A search row does say what it is, so its own type is
-
-                                // better than what the browse id can be read to mean.
-
-                                if (item.type != BrowseType.ARTIST) {
-
-                                    openBrowseMenu(
-
-                                        BrowseTarget(
-
-                                            browseId = item.browseId,
-
-                                            title = item.title,
-
-                                            subtitle = item.subtitle,
-
-                                            thumbnailUrl = item.thumbnailUrl,
-
-                                            type = item.type,
-
-                                            downloadId = downloadIdFor(item.browseId),
-
-                                        ),
-
-                                    )
-
-                                }
-
-                            },
-
-                            history = searchHistory,
-
-                            suggestions = searchSuggestions,
-
-                            typeaheadResults = viewModel.typeaheadResults.collectAsStateWithLifecycle().value,
-
-                            onSubmit = viewModel::submitSearch,
-
-                            // Suggestions land in search history via searchFor → recordSearch.
-
-                            // History items (onHistoryClick) navigate/play without re-logging.
-
-                            onSuggestionClick = viewModel::searchFor,
-
-                            onHistoryClick = { entity ->
-
-                                // Tap a history entity: navigate to it or play it directly.
-
-                                // Do NOT recordEntity here — tapping an existing history item
-
-                                // must not update its timestamp and push it to the top.
-
-                                when (entity.entityType) {
-
-                                    EntityType.TRACK -> {
-
-                                        // Play the track by its video id
-
-                                        playRadio(
-
-                                            com.music.bitchord.data.model.Song(
-
-                                                videoId = entity.id,
-
-                                                title = entity.title,
-
-                                                artist = entity.subtitle,
-
-                                                thumbnailUrl = entity.artworkUrl,
-
-                                            ),
-
-                                            QueueSource(entity.title, PlaybackSourceType.SEARCH),
-
-                                        )
-
-                                    }
-
-                                    EntityType.ALBUM, EntityType.ARTIST, EntityType.PLAYLIST -> {
-
-                                        viewModel.openDetail(
-
-                                            browseId = entity.id,
-
-                                            title = entity.title,
-
-                                            subtitle = entity.subtitle,
-
-                                            thumbnailUrl = entity.artworkUrl,
-
-                                        )
-
-                                    }
-
-                                }
-
-                            },
-
-                            onHistoryRemove = viewModel::removeSearch,
-
-                            onHistoryClear = viewModel::clearSearchHistory,
-
-                            onTypeaheadLongPress = openSongMenu,
-
-                            contentPadding = listPadding,
-
-                            topPadding = topBarContentPadding(),
-
-                            // The field is in the top bar; see the bar's accessory.
-
-                            showField = false,
-
-                            // The settings page's own two-state selector, so the
-
-                            // app has one look for "pick one of these".
-
-                            sourceSwitcher = {
-
-                                SegmentedControl(
-
-                                    options = listOf(
-
-                                        stringResource(R.string.search_source_youtube),
-
-                                        stringResource(R.string.library),
-
-                                    ),
-
-                                    selectedIndex = searchSource.ordinal,
-
-                                    onSelect = { index -> onSearchSourceChange(SearchSource.entries[index]) },
-
-                                )
-
-                            },
-
-                            searchingLibrary = searchSource == SearchSource.LIBRARY,
-
+                            onSetPlaylistTarget = { playlistTarget = it },
+                            openBrowseMenu = openBrowseMenu,
+                            downloadIdFor = downloadIdFor,
+                            searchHistory = searchHistory,
+                            searchSuggestions = searchSuggestions,
+                            viewModel = viewModel,
+                            searchSource = searchSource,
+                            onSearchSourceChange = onSearchSourceChange,
                             libraryResults = libraryResults,
-
-                            // The same queue opening the Local Music folder and
-
-                            // tapping the row there would give.
-
-                            onLibrarySongClick = { songs, index ->
-
-                                playFrom(
-
-                                    songs,
-
-                                    index,
-
-                                    QueueSource(
-
-                                        context.getString(R.string.local_music),
-
-                                        PlaybackSourceType.BROWSE,
-
-                                        "local:all",
-
-                                    ),
-
-                                )
-
-                            },
-
+                            playFrom = playFrom,
+                            context = context,
+                            listPadding = listPadding,
+                            directLinkBridge = directLinkBridge,
                         )
 
                         else -> LibraryScreen(
@@ -7256,10 +7002,9 @@ private fun BitChordApp(
                     onOpenLastfmLogin = { showLastfmLogin = true },
                     onOpenDiscord = { showDiscord = true },
                     onOpenSpotify = { showSpotify = true },
-                    onEditSource = { editingSource = it },
                     onEditWebDav = { showWebDavEditor = true },
                     onEditSmb = { showSmbEditor = true },
-                    onConfirmJioSaavn = { confirmJioSaavn = true },
+                    onSourceAlert = { sourceAlert = it },
                     onInviteHandled = {
                         activeJamInviteCode = null
                         activeJamInviteServer = null
@@ -7321,6 +7066,11 @@ private fun BitChordApp(
                 // share the same curve, height and page-aware colour — including
 
                 // the white theme background in light mode.
+
+                val isSearchRoot = selectedTab == TAB_SEARCH && detail == null &&
+                    selectedMoodGenre == null && libraryShowAll == null && !showSettings &&
+                    !showAccountScrobbling && !showSources && !showListenTogether &&
+                    !showEqualizer && !showDiscord && !showHistory && !showReplay
 
                 FrostedTopBar(
 
@@ -7427,8 +7177,14 @@ private fun BitChordApp(
                         settingsSubScreen != null -> ({ settingsSubScreen = null })
 
                         showSettings -> ({
-                            showSettings = false
-                            settingsInitialRoute = com.music.bitchord.ui.screens.settings.SettingsRoute.HUB
+                            if (com.music.bitchord.ui.screens.settings.SettingsNavigation.currentRoute.value !=
+                                com.music.bitchord.ui.screens.settings.SettingsRoute.HUB
+                            ) {
+                                com.music.bitchord.ui.screens.settings.SettingsNavigation.requestHubBack()
+                            } else {
+                                showSettings = false
+                                settingsInitialRoute = com.music.bitchord.ui.screens.settings.SettingsRoute.HUB
+                            }
                         })
 
                         showReplay -> ({ showReplay = false })
@@ -7447,17 +7203,7 @@ private fun BitChordApp(
 
                     // Only on the Search tab itself, not on anything pushed over it.
 
-                    accessory = if (
-
-                        selectedTab == TAB_SEARCH && detail == null && selectedMoodGenre == null &&
-
-                        libraryShowAll == null && !showSettings && !showAccountScrobbling &&
-
-                        !showSources && !showListenTogether && !showEqualizer && !showDiscord &&
-
-                        !showHistory && !showReplay
-
-                    ) {
+                    accessory = if (isSearchRoot) {
 
                         {
 
@@ -7507,390 +7253,58 @@ private fun BitChordApp(
 
                                 ),
 
+                                onPasteClick = if (clipboardLinkPrompt == null) directLinkBridge.onPasteFromClipboard else null,
+
                             )
 
                         }
 
                     } else null,
 
+                    showTrailingActions = !isSearchRoot,
+
                     actions = {
-
-                        // This is intentionally scoped to Listen together: the
-
-                        // round-trip time is meaningful while coordinating a
-
-                        // party, but would be noise in the rest of the app.
-
-                        if (showListenTogether) {
-
-                            Row(
-
-                                verticalAlignment = Alignment.CenterVertically,
-
-                                modifier = Modifier.padding(horizontal = 8.dp),
-
-                            ) {
-
-                                when (val state = partyServerStatus) {
-
-                                    is ServerConnectionState.CustomFallback -> {
-
-                                        Icon(
-
-                                            Icons.Rounded.CloudOff,
-
-                                            contentDescription = stringResource(R.string.listen_together_top_bar_fallback, stringResource(R.string.listen_together_ping, state.latencyMs)),
-
-                                            tint = MaterialTheme.colorScheme.error,
-
-                                            modifier = Modifier.size(14.dp),
-
-                                        )
-
-                                        Spacer(Modifier.width(4.dp))
-
-                                        Text(
-
-                                            text = stringResource(R.string.listen_together_ping, state.latencyMs),
-
-                                            style = MaterialTheme.typography.labelMedium,
-
-                                            color = MaterialTheme.colorScheme.error,
-
-                                            maxLines = 1,
-
-                                        )
-
-                                    }
-
-                                    is ServerConnectionState.CustomOnline -> {
-
-                                        Text(
-
-                                            text = stringResource(R.string.listen_together_ping, state.latencyMs),
-
-                                            style = MaterialTheme.typography.labelMedium,
-
-                                            color = MaterialTheme.colorScheme.onSurface,
-
-                                            maxLines = 1,
-
-                                        )
-
-                                    }
-
-                                    is ServerConnectionState.DefaultOnline -> {
-
-                                        Text(
-
-                                            text = stringResource(R.string.listen_together_ping, state.latencyMs),
-
-                                            style = MaterialTheme.typography.labelMedium,
-
-                                            color = MaterialTheme.colorScheme.onSurface,
-
-                                            maxLines = 1,
-
-                                        )
-
-                                    }
-
-                                    ServerConnectionState.Checking -> {
-
-                                        Text(
-
-                                            text = stringResource(R.string.listen_together_server_checking),
-
-                                            style = MaterialTheme.typography.labelMedium,
-
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-
-                                            maxLines = 1,
-
-                                        )
-
-                                    }
-
-                                    ServerConnectionState.Offline -> {
-
-                                        Text(
-
-                                            text = stringResource(R.string.listen_together_server_offline_dash),
-
-                                            style = MaterialTheme.typography.labelMedium,
-
-                                            color = MaterialTheme.colorScheme.error,
-
-                                            maxLines = 1,
-
-                                        )
-
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
-                        // Only worth surfacing where there's room for it and it won't
-
-                        // be mistaken for a per-page action — Home, at rest.
-
-                        if (!showSettings && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer &&
-
-                            detail == null && selectedTab == TAB_HOME
-
-                        ) {
-
-                            updateNotice?.let { update ->
-                                TopBarActionCircle(
-                                    onClick = { showUpdateDialog = true },
-                                    hazeState = hazeState,
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Upgrade,
-                                        contentDescription = stringResource(R.string.update_available, update.version),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-
-                        }
-
-                        if (!showSettings && !showAccountScrobbling) {
-
-                            // Left of the account photo, and only on Library itself:
-
-                            // a history is a record of what was played, which reads
-
-                            // as that tab's business rather than every tab's.
-
-                            if (!showHistory && !showReplay && !showDiscord && libraryShowAll == null &&
-
-                                detail == null && selectedTab == TAB_LIBRARY
-
-                            ) {
-
-                                TopBarActionCircle(
-                                    onClick = {
-                                        showHistory = true
-                                        viewModel.loadHistory()
-                                    },
-                                    hazeState = hazeState,
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.History,
-                                        contentDescription = stringResource(R.string.listening_history),
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-
-                            }
-
-                            // Left of the account photo, and only on a Library
-
-                            // "Show all" grid — the same control the Downloads
-
-                            // folder offers (see `LocalSearchField`), adapted to
-
-                            // the one thing a playlist or album card carries: a
-
-                            // title.
-
-                            if (libraryShowAll != null && detail == null) {
-
-                                Box {
-
-                                    TopBarActionCircle(
-                                        onClick = { librarySortMenuOpen = true },
-                                        hazeState = hazeState,
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Sort,
-                                            contentDescription = stringResource(R.string.sort_library),
-                                            tint = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
-
-                                    DropdownMenu(
-
-                                        expanded = librarySortMenuOpen,
-
-                                        onDismissRequest = { librarySortMenuOpen = false },
-
-                                    ) {
-
-                                        LibrarySort.entries.forEach { option ->
-
-                                            DropdownMenuItem(
-
-                                                text = { Text(option.localizedLabel()) },
-
-                                                trailingIcon = if (option == librarySort) {
-
-                                                    { Icon(Icons.Rounded.Check, contentDescription = null) }
-
-                                                } else null,
-
-                                                onClick = {
-
-                                                    AppSettings.setLibrarySort(option)
-
-                                                    librarySortMenuOpen = false
-
-                                                },
-
-                                            )
-
-                                        }
-
-                                    }
-
-                                }
-
-                            }
-
-                            // Left of the account photo, and only on an album or
-
-                            // playlist page — an artist page has no single track
-
-                            // list to reorder, and the device folders already
-
-                            // carry this same control themselves (see
-
-                            // `LocalSearchField`).
-
-                            if (detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST) {
-
-                                // The menu itself is [FrostedSortMenu], composed
-
-                                // with the app's other frosted overlays further
-
-                                // down — in the main hierarchy, where the haze
-
-                                // can see the content it blurs.
-
-                                TopBarActionCircle(
-                                    onClick = { songSortMenuOpen = true },
-                                    hazeState = hazeState,
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Sort,
-                                        contentDescription = stringResource(R.string.sort_songs),
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-
-                            }
-
-                            // Left of the account photo, on an artist page: iOS's
-
-                            // share glyph, sending the artist's channel link — the
-
-                            // one YouTube Music itself shares for an artist.
-
-                            if (detail != null && !isLocalDetail && detail.type == BrowseType.ARTIST &&
-
-                                detailActiveShelf == null && detail.browseId.startsWith("UC")
-
-                            ) {
-
-                                TopBarActionCircle(
-                                    onClick = {
-                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(
-                                                Intent.EXTRA_TEXT,
-                                                "https://music.youtube.com/channel/${detail.browseId}",
-                                            )
-                                        }
-                                        context.startActivity(Intent.createChooser(sendIntent, detail.title))
-                                    },
-                                    hazeState = hazeState,
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.IosShare,
-                                        contentDescription = stringResource(R.string.share),
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-
-                            }
-
-                            // Left of the account photo, and only there while
-
-                            // there is a batch to report on — see
-
-                            // [TopBarDownloadButton], which decides that for
-
-                            // itself rather than being told.
-
-                            TopBarDownloadButton(
-                                onClick = { showDownloadManager = true },
-                                hazeState = hazeState,
-                            )
-
-                            if (updateNotice != null) {
-                                TopBarActionCircle(
-                                    onClick = { showUpdateDialog = true },
-                                    hazeState = hazeState,
-                                ) {
-                                    Box(contentAlignment = Alignment.TopEnd) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Upgrade,
-                                            contentDescription = stringResource(R.string.software_update),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .size(8.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF34D399)),
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (auraAiUnlocked) {
-                                TopBarActionCircle(
-                                    onClick = { showAuraChat = true },
-                                    hazeState = hazeState,
-                                ) {
-                                    AuraOrbIcon(
-                                        size = 28.dp,
-                                        isPlaying = player.isPlaying,
-                                    )
-                                }
-                            }
-
-                            TopBarActionCircle(
-                                onClick = { showSettings = true },
-                                hazeState = hazeState,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Settings,
-                                    contentDescription = stringResource(R.string.settings),
-                                    tint = if (showSettings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            }
-
-                            TopBarAccountButton(
-                                account = account,
-                                onClick = {
-                                    if (signedIn) {
-                                        viewModel.loadChannels()
-                                        showAccountSelector = true
-                                    } else showSettings = true
-                                },
-                                onSwipeProfile = { forward -> viewModel.stepProfile(forward) },
-                                hazeState = hazeState,
-                            )
-
-                        }
-
+                        BitChordTopBarActions(
+                            showListenTogether = showListenTogether,
+                            showSettings = showSettings,
+                            showAccountScrobbling = showAccountScrobbling,
+                            showSources = showSources,
+                            showEqualizer = showEqualizer,
+                            showHistory = showHistory,
+                            showReplay = showReplay,
+                            showDiscord = showDiscord,
+                            isHomeTab = selectedTab == TAB_HOME,
+                            isLibraryTab = selectedTab == TAB_LIBRARY,
+                            detail = detail,
+                            detailActiveShelf = detailActiveShelf,
+                            isLocalDetail = isLocalDetail,
+                            libraryShowAll = libraryShowAll,
+                            librarySort = librarySort,
+                            librarySortMenuOpen = librarySortMenuOpen,
+                            onSetLibrarySortMenuOpen = { librarySortMenuOpen = it },
+                            updateNotice = updateNotice,
+                            auraAiUnlocked = auraAiUnlocked,
+                            isPlayerPlaying = player.isPlaying,
+                            account = account,
+                            signedIn = signedIn,
+                            hazeState = hazeState,
+                            context = context,
+                            viewModel = viewModel,
+                            onShowUpdateDialog = { showUpdateDialog = true },
+                            onOpenHistory = { showHistory = true },
+                            onOpenSongSortMenu = { songSortMenuOpen = true },
+                            onOpenDownloadManager = { showDownloadManager = true },
+                            onOpenAuraChat = { showAuraChat = true },
+                            onOpenSettings = {
+                                showHistory = false
+                                libraryShowAll = null
+                                showSpotify = false
+                                showDiscord = false
+                                settingsSubScreen = null
+                                showSettings = true
+                            },
+                            onOpenAccountSelector = { showAccountSelector = true },
+                        )
                     },
 
                 )
@@ -7981,6 +7395,58 @@ private fun BitChordApp(
 
 
 
+                val floatingClipboardPrompt = clipboardLinkPrompt?.takeIf {
+
+                    selectedTab != TAB_SEARCH && detail == null && selectedMoodGenre == null &&
+
+                        !showSettings && !showEqualizer && !showReplay && !showListenTogether &&
+
+                        !showAccountScrobbling && !showSources && !showHistory && !showNowPlaying &&
+
+                        libraryShowAll == null
+
+                }
+
+                val floatingClipboardBanner: @Composable () -> Unit = {
+
+                    floatingClipboardPrompt?.let { copied ->
+
+                        CopiedYouTubeLinkBanner(
+
+                            link = copied,
+
+                            onPlayLink = { link ->
+
+                                viewModel.clearDetail()
+
+                                viewModel.closeMoodGenre()
+
+                                showSettings = false
+
+                                settingsSubScreen = null
+
+                                showHistory = false
+
+                                libraryShowAll = null
+
+                                selectedTab = TAB_SEARCH
+
+                                viewModel.openClipboardLink(link)
+
+                            },
+
+                            onDismiss = { viewModel.dismissClipboardPrompt() },
+
+                            modifier = Modifier.padding(bottom = 4.dp),
+
+                        )
+
+                    }
+
+                }
+
+
+
                 if (glassActive) Column(
 
                     modifier = Modifier
@@ -7994,6 +7460,8 @@ private fun BitChordApp(
                         .onSizeChanged { floatingBarsHeight.intValue = it.height },
 
                 ) {
+
+                    floatingClipboardBanner()
 
                     QueueActionNoticeHost(queueNotice)
 
@@ -8080,6 +7548,8 @@ private fun BitChordApp(
                     horizontalAlignment = Alignment.CenterHorizontally,
 
                 ) {
+
+                    floatingClipboardBanner()
 
                     QueueActionNoticeHost(queueNotice)
 
@@ -8803,358 +8273,43 @@ private fun BitChordApp(
 
         // ---- Now Playing ----
 
-        if (playerRaised) {
-
-            // What rememberModalBottomSheetState builds, but able to start open,
-
-            // and with every hide routed through [playerSheetMotion] — a drag
-
-            // released low, a back press, a tap on the scrim. Refused here and
-
-            // carried out there, on a curve slow enough to watch the artwork
-
-            // fly home on, rather than on the sheet's own.
-
-            val sheetDensity = LocalDensity.current
-
-            val confirmSheetValue: (SheetValue) -> Boolean = { value ->
-
-                // Read when asked, not when the sheet was made: the setting
-
-                // can change while the player is up.
-
-                if (value == SheetValue.Hidden && !reducePlayerMotion) {
-
-                    playerSheetMotion.close()
-
-                    false
-
-                } else {
-
-                    true
-
-                }
-
-            }
-
-            val nowPlayingSheetState = rememberSaveable(
-
-                saver = SheetState.Saver(
-
-                    skipPartiallyExpanded = true,
-
-                    confirmValueChange = confirmSheetValue,
-
-                    density = sheetDensity,
-
-                    skipHiddenState = false,
-
-                ),
-
-            ) {
-
-                SheetState(
-
-                    skipPartiallyExpanded = true,
-
-                    density = sheetDensity,
-
-                    // Already open when the app is the one raising it: its
-
-                    // content is held down, and slid up, by the motion.
-
-                    initialValue = if (playerSheetMotion.holding) SheetValue.Expanded else SheetValue.Hidden,
-
-                    confirmValueChange = confirmSheetValue,
-
-                )
-
-            }
-
-            DisposableEffect(nowPlayingSheetState) {
-
-                playerSheetMotion.sheet = nowPlayingSheetState
-
-                playerDock.sheetOffset = playerSheetMotion::position
-
-                onDispose {
-
-                    playerDock.sheetOffset = null
-
-                    playerSheetMotion.onSheetGone()
-
-                }
-
-            }
-
-            ModalBottomSheet(
-
-                onDismissRequest = { showNowPlaying = false },
-
-                sheetState = nowPlayingSheetState,
-
-                // None of M3's: it follows the sheet's own animation, which is
-
-                // no longer what moves the player. The player draws its own,
-
-                // off where the player actually is — see the content below.
-
-                scrimColor = if (reducePlayerMotion) BottomSheetDefaults.ScrimColor else Color.Transparent,
-
-                // The player fills the screen and paints its own background to
-
-                // the very top, so the sheet's default 28.dp top corners would
-
-                // only cut two notches out of the artwork behind the status bar.
-
-                // Square, and not clipped along its top — see [PlayerSheetShape].
-
-                shape = PlayerSheetShape,
-
-                containerColor = Color.Transparent,
-
-                dragHandle = null,
-
-                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-
-                // M3 caps a bottom sheet at [BottomSheetDefaults.SheetMaxWidth]
-
-                // (640.dp) and centres it once the window is wider than that —
-
-                // built for a sheet that's meant to look like a sheet next to
-
-                // visible content either side. This one is the whole player;
-
-                // capped at 640dp on a tablet it renders as a narrow card with
-
-                // the page it's supposed to be covering visible down both
-
-                // sides. Unspecified opts out of the cap entirely, so the
-
-                // sheet always spans the full window this app draws it for.
-
-                sheetMaxWidth = Dp.Unspecified,
-
-                // Back is the app's to carry out, like every other close — see
-
-                // the handler below. Left to M3, a back press is the one close
-
-                // that never asks `confirmValueChange`: the sheet hides itself
-
-                // straight away on its own curve, then the window leaves on its
-
-                // exit animation with the artwork still drawn in it.
-
-                properties = ModalBottomSheetProperties(shouldDismissOnBackPress = reducePlayerMotion),
-
-            ) {
-
-                // With M3's own back off, the dialog's dispatcher ends here.
-
-                // Composed ahead of the player, so the player's own handlers —
-
-                // the lyrics and the queue putting themselves away first — are
-
-                // newer and are asked before this one.
-
-                BackHandler(enabled = !reducePlayerMotion) { playerSheetMotion.close() }
-
-                // Keeps a sheet still "settling" after a lyrics or queue
-
-                // scroll from taking the next touch meant for that list.
-
-                // See [PlayerSheetMotion.attachWindow].
-
-                                val sheetWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-                DacVolumeKeys()
-
-                DisposableEffect(sheetWindow, reducePlayerMotion) {
-
-                    if (!reducePlayerMotion) playerSheetMotion.attachWindow(sheetWindow)
-
-                    onDispose { }
-
-                }
-
-                Box(
-
-                    Modifier
-
-                        // Where the app is holding the player, if it is — see
-
-                        // [PlayerSheetMotion.contentOffsetPx]. Placement only.
-
-                        .offset { IntOffset(0, playerSheetMotion.contentOffsetPx()) }
-
-                        // The dim behind the player, from the window's top to
-
-                        // its bottom whatever the player's offset, and as deep
-
-                        // as the player is open.
-
-                        .drawBehind {
-
-                            val open = playerDock.openFraction()
-
-                            // Not at all under a portrait player that is fully up:
-
-                            // its own background is opaque, and a full-screen
-
-                            // blend behind it is paid on every frame the window
-
-                            // draws for nothing anyone can see.
-
-                            if (!reducePlayerMotion && open > 0f && !(open >= 1f && playerDock.attached)) {
-
-                                val top = playerSheetMotion.position().takeUnless { it.isNaN() } ?: 0f
-
-                                drawRect(
-
-                                    color = Color.Black.copy(alpha = PLAYER_SCRIM_ALPHA * open),
-
-                                    topLeft = Offset(0f, -top.toInt().toFloat()),
-
-                                    size = Size(size.width, size.height),
-
-                                )
-
-                            }
-
-                        }
-
-                        .guardSheetFromContentTouches(nowPlayingSheetState)
-
-                        // The sheet fills the window, so its height is the
-
-                        // whole of its travel: hidden sits that far down.
-
-                        .onSizeChanged {
-
-                            playerDock.sheetTravel = it.height.toFloat()
-
-                            playerSheetMotion.laidOut = true
-
-                        },
-
-                ) {
-                    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
-                    val playerMenuUp = songActions != null && songMenuOrigin == null && menuFromPlayer
-                    LaunchedEffect(playerMenuUp, reduceDynamicBlur) {
-                        if (!playerMenuUp || reduceDynamicBlur) {
-                            delay(120L)
-                            playerBackdrop.release()
-                        }
-                    }
-                    Box(
-                        when {
-                            reduceDynamicBlur -> Modifier
-                            playerLiveCanvas -> Modifier.layerBackdrop(livePlayerBackdrop)
-                            else -> Modifier.snapshotBackdropSource(playerBackdrop)
-                        },
-                    ) {
-                        CompositionLocalProvider(LocalPlayerDock provides activeDock) {
-                            nowPlaying(playerSong)
-                        }
-                    }
-                    AuraActionSheet(
-                        item = songActions?.takeIf { songMenuOrigin == null && menuFromPlayer },
-                        anchor = songMenuAnchor,
-                        onDismiss = { songActions = null },
-                        backdrop = if (playerLiveCanvas) livePlayerBackdrop else playerBackdrop,
-                    ) { song ->
-                        songMenuBody(song)
-                    }
-                }
-
-            }
-
+        if (playerRaised && playerSong != null) {
+            BitChordNowPlayingModal(
+                playerSong = playerSong,
+                reducePlayerMotion = reducePlayerMotion,
+                playerSheetMotion = playerSheetMotion,
+                playerDock = playerDock,
+                activeDock = activeDock,
+                playerBackdrop = playerBackdrop,
+                livePlayerBackdrop = livePlayerBackdrop,
+                playerLiveCanvas = playerLiveCanvas,
+                songActions = songActions,
+                songMenuOrigin = songMenuOrigin,
+                songMenuAnchor = songMenuAnchor,
+                menuFromPlayer = menuFromPlayer,
+                onDismissNowPlaying = { showNowPlaying = false },
+                onDismissSongActions = { songActions = null },
+                nowPlaying = nowPlaying,
+                songMenuBody = songMenuBody,
+            )
         }
 
 
 
-        // ---- Replay stories ----
-
-        // Mounted out here rather than inside the pane above, because a story
-
-        // covers the window: on a tablet the page is only the left half of the
-
-        // row, and a story laid out inside it would run alongside the player
-
-        // instead of over it.
-
-        replayStory?.let { start ->
-
-            replay.summary?.takeUnless { it.isEmpty }?.let { summary ->
-
-                ReplayStories(
-
-                    summary = summary,
-
-                    start = start,
-
-                    onClose = { replayStory = null },
-
-                    onShare = { card ->
-
-                        replaySharePage = card
-
-                        showReplayShare = true
-
-                    },
-
-                    paused = showReplayShare,
-
-                )
-
-            }
-
-        }
-
-
-
-        // ---- Share the Replay ----
-
-        if (showReplayShare) {
-
-            replay.summary?.takeUnless { it.isEmpty }?.let { summary ->
-
-                ModalBottomSheet(
-
-                    onDismissRequest = { showReplayShare = false },
-
-                    // Straight to full height. The sheet is a picture and two
-
-                    // buttons, and half-open it showed the picture with both
-
-                    // buttons below the fold — a sheet whose only two controls
-
-                    // need a drag to reach.
-
-                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-
-                    containerColor = MaterialTheme.colorScheme.background,
-
-                ) {
-
-                    ReplayShareSheet(
-
-                        summary = summary,
-
-                        holder = account?.name.orEmpty(),
-
-                        memberSince = replay.memberSince,
-
-                        page = replaySharePage,
-
-                        onDismiss = { showReplayShare = false },
-
-                    )
-
-                }
-
-            }
-
-        }
+        // ---- Replay stories & share ----
+        BitChordReplayOverlays(
+            replay = replay,
+            replayStory = replayStory,
+            onCloseStory = { replayStory = null },
+            onShareStory = { card ->
+                replaySharePage = card
+                showReplayShare = true
+            },
+            showReplayShare = showReplayShare,
+            onDismissReplayShare = { showReplayShare = false },
+            accountHolder = account?.name.orEmpty(),
+            replaySharePage = replaySharePage,
+        )
 
 
 
@@ -9802,10 +8957,8 @@ private fun BitChordApp(
             onDismissDiscordDialog = { discordDialog = null },
             editingPartyServer = editingPartyServer,
             onDismissEditingPartyServer = { editingPartyServer = false },
-            editingSource = editingSource,
-            onDismissEditingSource = { editingSource = null },
-            confirmJioSaavn = confirmJioSaavn,
-            onDismissConfirmJioSaavn = { confirmJioSaavn = false },
+            sourceAlert = sourceAlert,
+            onDismissSourceAlert = { sourceAlert = null },
             scope = scope,
             context = context,
         )
@@ -9844,7 +8997,329 @@ private fun BitChordApp(
 
 }
 
+@Composable
+private fun BitChordSearchTabContent(
+    query: String,
+    filter: SearchFilter,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    results: UiState<List<SearchResult>>?,
+    loadingMore: Boolean,
+    listState: LazyListState,
+    scrollResetTrigger: Int,
+    focusRequested: Boolean,
+    onFocusHandled: () -> Unit,
+    searchLabel: String,
+    playRadio: (Song, QueueSource) -> Unit,
+    openSongMenu: (Song) -> Unit,
+    onSongSwipe: (Song) -> Unit,
+    onSetPlaylistTarget: (Song) -> Unit,
+    openBrowseMenu: (BrowseTarget) -> Unit,
+    downloadIdFor: (String?) -> String?,
+    searchHistory: List<SearchHistoryEntity>,
+    searchSuggestions: List<String>,
+    viewModel: MainViewModel,
+    searchSource: SearchSource,
+    onSearchSourceChange: (SearchSource) -> Unit,
+    libraryResults: UiState<List<Song>>?,
+    playFrom: (List<Song>, Int, QueueSource) -> Unit,
+    context: Context,
+    listPadding: PaddingValues,
+    directLinkBridge: DirectLinkUiBridge,
+) {
+    val typeaheadResults by viewModel.typeaheadResults.collectAsStateWithLifecycle()
+    val directLink by viewModel.directLink.collectAsStateWithLifecycle()
+    val clipboardPrompt by viewModel.clipboardLinkPrompt.collectAsStateWithLifecycle()
+    SearchScreen(
+        query = query,
+        onQueryChange = viewModel::onQueryChange,
+        filter = filter,
+        currentSong = currentSong,
+        isPlaying = isPlaying,
+        onFilterChange = viewModel::onFilterChange,
+        results = results,
+        loadingMore = loadingMore,
+        onLoadMore = viewModel::loadMoreSearchResults,
+        listState = listState,
+        scrollResetTrigger = scrollResetTrigger,
+        focusRequested = focusRequested,
+        onFocusHandled = onFocusHandled,
+        onSongClick = { songs, index ->
+            songs.getOrNull(index)?.let { song ->
+                viewModel.recordEntity(
+                    SearchHistoryEntity(
+                        id = song.videoId,
+                        title = song.title,
+                        subtitle = song.artist.ifEmpty { "" },
+                        artworkUrl = song.thumbnailUrl,
+                        entityType = EntityType.TRACK,
+                    ),
+                )
+                playRadio(song, QueueSource(searchLabel, PlaybackSourceType.SEARCH))
+            }
+        },
+        onSongLongPress = openSongMenu,
+        onSongSwipe = onSongSwipe,
+        onTopResultPlay = { song ->
+            viewModel.recordEntity(
+                SearchHistoryEntity(
+                    id = song.videoId,
+                    title = song.title,
+                    subtitle = song.artist.ifEmpty { "" },
+                    artworkUrl = song.thumbnailUrl,
+                    entityType = EntityType.TRACK,
+                ),
+            )
+            playRadio(song, QueueSource(searchLabel, PlaybackSourceType.SEARCH))
+        },
+        onTopResultPlaylist = { song ->
+            viewModel.recordEntity(
+                SearchHistoryEntity(
+                    id = song.videoId,
+                    title = song.title,
+                    subtitle = song.artist.ifEmpty { "" },
+                    artworkUrl = song.thumbnailUrl,
+                    entityType = EntityType.TRACK,
+                ),
+            )
+            viewModel.loadPlaylists()
+            onSetPlaylistTarget(song)
+        },
+        onBrowseClick = { item ->
+            viewModel.recordEntity(
+                SearchHistoryEntity(
+                    id = item.browseId ?: "",
+                    title = item.title,
+                    subtitle = item.subtitle.ifBlank { "" },
+                    artworkUrl = item.thumbnailUrl,
+                    entityType = when (item.type) {
+                        BrowseType.ALBUM -> EntityType.ALBUM
+                        BrowseType.ARTIST -> EntityType.ARTIST
+                        BrowseType.PLAYLIST -> EntityType.PLAYLIST
+                        else -> EntityType.TRACK
+                    },
+                ),
+            )
+            viewModel.openDetail(
+                browseId = item.browseId,
+                title = item.title,
+                subtitle = item.subtitle,
+                thumbnailUrl = item.thumbnailUrl,
+                type = item.type,
+            )
+        },
+        onBrowseLongPress = { item ->
+            if (item.type != BrowseType.ARTIST) {
+                openBrowseMenu(
+                    BrowseTarget(
+                        browseId = item.browseId,
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        thumbnailUrl = item.thumbnailUrl,
+                        type = item.type,
+                        downloadId = downloadIdFor(item.browseId),
+                    ),
+                )
+            }
+        },
+        history = searchHistory,
+        suggestions = searchSuggestions,
+        typeaheadResults = typeaheadResults,
+        onSubmit = viewModel::submitSearch,
+        onSuggestionClick = viewModel::searchFor,
+        onHistoryClick = { entity ->
+            when (entity.entityType) {
+                EntityType.TRACK -> {
+                    playRadio(
+                        Song(
+                            videoId = entity.id,
+                            title = entity.title,
+                            artist = entity.subtitle,
+                            thumbnailUrl = entity.artworkUrl,
+                        ),
+                        QueueSource(entity.title, PlaybackSourceType.SEARCH),
+                    )
+                }
 
+                EntityType.ALBUM, EntityType.ARTIST, EntityType.PLAYLIST -> {
+                    viewModel.openDetail(
+                        browseId = entity.id,
+                        title = entity.title,
+                        subtitle = entity.subtitle,
+                        thumbnailUrl = entity.artworkUrl,
+                    )
+                }
+            }
+        },
+        onHistoryRemove = viewModel::removeSearch,
+        onHistoryClear = viewModel::clearSearchHistory,
+        onTypeaheadLongPress = openSongMenu,
+        contentPadding = listPadding,
+        topPadding = topBarContentPadding(),
+        showField = false,
+        sourceSwitcher = {
+            SegmentedControl(
+                options = listOf(
+                    stringResource(R.string.search_source_youtube),
+                    stringResource(R.string.library),
+                ),
+                selectedIndex = searchSource.ordinal,
+                onSelect = { index -> onSearchSourceChange(SearchSource.entries[index]) },
+            )
+        },
+        searchingLibrary = searchSource == SearchSource.LIBRARY,
+        libraryResults = libraryResults,
+        onLibrarySongClick = { songs, index ->
+            playFrom(
+                songs,
+                index,
+                QueueSource(
+                    context.getString(R.string.local_music),
+                    PlaybackSourceType.BROWSE,
+                    "local:all",
+                ),
+            )
+        },
+        directLink = directLink,
+        onDirectLinkSelectMode = viewModel::selectDirectLinkStudioMatch,
+        onDirectLinkPlay = directLinkBridge.onPlayTrack,
+        onDirectLinkPlayNext = directLinkBridge.onPlayNext,
+        onDirectLinkAddToQueue = directLinkBridge.onAddToQueue,
+        onDirectLinkDownload = directLinkBridge.onDownloadTrack,
+        onDirectLinkOpenBrowse = directLinkBridge.onOpenBrowse,
+        onDirectLinkPlayCollection = directLinkBridge.onPlayCollection,
+        onDirectLinkOpenExternal = directLinkBridge.onOpenExternal,
+        onDirectLinkRetry = viewModel::retryDirectLink,
+        clipboardPrompt = clipboardPrompt,
+        onClipboardPromptOpen = viewModel::openClipboardLink,
+        onClipboardPromptDismiss = viewModel::dismissClipboardPrompt,
+        voiceClarityEnabled = directLinkBridge.voiceClarityEnabled,
+        onToggleVoiceClarity = directLinkBridge.onToggleVoiceClarity,
+        onDirectLinkDownloadAll = directLinkBridge.onDownloadAll,
+        onSearchPasteClick = directLinkBridge.onPasteFromClipboard,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BitChordNowPlayingModal(
+    playerSong: Song,
+    reducePlayerMotion: Boolean,
+    playerSheetMotion: PlayerSheetMotion,
+    playerDock: PlayerDock,
+    activeDock: PlayerDock?,
+    playerBackdrop: com.music.bitchord.ui.components.backdrop.backdrops.SnapshotBackdrop,
+    livePlayerBackdrop: LayerBackdrop,
+    playerLiveCanvas: Boolean,
+    songActions: Song?,
+    songMenuOrigin: HeldItem?,
+    songMenuAnchor: androidx.compose.ui.geometry.Rect?,
+    menuFromPlayer: Boolean,
+    onDismissNowPlaying: () -> Unit,
+    onDismissSongActions: () -> Unit,
+    nowPlaying: @Composable (Song) -> Unit,
+    songMenuBody: @Composable (Song) -> Unit,
+) {
+    val sheetDensity = LocalDensity.current
+    val confirmSheetValue: (SheetValue) -> Boolean = { value ->
+        if (value == SheetValue.Hidden && !reducePlayerMotion) {
+            playerSheetMotion.close()
+            false
+        } else {
+            true
+        }
+    }
+    val nowPlayingSheetState = rememberSaveable(
+        saver = SheetState.Saver(
+            skipPartiallyExpanded = true,
+            confirmValueChange = confirmSheetValue,
+            density = sheetDensity,
+            skipHiddenState = false,
+        ),
+    ) {
+        SheetState(
+            skipPartiallyExpanded = true,
+            density = sheetDensity,
+            initialValue = if (playerSheetMotion.holding) SheetValue.Expanded else SheetValue.Hidden,
+            confirmValueChange = confirmSheetValue,
+        )
+    }
+    DisposableEffect(nowPlayingSheetState) {
+        playerSheetMotion.sheet = nowPlayingSheetState
+        playerDock.sheetOffset = playerSheetMotion::position
+        onDispose {
+            playerDock.sheetOffset = null
+            playerSheetMotion.onSheetGone()
+        }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismissNowPlaying,
+        sheetState = nowPlayingSheetState,
+        scrimColor = if (reducePlayerMotion) BottomSheetDefaults.ScrimColor else Color.Transparent,
+        shape = PlayerSheetShape,
+        containerColor = Color.Transparent,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        sheetMaxWidth = Dp.Unspecified,
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = reducePlayerMotion),
+    ) {
+        BackHandler(enabled = !reducePlayerMotion) { playerSheetMotion.close() }
+        val sheetWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        DacVolumeKeys()
+        DisposableEffect(sheetWindow, reducePlayerMotion) {
+            if (!reducePlayerMotion) playerSheetMotion.attachWindow(sheetWindow)
+            onDispose { }
+        }
+        Box(
+            Modifier
+                .offset { IntOffset(0, playerSheetMotion.contentOffsetPx()) }
+                .drawBehind {
+                    val open = playerDock.openFraction()
+                    if (!reducePlayerMotion && open > 0f && !(open >= 1f && playerDock.attached)) {
+                        val top = playerSheetMotion.position().takeUnless { it.isNaN() } ?: 0f
+                        drawRect(
+                            color = Color.Black.copy(alpha = PLAYER_SCRIM_ALPHA * open),
+                            topLeft = Offset(0f, -top.toInt().toFloat()),
+                            size = Size(size.width, size.height),
+                        )
+                    }
+                }
+                .guardSheetFromContentTouches(nowPlayingSheetState)
+                .onSizeChanged {
+                    playerDock.sheetTravel = it.height.toFloat()
+                    playerSheetMotion.laidOut = true
+                },
+        ) {
+            val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+            val playerMenuUp = songActions != null && songMenuOrigin == null && menuFromPlayer
+            LaunchedEffect(playerMenuUp, reduceDynamicBlur) {
+                if (!playerMenuUp || reduceDynamicBlur) {
+                    delay(120L)
+                    playerBackdrop.release()
+                }
+            }
+            Box(
+                when {
+                    reduceDynamicBlur -> Modifier
+                    playerLiveCanvas -> Modifier.layerBackdrop(livePlayerBackdrop)
+                    else -> Modifier.snapshotBackdropSource(playerBackdrop)
+                },
+            ) {
+                CompositionLocalProvider(LocalPlayerDock provides activeDock) {
+                    nowPlaying(playerSong)
+                }
+            }
+            AuraActionSheet(
+                item = songActions?.takeIf { songMenuOrigin == null && menuFromPlayer },
+                anchor = songMenuAnchor,
+                onDismiss = onDismissSongActions,
+                backdrop = if (playerLiveCanvas) livePlayerBackdrop else playerBackdrop,
+            ) { song ->
+                songMenuBody(song)
+            }
+        }
+    }
+}
 
 private fun tween(durationMillis: Int) =
 
@@ -10223,5 +9698,23 @@ private suspend fun LazyListState.scrollToTopEased() {
     }
     if (this.firstVisibleItemIndex != 0 || this.firstVisibleItemScrollOffset != 0) {
         this.animateScrollToItem(0)
+    }
+}
+
+@Composable
+private fun rememberLocalPlaylistShelfItems(
+    localPlaylists: List<com.music.bitchord.data.spotify.LocalPlaylist>,
+): List<ShelfItem> {
+    val countSubtitles = localPlaylists.map { stringResource(R.string.local_playlist_subtitle, it.songs.size) }
+    return remember(localPlaylists, countSubtitles) {
+        localPlaylists.mapIndexed { index, playlist ->
+            ShelfItem(
+                title = playlist.title,
+                subtitle = countSubtitles[index],
+                thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
+                videoId = null,
+                browseId = playlist.browseId,
+            )
+        }
     }
 }

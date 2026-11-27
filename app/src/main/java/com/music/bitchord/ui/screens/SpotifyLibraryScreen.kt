@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -280,6 +281,7 @@ private fun SpotifyLogin(
     modifier: Modifier = Modifier,
 ) {
     var sent by remember { mutableStateOf(false) }
+    val bgArgb = MaterialTheme.colorScheme.background.toArgb()
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
@@ -299,7 +301,7 @@ private fun SpotifyLogin(
                     @Suppress("DEPRECATION")
                     settings.forceDark = WebSettings.FORCE_DARK_OFF
                 }
-                setBackgroundColor(0xFF121212.toInt())
+                setBackgroundColor(bgArgb)
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                 webViewClient = object : WebViewClient() {

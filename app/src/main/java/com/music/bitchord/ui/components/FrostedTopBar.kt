@@ -174,6 +174,7 @@ fun FrostedTopBar(
      * Root tabs have no back button there for it to collide with.
      */
     accessory: (@Composable () -> Unit)? = null,
+    showTrailingActions: Boolean = true,
     actions: @Composable () -> Unit = {},
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -316,9 +317,13 @@ fun FrostedTopBar(
             ) {
                 if (accessory != null) {
                     Box(Modifier.weight(1f)) { accessory() }
-                    Spacer(Modifier.width(ACCESSORY_GAP))
+                    if (showTrailingActions) {
+                        Spacer(Modifier.width(ACCESSORY_GAP))
+                    }
                 }
-                actions()
+                if (showTrailingActions) {
+                    actions()
+                }
             }
         }
         RefreshPuck(refreshing = refreshing, pullFraction = pullFraction)
@@ -383,58 +388,6 @@ fun TopBarActionCircle(
         contentAlignment = Alignment.Center,
     ) {
         content()
-    }
-}
-
-/** One shared pill for every action at the right of a floating top bar. */
-@Deprecated("Use individual TopBarActionCircle and TopBarAccountButton surfaces instead")
-@Composable
-fun ArtworkPageActions(
-    hazeState: HazeState?,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Row(
-        modifier = modifier
-            .then(artworkPageSurface(shape = CircleShape, hazeState = hazeState))
-            // Keep the right edge fixed while a new action opens room to its
-            // left. The surface itself therefore grows instead of jumping to
-            // its new width in a single frame.
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-            )
-            // One 48dp profile target with no inset is a true 48x48 circle.
-            // Once another action exists, restore the navbar's PILL_INSET at
-            // both edges. This is layout padding inside the surface, not an
-            // outer margin, so BAR_GUTTER remains unchanged.
-            .artworkActionEdgePadding(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        content()
-    }
-}
-
-/**
- * Navbar edge padding that collapses only for the profile-only state.
- *
- * Invisible/animating action slots can measure between zero and 48dp, so the
- * natural content width—not the number of emitted composables—is the reliable
- * source of truth. At exactly one icon target the pill stays circular; above
- * that it gains the same inset as the navbar while retaining fully round ends.
- */
-private fun Modifier.artworkActionEdgePadding(): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints.copy(minWidth = 0))
-    val oneActionWidth = 48.dp.roundToPx()
-    val extraActionFraction = ((placeable.width - oneActionWidth).toFloat() / oneActionWidth)
-        .coerceIn(0f, 1f)
-    val edgePadding = (PILL_INSET.roundToPx() * extraActionFraction).roundToInt()
-    val width = (placeable.width + edgePadding * 2).coerceIn(constraints.minWidth, constraints.maxWidth)
-
-    layout(width, placeable.height) {
-        placeable.placeRelative(edgePadding, 0)
     }
 }
 

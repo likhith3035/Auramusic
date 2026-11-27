@@ -107,6 +107,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -507,6 +510,7 @@ private fun SharedTransitionScope.InlineTab(
             .clip(shapes.tabBarShape)
             .then(tabBarContentModifier())
             .clickable(
+                role = Role.Tab,
                 onClick = {
                     onInlineTabClick()
                     inlineTab.onClick()
@@ -566,6 +570,7 @@ private fun SharedTransitionScope.InlineStandaloneTab(
             .clip(shapes.standaloneTabShape)
             .then(tabBarContentModifier())
             .clickable(
+                role = Role.Tab,
                 onClick = standaloneTab.onClick,
                 indication = standaloneTab.indication?.invoke(),
                 interactionSource = remember { MutableInteractionSource() }
@@ -960,7 +965,9 @@ private fun SharedTransitionScope.ExpandedTabs(
                                 .weight(1f)
                                 .skipToLookaheadSize()
                                 .clip(shapes.tabShape)
+                                .semantics { selected = isSelected }
                                 .clickable(
+                                    role = Role.Tab,
                                     onClick = tab.onClick,
                                     indication = tab.indication?.invoke(),
                                     interactionSource = remember { MutableInteractionSource() }
@@ -1021,6 +1028,7 @@ private fun SharedTransitionScope.ExpandedStandaloneTab(
             .clip(shapes.standaloneTabShape)
             .then(tabBarContentModifier())
             .clickable(
+                role = Role.Tab,
                 onClick = standaloneTab.onClick,
                 indication = standaloneTab.indication?.invoke(),
                 interactionSource = remember { MutableInteractionSource() }

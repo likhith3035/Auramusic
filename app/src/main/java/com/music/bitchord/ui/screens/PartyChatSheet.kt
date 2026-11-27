@@ -38,6 +38,8 @@ import androidx.collection.LruCache
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,6 +66,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Campaign
@@ -80,8 +84,6 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Reply
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Share
@@ -115,6 +117,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -155,7 +158,6 @@ fun PartyChatSheet(
     val state by ListenTogether.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    val showDevModal by ListenTogether.showDevModal.collectAsStateWithLifecycle()
     val showDevConsole by ListenTogether.showDevConsole.collectAsStateWithLifecycle()
     val activeGodAnnouncement by ListenTogether.godAnnouncement.collectAsStateWithLifecycle()
     val typingUsers by ListenTogether.typingUsers.collectAsStateWithLifecycle()
@@ -323,7 +325,7 @@ fun PartyChatSheet(
                 )
             }
 
-            if (state.you?.isFounder == true || state.you?.displayName.equals("likki", ignoreCase = true)) {
+            if (state.you?.isHost == true || state.you?.isFounder == true) {
                 Spacer(Modifier.weight(1f))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1292,163 +1294,6 @@ fun PartyChatSheet(
         )
     }
 
-    // Developer Terminal Modal for likhith3035. secret access
-    if (showDevModal) {
-        var devDob by remember { mutableStateOf("") }
-        var devNickname by remember { mutableStateOf("likki") }
-        var devConfirm by remember { mutableStateOf("") }
-        var devError by remember { mutableStateOf<String?>(null) }
-
-        Dialog(
-            onDismissRequest = {
-                ListenTogether.setShowDevModal(false)
-            }
-        ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF13151F),
-                border = BorderStroke(1.5.dp, Color(0xFFFFB300).copy(alpha = 0.6f)),
-                shadowElevation = 16.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Color(0xFFFFB300).copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Key,
-                            contentDescription = null,
-                            tint = Color(0xFFFFB300),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Text(
-                        text = "Developer Terminal",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-
-                    Text(
-                        text = "Enter developer authorization to elevate host privileges",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF94A3B8),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    OutlinedTextField(
-                        value = devDob,
-                        onValueChange = { devDob = it; devError = null },
-                        label = { Text("Date of Birth (DD MM YYYY)") },
-                        placeholder = { Text("29 07 2005") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color(0xFFFFB300),
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedLabelColor = Color(0xFFFFB300),
-                            unfocusedLabelColor = Color(0xFF94A3B8)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = devNickname,
-                        onValueChange = { devNickname = it; devError = null },
-                        label = { Text("Developer Nickname") },
-                        placeholder = { Text("likki") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color(0xFFFFB300),
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedLabelColor = Color(0xFFFFB300),
-                            unfocusedLabelColor = Color(0xFF94A3B8)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = devConfirm,
-                        onValueChange = { devConfirm = it; devError = null },
-                        label = { Text("Type 'iam' to host") },
-                        placeholder = { Text("iam") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color(0xFFFFB300),
-                            unfocusedBorderColor = Color(0xFF334155),
-                            focusedLabelColor = Color(0xFFFFB300),
-                            unfocusedLabelColor = Color(0xFF94A3B8)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (devError != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = devError.orEmpty(),
-                            color = Color(0xFFEF4444),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { ListenTogether.setShowDevModal(false) }) {
-                            Text("Cancel", color = Color(0xFF94A3B8))
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Button(
-                            onClick = {
-                                val ok = ListenTogether.devElevate(devDob, devNickname, devConfirm)
-                                if (!ok) {
-                                    devError = "Verification failed. Check DOB & confirm."
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFFB300),
-                                contentColor = Color.Black
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("👑 Elevate to Host", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if (showDevConsole) {
         Dialog(
             onDismissRequest = {
@@ -1819,7 +1664,7 @@ private fun ChatMessageBubble(
                                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                             ) {
                                                 Text(
-                                                    text = "🗳️ Auto-Queued by Democracy",
+                                                    text = "Auto-Queued by Democracy",
                                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.primary,
@@ -1844,10 +1689,11 @@ private fun ChatMessageBubble(
                                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                         modifier = Modifier
                                             .weight(1f)
+                                            .heightIn(min = 40.dp)
                                             .clickable { onPlayNext(song) },
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                             horizontalArrangement = Arrangement.Center,
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
@@ -1873,15 +1719,16 @@ private fun ChatMessageBubble(
                                         color = MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier
                                             .weight(1f)
+                                            .heightIn(min = 40.dp)
                                             .clickable { onAddToQueue(song) },
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                             horizontalArrangement = Arrangement.Center,
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Rounded.QueueMusic,
+                                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(16.dp),
@@ -1903,10 +1750,11 @@ private fun ChatMessageBubble(
                                         else MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier
                                             .weight(1.1f)
+                                            .heightIn(min = 40.dp)
                                             .clickable { onUpvote() },
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
                                             horizontalArrangement = Arrangement.Center,
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
@@ -1985,44 +1833,59 @@ private fun ChatMessageBubble(
                 // Reaction trigger (+)
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        .clickable { showEmojiDock = !showEmojiDock },
+                        .clickable(role = Role.Button) { showEmojiDock = !showEmojiDock },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "➕", fontSize = 10.sp)
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Add reaction",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
 
                 Spacer(Modifier.width(6.dp))
 
-                // Reply trigger (↩)
+                // Reply trigger
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        .clickable { onReply(message) },
+                        .clickable(role = Role.Button) { onReply(message) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "↩️", fontSize = 10.sp)
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.Reply,
+                        contentDescription = "Reply",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
 
-                // Pin trigger (📌) for host
+                // Pin trigger for host
                 if (onPin != null) {
                     Spacer(Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(
                                 if (message.isPinned) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                             )
-                            .clickable { onPin(message.id) },
+                            .clickable(role = Role.Button) { onPin(message.id) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = if (message.isPinned) "📌" else "📍", fontSize = 10.sp)
+                        Icon(
+                            imageVector = Icons.Rounded.PushPin,
+                            contentDescription = if (message.isPinned) "Unpin message" else "Pin message",
+                            tint = if (message.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp),
+                        )
                     }
                 }
             }
@@ -2036,23 +1899,28 @@ private fun ChatMessageBubble(
                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Row(
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         listOf("❤️", "🔥", "😂", "👍", "😮", "👏", "🎉").forEach { em ->
-                            Text(
-                                text = em,
-                                fontSize = 18.sp,
+                            Box(
                                 modifier = Modifier
+                                    .size(36.dp)
                                     .clip(CircleShape)
-                                    .clickable {
+                                    .clickable(role = Role.Button) {
                                         onReact(message.id, em)
                                         showEmojiDock = false
-                                    }
-                                    .padding(4.dp)
-                            )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = em,
+                                    fontSize = 18.sp,
+                                )
+                            }
                         }
                     }
                 }
@@ -2421,7 +2289,7 @@ private fun MessageActionsSheet(
 
                     // Actions List
                     ContextActionRow(
-                        icon = Icons.Rounded.Reply,
+                        icon = Icons.AutoMirrored.Rounded.Reply,
                         title = "Reply",
                         subtitle = "Quote message in room chat",
                         onClick = {

@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.music.bitchord.ui.components.longPressMenuClickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,9 +39,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Album
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -56,7 +56,6 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -515,6 +514,7 @@ private fun SongsTab(
     onSongSwipe: (Song) -> Unit,
     contentPadding: PaddingValues,
 ) {
+    val gridSongKeys = remember(songs) { uniqueSongKeys(songs) }
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         LazyVerticalGrid(
@@ -537,7 +537,7 @@ private fun SongsTab(
                     modifier = Modifier.padding(horizontal = 0.dp, vertical = 10.dp),
                 )
             }
-            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
+            itemsIndexed(songs, key = { index, _ -> gridSongKeys[index] }) { index, song ->
                 SongGridCard(
                     song = song,
                     selected = song.videoId in selectedIds,
@@ -562,7 +562,7 @@ private fun SongsTab(
                     title = pluralStringResource(R.plurals.song_count_plural, songs.size, songs.size),
                 )
             }
-            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
+            itemsIndexed(songs, key = { index, _ -> gridSongKeys[index] }) { index, song ->
                 SongRow(
                     song = song,
                     selected = song.videoId in selectedIds,
@@ -1231,7 +1231,7 @@ private fun DrillDownHeader(
                 modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.ArrowBack, stringResource(R.string.back), tint = MaterialTheme.colorScheme.onBackground)
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back), tint = MaterialTheme.colorScheme.onBackground)
             }
             Spacer(Modifier.weight(1f))
             onMore?.let { more ->
@@ -1318,7 +1318,7 @@ private fun DrillDownActionRow(
             Icon(
                 BitChordIcons.Shuffle,
                 contentDescription = stringResource(R.string.shuffle),
-                tint = if (isSystemInDarkTheme()) Color.White else Color.Black,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -1371,6 +1371,7 @@ private fun DrillDownSongList(
     onBack: () -> Unit,
     contentPadding: PaddingValues,
 ) {
+    val gridSongKeys = remember(songs) { uniqueSongKeys(songs) }
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         LazyVerticalGrid(
@@ -1402,7 +1403,7 @@ private fun DrillDownSongList(
                     onShuffle = onShuffle,
                 )
             }
-            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
+            itemsIndexed(songs, key = { index, _ -> gridSongKeys[index] }) { index, song ->
                 SongGridCard(
                     song = song,
                     selected = song.videoId in selectedIds,
@@ -1437,7 +1438,7 @@ private fun DrillDownSongList(
                     onShuffle = onShuffle,
                 )
             }
-            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
+            itemsIndexed(songs, key = { index, _ -> gridSongKeys[index] }) { index, song ->
                 SongRow(
                     song = song,
                     selected = song.videoId in selectedIds,
@@ -1587,7 +1588,7 @@ private fun LocalSearchField(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Rounded.Sort,
+                    Icons.AutoMirrored.Rounded.Sort,
                     contentDescription = stringResource(R.string.sort_music),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(19.dp),
@@ -1654,14 +1655,14 @@ private fun DownloadSelectionBar(
             Icon(
                 Icons.Rounded.Check,
                 contentDescription = stringResource(R.string.select_all),
-                tint = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp),
             )
         }
         Text(
             text = "$count ${stringResource(R.string.selected)}",
             style = MaterialTheme.typography.titleSmall,
-            color = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
         onUpload?.let { upload ->
@@ -1749,5 +1750,15 @@ private fun SectionHeader(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+private fun uniqueSongKeys(songs: List<Song>): List<String> {
+    val counts = HashMap<String, Int>(songs.size)
+    return songs.map { song ->
+        val base = song.localUri ?: song.videoId
+        val seen = (counts[base] ?: 0) + 1
+        counts[base] = seen
+        if (seen == 1) base else "${base}_#$seen"
     }
 }

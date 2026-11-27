@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.Check
@@ -67,6 +69,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -399,27 +402,60 @@ private fun DynamicFrequencyCurve(
         else -> "SCOOPED MIDS • ${signed(y)}"
     }
 
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val cardTopColor = if (isDark) Color(0xFF13131A) else MaterialTheme.colorScheme.surfaceContainerLow
+    val cardBottomColor = if (isDark) Color(0xFF0C0C10) else MaterialTheme.colorScheme.surfaceContainer
+    val borderBottomColor = if (isDark) Color(0xFF22222E) else MaterialTheme.colorScheme.outlineVariant
+    val statusAccent = if (isDark) Color(0xFF00F5D4) else Color(0xFF008775)
+    val density = LocalDensity.current
+    val canvasHeightPx = with(density) { 110.dp.toPx() }
+    val padYPx = with(density) { 12.dp.toPx() }
+    val cardBgBrush = remember(cardTopColor, cardBottomColor) {
+        Brush.verticalGradient(listOf(cardTopColor, cardBottomColor))
+    }
+    val cardBorderBrush = remember(primaryColor, borderBottomColor) {
+        Brush.verticalGradient(listOf(primaryColor.copy(alpha = 0.28f), borderBottomColor))
+    }
+    val fillBrush = remember(primaryColor, enabled, padYPx, canvasHeightPx) {
+        Brush.verticalGradient(
+            colors = listOf(
+                primaryColor.copy(alpha = if (enabled) 0.22f else 0.05f),
+                Color.Transparent,
+            ),
+            startY = padYPx,
+            endY = canvasHeightPx,
+        )
+    }
+    val curveBrush = remember(isDark) {
+        Brush.horizontalGradient(
+            colors = if (isDark) {
+                listOf(Color(0xFFF59E0B), Color(0xFF10B981), Color(0xFF06B6D4))
+            } else {
+                listOf(Color(0xFFD97706), Color(0xFF059669), Color(0xFF0284C7))
+            },
+        )
+    }
+    val disabledCurveBrush = remember {
+        Brush.linearGradient(listOf(Color.Gray, Color.DarkGray))
+    }
+    val curveStroke = remember(density) {
+        with(density) {
+            Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        }
+    }
+    val curvePath = remember { Path() }
+    val fillPath = remember { Path() }
+    val pointCache = remember { MutableList(EqLayout.MANUAL_BANDS_HZ.size) { Offset.Zero } }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = GROUP_INSET, vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF13131A),
-                        Color(0xFF0C0C10),
-                    ),
-                ),
-            )
+            .background(cardBgBrush)
             .border(
                 width = 1.dp,
-                brush = Brush.verticalGradient(
-                    listOf(
-                        primaryColor.copy(alpha = 0.28f),
-                        Color(0xFF22222E),
-                    ),
-                ),
+                brush = cardBorderBrush,
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(top = 12.dp, bottom = 8.dp, start = 10.dp, end = 10.dp),
@@ -437,13 +473,13 @@ private fun DynamicFrequencyCurve(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (enabled) Color(0xFF00F5D4) else Color.Gray),
+                            .background(if (enabled) statusAccent else Color.Gray),
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "DYNAMIC ACOUSTIC RESPONSE",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (enabled) Color(0xFF00F5D4) else onSurfaceVariant,
+                        color = if (enabled) statusAccent else onSurfaceVariant,
                         letterSpacing = 0.8.sp,
                     )
                 }
@@ -481,58 +517,43 @@ private fun DynamicFrequencyCurve(
 
                 val count = animatedBands.size
                 val stepX = w / (count - 1)
-                val points = animatedBands.mapIndexed { i, db ->
-                    val clamped = db.coerceIn(-range, range)
-                    Offset(
+                for (i in 0 until count) {
+                    val clamped = animatedBands[i].coerceIn(-range, range)
+                    pointCache[i] = Offset(
                         x = i * stepX,
                         y = midY - (clamped / range) * (usableH / 2f),
                     )
                 }
 
-                val path = Path()
-                val fillPath = Path()
-                if (points.isNotEmpty()) {
-                    path.moveTo(points[0].x, points[0].y)
-                    fillPath.moveTo(points[0].x, midY)
-                    fillPath.lineTo(points[0].x, points[0].y)
+                curvePath.reset()
+                fillPath.reset()
+                if (pointCache.isNotEmpty()) {
+                    curvePath.moveTo(pointCache[0].x, pointCache[0].y)
+                    fillPath.moveTo(pointCache[0].x, midY)
+                    fillPath.lineTo(pointCache[0].x, pointCache[0].y)
 
-                    for (i in 0 until points.size - 1) {
-                        val p0 = points[i]
-                        val p1 = points[i + 1]
+                    for (i in 0 until pointCache.size - 1) {
+                        val p0 = pointCache[i]
+                        val p1 = pointCache[i + 1]
                         val cx = (p0.x + p1.x) / 2f
-                        path.cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                        curvePath.cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
                         fillPath.cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
                     }
 
-                    fillPath.lineTo(points.last().x, midY)
+                    fillPath.lineTo(pointCache.last().x, midY)
                     fillPath.close()
 
-                    val fillBrush = Brush.verticalGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = if (enabled) 0.22f else 0.05f),
-                            Color.Transparent,
-                        ),
-                        startY = padY,
-                        endY = h,
-                    )
                     drawPath(fillPath, brush = fillBrush)
 
-                    val curveBrush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFFF59E0B),
-                            Color(0xFF10B981),
-                            Color(0xFF06B6D4),
-                        ),
-                    )
                     drawPath(
-                        path = path,
-                        brush = if (enabled) curveBrush else Brush.linearGradient(listOf(Color.Gray, Color.DarkGray)),
-                        style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        path = curvePath,
+                        brush = if (enabled) curveBrush else disabledCurveBrush,
+                        style = curveStroke,
                     )
 
-                    points.forEach { pt ->
+                    pointCache.forEach { pt ->
                         drawCircle(
-                            color = Color(0xFF0C0C10),
+                            color = cardBottomColor,
                             radius = 4.dp.toPx(),
                             center = pt,
                         )
@@ -595,12 +616,14 @@ private fun DynamicSoundstagePresets(
             .padding(horizontal = GROUP_INSET, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+        val inactiveBg = if (isDark) Color(0xFF14141E) else MaterialTheme.colorScheme.surfaceVariant
+        val inactiveBorder = if (isDark) Color(0xFF262638) else MaterialTheme.colorScheme.outlineVariant
+        val inactiveText = if (isDark) Color(0xFFE2E8F0) else MaterialTheme.colorScheme.onSurface
         SOUNDSTAGE_MACROS.forEach { macro ->
             val isSelected = currentX == macro.x && currentY == macro.y
-            val bgColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-            else Color(0xFF14141E)
-            val borderColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-            else Color(0xFF262638)
+            val bgColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else inactiveBg
+            val borderColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f) else inactiveBorder
 
             Box(
                 modifier = Modifier
@@ -622,7 +645,7 @@ private fun DynamicSoundstagePresets(
                         text = macro.title,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFE2E8F0),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else inactiveText,
                     )
                 }
             }
@@ -685,13 +708,35 @@ private fun TonePad(
             )
         }
 
+        val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+        val padBackgroundColor = if (isDark) Color(0xFF0F0F17) else MaterialTheme.colorScheme.surfaceContainerLow
+        val padBorderColor = if (isDark) Color(0xFF222232) else MaterialTheme.colorScheme.outlineVariant
+        val density = LocalDensity.current
+        val puckInsetPx = with(density) { PUCK_RADIUS.toPx() }
+        val puckBodyBrush = remember(isDark, puckInsetPx) {
+            Brush.radialGradient(
+                colors = if (isDark) {
+                    listOf(Color(0xFF28293E), Color(0xFF12121E))
+                } else {
+                    listOf(Color.White, Color(0xFFE2E8F0))
+                },
+                center = Offset.Zero,
+                radius = puckInsetPx,
+            )
+        }
+        val puckRingStroke = remember(density) {
+            with(density) { Stroke(width = 1.8.dp.toPx()) }
+        }
+        val quadrantCache = remember { arrayOfNulls<Brush>(4) }
+        var cachedPadSize by remember { mutableStateOf(Size.Zero) }
+
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(PAD_HEIGHT)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF0F0F17))
-                .border(1.dp, Color(0xFF222232), RoundedCornerShape(16.dp))
+                .background(padBackgroundColor)
+                .border(1.dp, padBorderColor, RoundedCornerShape(16.dp))
                 .pointerInput(steps, enabled) {
                     if (!enabled) return@pointerInput
                     awaitEachGesture {
@@ -730,35 +775,33 @@ private fun TonePad(
             val columns = steps * 2
             val dotRadius = DOT_RADIUS.toPx()
 
-            // 4-Quadrant Ambient Lighting
-            drawCircle(
-                brush = Brush.radialGradient(
+            if (cachedPadSize != size || quadrantCache[0] == null) {
+                cachedPadSize = size
+                val radius = size.width * 0.6f
+                quadrantCache[0] = Brush.radialGradient(
                     colors = listOf(Color(0xFFF59E0B).copy(alpha = 0.14f), Color.Transparent),
                     center = Offset(0f, 0f),
-                    radius = size.width * 0.6f,
-                ),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
+                    radius = radius,
+                )
+                quadrantCache[1] = Brush.radialGradient(
                     colors = listOf(Color(0xFF06B6D4).copy(alpha = 0.14f), Color.Transparent),
                     center = Offset(size.width, 0f),
-                    radius = size.width * 0.6f,
-                ),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
+                    radius = radius,
+                )
+                quadrantCache[2] = Brush.radialGradient(
                     colors = listOf(Color(0xFF8B5CF6).copy(alpha = 0.12f), Color.Transparent),
                     center = Offset(0f, size.height),
-                    radius = size.width * 0.6f,
-                ),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
+                    radius = radius,
+                )
+                quadrantCache[3] = Brush.radialGradient(
                     colors = listOf(Color(0xFFEC4899).copy(alpha = 0.12f), Color.Transparent),
                     center = Offset(size.width, size.height),
-                    radius = size.width * 0.6f,
-                ),
-            )
+                    radius = radius,
+                )
+            }
+            quadrantCache.forEach { brush ->
+                if (brush != null) drawCircle(brush = brush)
+            }
 
             // Crosshair central axis lines
             val centerX = inset + usableWidth * 0.5f
@@ -824,27 +867,21 @@ private fun TonePad(
                 )
             }
 
-            // Lens Puck Body
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF28293E), Color(0xFF12121E)),
-                    center = puckCentre,
+            // Lens Puck Body (translated so cached radial gradient is reused across frames)
+            translate(left = puckCentre.x, top = puckCentre.y) {
+                drawCircle(
+                    brush = puckBodyBrush,
                     radius = inset,
-                ),
-                radius = inset,
-                center = puckCentre,
-            )
+                    center = Offset.Zero,
+                )
+            }
 
-            // Hairline Specular Highlight Border
+            // Specular Highlight Border
             drawCircle(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.White.copy(alpha = 0.75f), puckAccent.copy(alpha = 0.40f)),
-                    startY = puckCentre.y - inset,
-                    endY = puckCentre.y + inset,
-                ),
+                color = puckAccent.copy(alpha = 0.65f),
                 radius = inset,
                 center = puckCentre,
-                style = Stroke(width = 1.8.dp.toPx()),
+                style = puckRingStroke,
             )
 
             // Glowing center core dot
@@ -898,6 +935,11 @@ private fun ToneReadout(
 ) {
     val haptics = rememberHaptics()
     val isCentered = x == 0 && y == 0
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val chipBg = if (isDark) Color(0xFF141420) else MaterialTheme.colorScheme.surfaceVariant
+    val chipBorder = if (isDark) Color(0xFF28283C) else MaterialTheme.colorScheme.outlineVariant
+    val chipTextColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val neutralTint = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier
@@ -911,8 +953,8 @@ private fun ToneReadout(
             modifier = Modifier
                 .padding(end = 6.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF141420))
-                .border(1.dp, Color(0xFF28283C), RoundedCornerShape(10.dp))
+                .background(chipBg)
+                .border(1.dp, chipBorder, RoundedCornerShape(10.dp))
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
             Row(
@@ -921,7 +963,7 @@ private fun ToneReadout(
                 Icon(
                     imageVector = Icons.Rounded.Waves,
                     contentDescription = stringResource(R.string.equalizer_tilt),
-                    tint = if (x < 0) Color(0xFFF59E0B) else if (x > 0) Color(0xFF06B6D4) else Color(0xFF94A3B8),
+                    tint = if (x < 0) Color(0xFFF59E0B) else if (x > 0) Color(0xFF06B6D4) else neutralTint,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(6.dp))
@@ -933,7 +975,7 @@ private fun ToneReadout(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = chipTextColor,
                 )
             }
         }
@@ -943,8 +985,8 @@ private fun ToneReadout(
             modifier = Modifier
                 .padding(end = if (!isCentered) 6.dp else 0.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF141420))
-                .border(1.dp, Color(0xFF28283C), RoundedCornerShape(10.dp))
+                .background(chipBg)
+                .border(1.dp, chipBorder, RoundedCornerShape(10.dp))
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
             Row(
@@ -953,7 +995,7 @@ private fun ToneReadout(
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ShowChart,
                     contentDescription = stringResource(R.string.equalizer_contour),
-                    tint = if (y > 0) Color(0xFF10B981) else if (y < 0) Color(0xFFEC4899) else Color(0xFF94A3B8),
+                    tint = if (y > 0) Color(0xFF10B981) else if (y < 0) Color(0xFFEC4899) else neutralTint,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(6.dp))
@@ -965,7 +1007,7 @@ private fun ToneReadout(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = chipTextColor,
                 )
             }
         }
@@ -1074,27 +1116,57 @@ private fun EqualizerFrequencyCurve(
         color = onSurfaceVariant.copy(alpha = 0.7f),
     )
 
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val cardTopColor = if (isDark) Color(0xFF13131A) else MaterialTheme.colorScheme.surfaceContainerLow
+    val cardBottomColor = if (isDark) Color(0xFF0C0C10) else MaterialTheme.colorScheme.surfaceContainer
+    val borderBottomColor = if (isDark) Color(0xFF22222E) else MaterialTheme.colorScheme.outlineVariant
+    val statusAccent = if (isDark) Color(0xFF00F5D4) else Color(0xFF008775)
+    val density = LocalDensity.current
+    val canvasHeightPx = with(density) { 110.dp.toPx() }
+    val cardBgBrush = remember(cardTopColor, cardBottomColor) {
+        Brush.verticalGradient(listOf(cardTopColor, cardBottomColor))
+    }
+    val cardBorderBrush = remember(primaryColor, borderBottomColor) {
+        Brush.verticalGradient(listOf(primaryColor.copy(alpha = 0.28f), borderBottomColor))
+    }
+    val fillBrush = remember(primaryColor, enabled, canvasHeightPx, statusAccent) {
+        Brush.verticalGradient(
+            colors = listOf(
+                primaryColor.copy(alpha = if (enabled) 0.32f else 0.08f),
+                statusAccent.copy(alpha = if (enabled) 0.12f else 0.03f),
+                Color.Transparent,
+            ),
+            startY = 0f,
+            endY = canvasHeightPx,
+        )
+    }
+    val strokeBrush = remember(enabled, isDark) {
+        Brush.horizontalGradient(
+            colors = when {
+                !enabled -> listOf(Color.Gray, Color.DarkGray)
+                isDark -> listOf(Color(0xFF00F5D4), Color(0xFF00BBF9), Color(0xFF8338EC), Color(0xFFFF007F))
+                else -> listOf(Color(0xFF008775), Color(0xFF0284C7), Color(0xFF7C3AED), Color(0xFFDB2777))
+            },
+        )
+    }
+    val curveStroke = remember(density) {
+        with(density) {
+            Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        }
+    }
+    val curvePath = remember { Path() }
+    val fillPath = remember { Path() }
+    val pointCache = remember(animatedBands.size) { MutableList(animatedBands.size) { Offset.Zero } }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = GROUP_INSET, vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF13131A),
-                        Color(0xFF0C0C10),
-                    ),
-                ),
-            )
+            .background(cardBgBrush)
             .border(
                 width = 1.dp,
-                brush = Brush.verticalGradient(
-                    listOf(
-                        primaryColor.copy(alpha = 0.28f),
-                        Color(0xFF22222E),
-                    ),
-                ),
+                brush = cardBorderBrush,
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(top = 12.dp, bottom = 8.dp, start = 10.dp, end = 10.dp),
@@ -1112,13 +1184,13 @@ private fun EqualizerFrequencyCurve(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (enabled) Color(0xFF00F5D4) else Color.Gray),
+                            .background(if (enabled) statusAccent else Color.Gray),
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "STUDIO SPECTRUM RESPONSE",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (enabled) Color(0xFF00F5D4) else onSurfaceVariant,
+                        color = if (enabled) statusAccent else onSurfaceVariant,
                         letterSpacing = 0.8.sp,
                     )
                 }
@@ -1156,86 +1228,62 @@ private fun EqualizerFrequencyCurve(
                 }
 
                 val count = animatedBands.size
-                val points = ArrayList<Offset>(count)
                 val padX = 14.dp.toPx()
                 val usableW = w - padX * 2
                 for (i in 0 until count) {
                     val px = padX + (i.toFloat() / (count - 1)) * usableW
                     val py = midY - (animatedBands[i] / range) * (usableH / 2f)
-                    points.add(Offset(px, py))
+                    pointCache[i] = Offset(px, py)
                 }
 
                 // Smooth cubic curve path
-                val path = Path()
-                path.moveTo(0f, points[0].y)
-                path.lineTo(points[0].x, points[0].y)
+                curvePath.reset()
+                curvePath.moveTo(0f, pointCache[0].y)
+                curvePath.lineTo(pointCache[0].x, pointCache[0].y)
 
-                for (i in 0 until points.size - 1) {
-                    val p0 = points[maxOf(0, i - 1)]
-                    val p1 = points[i]
-                    val p2 = points[i + 1]
-                    val p3 = points[minOf(points.size - 1, i + 2)]
+                for (i in 0 until pointCache.size - 1) {
+                    val p0 = pointCache[maxOf(0, i - 1)]
+                    val p1 = pointCache[i]
+                    val p2 = pointCache[i + 1]
+                    val p3 = pointCache[minOf(pointCache.size - 1, i + 2)]
 
                     val cp1x = p1.x + (p2.x - p0.x) / 6f
                     val cp1y = p1.y + (p2.y - p0.y) / 6f
                     val cp2x = p2.x - (p3.x - p1.x) / 6f
                     val cp2y = p2.y - (p3.y - p1.y) / 6f
 
-                    path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+                    curvePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
                 }
-                path.lineTo(w, points.last().y)
+                curvePath.lineTo(w, pointCache.last().y)
 
                 // Fill under curve
-                val fillPath = Path()
-                fillPath.addPath(path)
+                fillPath.reset()
+                fillPath.addPath(curvePath)
                 fillPath.lineTo(w, h)
                 fillPath.lineTo(0f, h)
                 fillPath.close()
 
                 drawPath(
                     path = fillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = if (enabled) 0.32f else 0.08f),
-                            Color(0xFF00F5D4).copy(alpha = if (enabled) 0.12f else 0.03f),
-                            Color.Transparent,
-                        ),
-                        startY = 0f,
-                        endY = h,
-                    ),
+                    brush = fillBrush,
                 )
 
                 // Stroke line
                 drawPath(
-                    path = path,
-                    brush = Brush.horizontalGradient(
-                        colors = if (enabled) {
-                            listOf(
-                                Color(0xFF00F5D4),
-                                Color(0xFF00BBF9),
-                                Color(0xFF8338EC),
-                                Color(0xFFFF007F),
-                            )
-                        } else {
-                            listOf(Color.Gray, Color.DarkGray)
-                        },
-                    ),
-                    style = Stroke(
-                        width = 2.8.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
+                    path = curvePath,
+                    brush = strokeBrush,
+                    style = curveStroke,
                 )
 
                 // Anchor points
-                points.forEachIndexed { idx, pt ->
+                pointCache.forEachIndexed { idx, pt ->
                     val bandVal = animatedBands.getOrElse(idx) { 0f }
                     val isBoosted = bandVal > 0.5f
                     val isCut = bandVal < -0.5f
                     val nodeColor = when {
                         !enabled -> Color.Gray
-                        isBoosted -> Color(0xFF00F5D4)
-                        isCut -> Color(0xFFFF9E00)
+                        isBoosted -> statusAccent
+                        isCut -> if (isDark) Color(0xFFFF9E00) else Color(0xFFB45309)
                         else -> primaryColor
                     }
 
@@ -1522,12 +1570,13 @@ private fun BandSliders(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                val isDarkLabel = MaterialTheme.colorScheme.background.luminance() < 0.5f
                 Text(
                     text = formatGain(value),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = when {
-                        value > 0.05f -> Color(0xFF00F5D4)
-                        value < -0.05f -> Color(0xFFFF9E00)
+                        value > 0.05f -> if (isDarkLabel) Color(0xFF00F5D4) else Color(0xFF008775)
+                        value < -0.05f -> if (isDarkLabel) Color(0xFFFF9E00) else Color(0xFFB45309)
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     maxLines = 1,
@@ -1560,8 +1609,29 @@ private fun BandFader(
     onChange: (Float) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
     val knobColor = MaterialTheme.colorScheme.surface
+    val zeroLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f)
+    val neutralRimColor = if (isDark) Color(0xFF383842) else MaterialTheme.colorScheme.outlineVariant
+    val density = LocalDensity.current
+    val faderInsetPx = with(density) { KNOB_RADIUS.toPx() }
+    val faderUsablePx = with(density) { FADER_HEIGHT.toPx() } - faderInsetPx * 2f
+    val faderCentreYPx = faderInsetPx + faderUsablePx / 2f
+    val boostFillBrush = remember(faderInsetPx, faderCentreYPx, isDark) {
+        Brush.verticalGradient(
+            colors = if (isDark) listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)) else listOf(Color(0xFF008775), Color(0xFF0284C7)),
+            startY = faderInsetPx,
+            endY = faderCentreYPx,
+        )
+    }
+    val cutFillBrush = remember(faderCentreYPx, faderUsablePx, isDark) {
+        Brush.verticalGradient(
+            colors = if (isDark) listOf(Color(0xFFFF9E00), Color(0xFFFF007F)) else listOf(Color(0xFFD97706), Color(0xFFDB2777)),
+            startY = faderCentreYPx,
+            endY = faderInsetPx + faderUsablePx,
+        )
+    }
     val range = EqLayout.MANUAL_RANGE_DB
     // See [TonePad]: the gesture block outlives the composition that made it.
     val latest by rememberUpdatedState(value)
@@ -1613,7 +1683,6 @@ private fun BandFader(
         val centreX = size.width / 2
         val knobY = inset + usable * (1f - (value / range + 1f) / 2f)
         val isBoost = value > 0.05f
-        val isCut = value < -0.05f
 
         // Draw track groove background
         drawRoundRect(
@@ -1625,21 +1694,8 @@ private fun BandFader(
 
         // Draw active level gradient fill from centre 0dB to current knob position
         if (abs(value) > 0.05f) {
-            val fillBrush = if (isBoost) {
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)),
-                    startY = knobY,
-                    endY = centreY,
-                )
-            } else {
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFFFF9E00), Color(0xFFFF007F)),
-                    startY = centreY,
-                    endY = knobY,
-                )
-            }
             drawRoundRect(
-                brush = fillBrush,
+                brush = if (isBoost) boostFillBrush else cutFillBrush,
                 topLeft = Offset(centreX - trackWidth / 2, minOf(centreY, knobY)),
                 size = Size(trackWidth, abs(centreY - knobY)),
                 cornerRadius = CornerRadius(trackWidth / 2),
@@ -1648,7 +1704,7 @@ private fun BandFader(
 
         // The zero reference line
         drawLine(
-            color = Color.White.copy(alpha = 0.35f),
+            color = zeroLineColor,
             start = Offset(centreX - trackWidth * 1.5f, centreY),
             end = Offset(centreX + trackWidth * 1.5f, centreY),
             strokeWidth = 1.dp.toPx(),
@@ -1676,7 +1732,7 @@ private fun BandFader(
             color = if (abs(value) > 0.05f) {
                 if (isBoost) Color(0xFF00F5D4) else Color(0xFFFF9E00)
             } else {
-                Color(0xFF383842)
+                neutralRimColor
             },
             radius = inset,
             center = Offset(centreX, knobY),

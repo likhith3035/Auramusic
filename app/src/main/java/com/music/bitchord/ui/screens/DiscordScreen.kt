@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -445,7 +447,7 @@ private fun DiscordAccountCard(
             .padding(horizontal = GROUP_INSET)
             .clip(GroupShape)
             .background(cardColor)
-            .then(if (connected) Modifier else Modifier.clickable(onClick = onConnect))
+            .then(if (connected) Modifier else Modifier.clickable(role = Role.Button, onClick = onConnect))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -686,9 +688,10 @@ private fun PresenceButton(label: String, enabled: Boolean, onClick: () -> Unit)
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 0.9f else 0.4f))
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

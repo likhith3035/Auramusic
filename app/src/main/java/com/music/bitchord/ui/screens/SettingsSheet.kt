@@ -64,6 +64,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -269,6 +270,7 @@ fun SettingsScreen(
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideSongStatus by AppSettings.hideSongStatus.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
+    val autoPlayPastedLinks by AppSettings.autoPlayPastedLinks.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val fastForwardHoldSpeed by AppSettings.fastForwardHoldSpeed.collectAsStateWithLifecycle()
     val rewindHoldSpeed by AppSettings.rewindHoldSpeed.collectAsStateWithLifecycle()
@@ -344,6 +346,10 @@ fun SettingsScreen(
     var showCustomApiKeysDialog by remember { mutableStateOf(false) }
     var showAdminPinDialog by remember { mutableStateOf(false) }
     var showTelemetryPulseSheet by remember { mutableStateOf(false) }
+    var showTasteEditor by remember { mutableStateOf(false) }
+    val startupChimeEnabled by AppSettings.startupChimeEnabled.collectAsStateWithLifecycle()
+    val lastBackupTimestampMs by AppSettings.lastBackupTimestampMs.collectAsStateWithLifecycle()
+    val tastePrefs by com.music.bitchord.data.taste.MusicTasteStore.preferences.collectAsStateWithLifecycle()
     val backupScope = rememberCoroutineScope()
 
     val batterySettingsLauncher = rememberLauncherForActivityResult(
@@ -493,11 +499,12 @@ fun SettingsScreen(
                 )
             }
             val onMobileDataTitle = stringResource(R.string.on_mobile_data)
-            row(onMobileDataTitle, "cellular", "streaming quality") {
+            row(onMobileDataTitle, "cellular", "streaming quality", "data saver") {
                 SettingsRow(
                     icon = Icons.Rounded.SignalCellularAlt,
                     title = onMobileDataTitle,
-                    badge = stringResource(R.string.in_use).takeIf { metered == true },
+                    subtitle = if (cellularDataSaver) "Overridden by Cellular Data Saver" else null,
+                    badge = if (cellularDataSaver) "DATA SAVER ON" else stringResource(R.string.in_use).takeIf { metered == true },
                     value = cellularQuality.localizedLabel(),
                     onClick = { picking = QualityTarget.CELLULAR },
                 )
@@ -658,6 +665,29 @@ fun SettingsScreen(
                     onClick = { AppSettings.setEnablePipPopup(!enablePipPopup) },
                 )
             }
+            val autoPlayLinksTitle = "Auto-play pasted links"
+            row(autoPlayLinksTitle, "youtube", "link", "url", "paste", "clipboard", "playback") {
+                SettingsRow(
+                    icon = Icons.Rounded.Link,
+                    title = autoPlayLinksTitle,
+                    subtitle = if (autoPlayPastedLinks) {
+                        "Starts playing immediately when you paste a YouTube link"
+                    } else {
+                        "Shows preview card with chapters and audio match first"
+                    },
+                    trailing = {
+                        Switch(
+                            checked = autoPlayPastedLinks,
+                            onCheckedChange = AppSettings::setAutoPlayPastedLinks,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setAutoPlayPastedLinks(!autoPlayPastedLinks) },
+                )
+            }
             val outputPrecisionTitle = stringResource(R.string.output_precision)
             row(outputPrecisionTitle, "pcm", "bit depth", "sample rate", "dac") {
                 SettingsRow(
@@ -753,22 +783,24 @@ fun SettingsScreen(
                 )
             }
             // Automix decides its own length from each pair of tracks —
-            // tempo, key, structure — so it replaces the manual slider rather
-            // than needing it set to anything first.
-            if (!smartFade) {
-                val crossfadeTitle = stringResource(R.string.crossfade)
-                row(crossfadeTitle, "fade", "gapless") {
-                    SliderRow(
-                        icon = Icons.Rounded.Waves,
-                        title = crossfadeTitle,
-                        subtitle = stringResource(R.string.crossfade_subtitle),
-                        value = if (crossfade == 0) stringResource(R.string.off) else "${crossfade}s",
-                        sliderValue = crossfade.toFloat(),
-                        onSliderValue = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
-                        valueRange = 0f..12f,
-                        steps = 11,
-                    )
-                }
+            // tempo, key, structure — so show a clear dependency note instead of hiding Crossfade.
+            val crossfadeTitle = stringResource(R.string.crossfade)
+            row(crossfadeTitle, "fade", "gapless", "automix") {
+                SliderRow(
+                    icon = Icons.Rounded.Waves,
+                    title = crossfadeTitle,
+                    subtitle = if (smartFade) {
+                        "Paused while Automix is enabled"
+                    } else {
+                        stringResource(R.string.crossfade_subtitle)
+                    },
+                    value = if (smartFade) "Auto" else if (crossfade == 0) stringResource(R.string.off) else "${crossfade}s",
+                    sliderValue = crossfade.toFloat(),
+                    onSliderValue = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+                    valueRange = 0f..12f,
+                    steps = 11,
+                    enabled = !smartFade,
+                )
             }
             val automixTitle = stringResource(R.string.automix)
             row(automixTitle, "crossfade", "smart fade", "mix") {
@@ -918,6 +950,32 @@ fun SettingsScreen(
 
     val contentPreferencesGroup: @Composable () -> Unit = {
         SearchableSettingsGroup(search, header = stringResource(R.string.content_preferences)) {
+            val tasteTitle = "Music taste & languages"
+            row(tasteTitle, "taste", "language", "singer", "music director", "composer", "personalized", "recommendations") {
+                SettingsRow(
+                    icon = Icons.Rounded.GraphicEq,
+                    title = tasteTitle,
+                    subtitle = if (tastePrefs.tasteConfigured) {
+                        com.music.bitchord.data.taste.MusicTasteStore.summaryLabel()
+                    } else {
+                        "Choose music languages, singers, and music directors"
+                    },
+                    onClick = { showTasteEditor = true },
+                )
+            }
+            if (tastePrefs.selectedArtists.isNotEmpty()) {
+                val autoFollowTitle = "Auto-follow picked artists on YouTube Music"
+                row(autoFollowTitle, "subscribe", "follow", "taste", "artists", divided = false) {
+                    SettingsSubRow(
+                        title = autoFollowTitle,
+                        subtitle = "Syncs ${tastePrefs.selectedArtists.size} picked channels when signed in",
+                        checked = tastePrefs.autoSubscribeOnSignIn,
+                        onCheckedChange = {
+                            com.music.bitchord.data.taste.MusicTasteStore.setAutoSubscribeOnSignIn(it)
+                        },
+                    )
+                }
+            }
             val preferMusicOnlyTitle = stringResource(R.string.prefer_music_only)
             row(preferMusicOnlyTitle, "video", "audio", "music video", "convert", "song") {
                 SettingsRow(
@@ -1297,6 +1355,24 @@ fun SettingsScreen(
                     onClick = { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
                 )
             }
+            row("Startup chime", "chime", "sound", "intro", "splash", "launch", "audio cue") {
+                SettingsRow(
+                    icon = Icons.Rounded.GraphicEq,
+                    title = "Startup chime",
+                    subtitle = "Play soft harmonic chime and haptic tick on cold launch",
+                    trailing = {
+                        Switch(
+                            checked = startupChimeEnabled,
+                            onCheckedChange = AppSettings::setStartupChimeEnabled,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setStartupChimeEnabled(!startupChimeEnabled) },
+                )
+            }
             val animatedCoverArtTitle = stringResource(R.string.animated_cover_art)
             // Carries the keywords of the rows that only appear once it is on,
             // so searching "spotify" with animated covers switched off turns up
@@ -1545,7 +1621,31 @@ fun SettingsScreen(
         val cacheLimitMb = if (cacheUnlimited) CACHE_UNLIMITED_STOP_MB else (cacheLimitBytes / (1024 * 1024)).toInt()
         val unlimitedLabel = stringResource(R.string.song_cache_unlimited)
         val cacheLimitLabel = if (cacheUnlimited) unlimitedLabel else formatCacheSize(cacheLimitMb)
+        var cachedFootprint by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+        LaunchedEffect(showCacheFolder, confirmClearSongCache) {
+            val songs = runCatching { AudioCache.cachedSongs() }.getOrDefault(emptyList())
+            cachedFootprint = songs.size to songs.sumOf { it.bytes }
+        }
         SearchableSettingsGroup(search, header = stringResource(R.string.storage)) {
+            row("Cache footprint", "storage", "used", "space", "cache", "size") {
+                val footprint = cachedFootprint
+                val usedSubtitle = if (footprint == null) {
+                    "Measuring cached tracks..."
+                } else {
+                    val mb = footprint.second / (1024.0 * 1024.0)
+                    val formatted = if (mb >= 1024.0) {
+                        "%.1f GB".format(Locale.ROOT, mb / 1024.0)
+                    } else {
+                        "%.1f MB".format(Locale.ROOT, mb)
+                    }
+                    "${footprint.first} cached tracks · $formatted used (limit: $cacheLimitLabel)"
+                }
+                SettingsRow(
+                    icon = Icons.Rounded.Storage,
+                    title = "Cache footprint",
+                    subtitle = usedSubtitle,
+                )
+            }
             val showCacheFolderTitle = stringResource(R.string.show_cache_folder)
             row(showCacheFolderTitle, "cache", "cached songs", "library", "folder") {
                 SettingsRow(
@@ -1647,11 +1747,24 @@ fun SettingsScreen(
                 )
             }
             val exportDataTitle = stringResource(R.string.export_data)
-            row(exportDataTitle, "backup") {
+            val lastBackupSubtitle = remember(lastBackupTimestampMs) {
+                if (lastBackupTimestampMs <= 0L) {
+                    null
+                } else {
+                    runCatching {
+                        val instant = java.time.Instant.ofEpochMilli(lastBackupTimestampMs)
+                            .atZone(java.time.ZoneId.systemDefault())
+                        "Last backup: " + java.time.format.DateTimeFormatter
+                            .ofPattern("MMM d, yyyy · h:mm a", Locale.getDefault())
+                            .format(instant)
+                    }.getOrNull()
+                }
+            }
+            row(exportDataTitle, "backup", "export", "last backup") {
                 SettingsRow(
                     icon = Icons.Rounded.FileUpload,
                     title = exportDataTitle,
-                    subtitle = exportStatus ?: stringResource(R.string.export_data_subtitle),
+                    subtitle = exportStatus ?: lastBackupSubtitle ?: stringResource(R.string.export_data_subtitle),
                     onClick = { exportPicker.launch(Backup.suggestedName()) },
                 )
             }
@@ -1869,7 +1982,28 @@ fun SettingsScreen(
                     onClick = { AppSettings.setShowNerdStats(!nerdStats) },
                 )
             }
-            row("Engineering & Innovation Log", "changelog", "updates", "features", "build", "timeline", "what's new", "fixes", "log") {
+        }
+    }
+
+    val aboutGroup: @Composable () -> Unit = {
+        SearchableSettingsGroup(search, header = "Experience & Tour") {
+            row("What's New in AuraMusic", "what's new", "features", "tour", "release notes", "about") {
+                SettingsRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    title = "What's New in AuraMusic",
+                    subtitle = "Explore highlights from v3.3 including Music Taste & YouTube Links",
+                    onClick = { com.music.bitchord.AuraIntroLauncher.openWhatsNew.value = true },
+                )
+            }
+            row("Welcome walkthrough", "onboarding", "intro", "welcome", "tutorial", "setup", "about") {
+                SettingsRow(
+                    icon = Icons.Rounded.GraphicEq,
+                    title = "Welcome walkthrough",
+                    subtitle = "Replay welcome, display name, look & sign-in setup",
+                    onClick = { com.music.bitchord.AuraIntroLauncher.replayOnboarding.value = true },
+                )
+            }
+            row("Engineering & Innovation Log", "changelog", "updates", "features", "build", "timeline", "what's new", "fixes", "log", "about") {
                 SettingsRow(
                     icon = Icons.Rounded.History,
                     title = "Engineering & Innovation Log",
@@ -1884,7 +2018,10 @@ fun SettingsScreen(
                     onClick = { showChangelog = true },
                 )
             }
-            row("Check for Software Updates", "update", "software update", "version", "download", "upgrade", "new version", "changelog", "apk") {
+        }
+
+        SearchableSettingsGroup(search, header = "Software Updates & Build") {
+            row("Check for Software Updates", "update", "software update", "version", "download", "upgrade", "new version", "changelog", "apk", "about") {
                 val coroutineScope = rememberCoroutineScope()
                 var checkingUpdate by remember { mutableStateOf(false) }
                 val updateNotice by AppUpdateChecker.available.collectAsStateWithLifecycle()
@@ -1934,7 +2071,7 @@ fun SettingsScreen(
                     },
                 )
             }
-            row("Include Beta Updates", "beta", "preview", "pre-release", "experimental", "test", "update") {
+            row("Include Beta Updates", "beta", "preview", "pre-release", "experimental", "test", "update", "about") {
                 val includeBeta by AppSettings.includeBetaUpdates.collectAsStateWithLifecycle()
                 val coroutineScope = rememberCoroutineScope()
                 SettingsRow(
@@ -2064,6 +2201,23 @@ fun SettingsScreen(
         }
     }
 
+    LaunchedEffect(currentRoute) {
+        com.music.bitchord.ui.screens.settings.SettingsNavigation.currentRoute.value = currentRoute
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            com.music.bitchord.ui.screens.settings.SettingsNavigation.currentRoute.value = SettingsRoute.HUB
+        }
+    }
+
+    val hubBackSeq by com.music.bitchord.ui.screens.settings.SettingsNavigation.hubBackSeq.collectAsStateWithLifecycle()
+    LaunchedEffect(hubBackSeq) {
+        if (hubBackSeq > 0) {
+            currentRoute = SettingsRoute.HUB
+        }
+    }
+
     val pendingDeepLink by com.music.bitchord.ui.screens.settings.SettingsNavigation.pendingRoute.collectAsStateWithLifecycle()
     LaunchedEffect(pendingDeepLink) {
         pendingDeepLink?.let { target ->
@@ -2131,6 +2285,7 @@ fun SettingsScreen(
                         }
                     },
                     onListenTogether = onListenTogether,
+                    onOpenTastePicker = { showTasteEditor = true },
                     modifier = modifier,
                     searchResultsContent = if (searchQuery.isNotBlank()) {
                         {
@@ -2146,9 +2301,36 @@ fun SettingsScreen(
                             accountGroup()
                             auraAiGroup()
                             advancedOptionsGroup()
+                            aboutGroup()
                             yourDataGroup()
                             miscGroup()
                             languageGroup()
+                            if (!search.anyMatch) {
+                                SettingsGroup(topSpacing = 14.dp) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Text(
+                                            text = "No settings found for \"${searchQuery.trim()}\"",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = "Try searching quality, taste, theme, cache, or updates.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        TextButton(onClick = { searchQuery = "" }) {
+                                            Text("Clear search")
+                                        }
+                                    }
+                                }
+                            }
                             Spacer(Modifier.height(32.dp))
                         }
                     } else null,
@@ -2250,6 +2432,27 @@ fun SettingsScreen(
                     yourDataGroup()
                     miscGroup()
                     languageGroup()
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+            SettingsRoute.ABOUT -> {
+                Column(
+                    modifier = modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(contentPadding),
+                ) {
+                    SettingsSubPageHeader(
+                        title = "About & Updates",
+                        onBack = { currentRoute = SettingsRoute.HUB },
+                    )
+                    aboutGroup()
+                    Spacer(Modifier.height(18.dp))
+                    DeveloperProfileCard(
+                        developerName = "kami likhith",
+                        onOpenChangelog = { showChangelog = true },
+                        modifier = Modifier.padding(horizontal = GROUP_INSET),
+                    )
                     Spacer(Modifier.height(32.dp))
                 }
             }
@@ -2528,6 +2731,12 @@ fun SettingsScreen(
     if (showChangelog) {
         AuraChangelogDialog(
             onDismissRequest = { showChangelog = false },
+        )
+    }
+
+    if (showTasteEditor) {
+        com.music.bitchord.ui.onboarding.AuraMainTasteEditorOverlay(
+            onDismiss = { showTasteEditor = false },
         )
     }
 
@@ -3194,12 +3403,29 @@ internal fun SettingsGroup(
     } else {
         Spacer(Modifier.height(topSpacing))
     }
+    val nothingOsMode by AppSettings.nothingOsMode.collectAsStateWithLifecycle()
+    val containerColor = if (nothingOsMode) {
+        com.music.bitchord.ui.theme.NothingThemeTokens.Surface
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = GROUP_INSET)
             .clip(GroupShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(containerColor)
+            .then(
+                if (nothingOsMode) {
+                    Modifier.border(
+                        1.dp,
+                        com.music.bitchord.ui.theme.NothingThemeTokens.Border,
+                        GroupShape,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         content()
     }
@@ -3410,13 +3636,18 @@ internal fun SliderRow(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     subtitle: String? = null,
+    enabled: Boolean = true,
 ) {
     val colors = SliderDefaults.colors(
         thumbColor = MaterialTheme.colorScheme.primary,
         activeTrackColor = MaterialTheme.colorScheme.primary,
         inactiveTrackColor = MaterialTheme.colorScheme.outline,
     )
-    Column(Modifier.padding(start = ROW_INSET, end = ROW_INSET, top = 12.dp, bottom = 4.dp)) {
+    Column(
+        Modifier
+            .alpha(if (enabled) 1f else 0.52f)
+            .padding(start = ROW_INSET, end = ROW_INSET, top = 12.dp, bottom = 4.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
@@ -3449,6 +3680,7 @@ internal fun SliderRow(
         Slider(
             value = sliderValue,
             onValueChange = onSliderValue,
+            enabled = enabled,
             valueRange = valueRange,
             steps = steps,
             colors = colors,
@@ -3499,59 +3731,106 @@ internal fun SegmentedControl(
     enabled: Boolean = true,
 ) {
     val haptics = LocalHapticFeedback.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.outline)
-            // Enough of a margin for the track to read as a track. At 2dp the
-            // selected pill sat all but flush against the container's own edge,
-            // so the two rounded rectangles merged into one shape and the
-            // control stopped looking like something with a position in it.
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        options.forEachIndexed { index, label ->
-            val chosen = index == selectedIndex
-            val pill by animateColorAsState(
-                targetValue = if (chosen) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    Color.Transparent
-                },
-                animationSpec = tween(160),
-                label = "segmentPill",
-            )
-            val labelColor by animateColorAsState(
-                targetValue = if (chosen) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                animationSpec = tween(160),
-                label = "segmentLabel",
-            )
-            Box(
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp || options.size > 4
+        if (compact) {
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(pill)
-                    .clickable(enabled = enabled) {
-                        if (!chosen) {
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onSelect(index)
-                        }
-                    }
-                    .padding(horizontal = 4.dp, vertical = 9.dp),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.outline)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = labelColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                options.forEachIndexed { index, label ->
+                    val chosen = index == selectedIndex
+                    val pill by animateColorAsState(
+                        targetValue = if (chosen) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        animationSpec = tween(160),
+                        label = "segmentPill",
+                    )
+                    val labelColor by animateColorAsState(
+                        targetValue = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        animationSpec = tween(160),
+                        label = "segmentLabel",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(pill)
+                            .clickable(enabled = enabled) {
+                                if (!chosen) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSelect(index)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = labelColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.outline)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                options.forEachIndexed { index, label ->
+                    val chosen = index == selectedIndex
+                    val pill by animateColorAsState(
+                        targetValue = if (chosen) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            Color.Transparent
+                        },
+                        animationSpec = tween(160),
+                        label = "segmentPill",
+                    )
+                    val labelColor by animateColorAsState(
+                        targetValue = if (chosen) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        animationSpec = tween(160),
+                        label = "segmentLabel",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(pill)
+                            .clickable(enabled = enabled) {
+                                if (!chosen) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSelect(index)
+                                }
+                            }
+                            .padding(horizontal = 4.dp, vertical = 9.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = labelColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }

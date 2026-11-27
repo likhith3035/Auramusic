@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -374,17 +375,6 @@ fun SongActionsMenu(
                 onClick = it,
             )
         }
-
-        ActionRow(
-            icon = Icons.Rounded.BugReport,
-            label = stringResource(R.string.copy_log),
-            accent = palette.accent,
-            onClick = {
-                val clip = android.content.ClipData.newPlainText("Song Debug Log", song.toString())
-                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                cm?.setPrimaryClip(clip)
-            },
-        )
     }
 
     CompositionLocalProvider(LocalActionRowStyle provides ActionRowStyle.Menu) {
@@ -629,6 +619,7 @@ private fun SleepTimerHeader(
     subtitle: String,
     onBack: () -> Unit,
 ) {
+    val menuColors = iosMenuColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -639,7 +630,7 @@ private fun SleepTimerHeader(
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.White,
+                tint = menuColors.label,
             )
         }
         Spacer(Modifier.width(10.dp))
@@ -648,12 +639,12 @@ private fun SleepTimerHeader(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = menuColors.label,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.65f),
+                color = menuColors.secondaryLabel,
             )
         }
     }
@@ -666,6 +657,7 @@ private fun CustomSleepTimerPage(
     onBack: () -> Unit,
     onStart: (Int) -> Unit,
 ) {
+    val menuColors = iosMenuColors()
     var minutes by remember { mutableStateOf(initialMinutes) }
     Column(
         modifier = Modifier
@@ -699,7 +691,7 @@ private fun CustomSleepTimerPage(
                 idleHeight = 6.dp,
                 activeHeight = 10.dp,
                 activeColor = palette.accent,
-                inactiveColor = Color.White.copy(alpha = 0.26f),
+                inactiveColor = menuColors.label.copy(alpha = 0.22f),
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(14.dp))
@@ -715,7 +707,7 @@ private fun CustomSleepTimerPage(
                 Text(
                     text = "Start Timer",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Color.Black,
+                    color = if (palette.accent.luminance() > 0.5f) Color.Black else Color.White,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
@@ -729,10 +721,11 @@ private fun StepButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val menuColors = iosMenuColors()
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp).continuous())
-            .background(Color.White.copy(alpha = 0.08f))
+            .background(menuColors.label.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
@@ -740,7 +733,7 @@ private fun StepButton(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = Color.White.copy(alpha = 0.85f),
+            color = menuColors.label.copy(alpha = 0.85f),
         )
     }
 }
@@ -762,11 +755,12 @@ private fun SleepOption(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val menuColors = iosMenuColors()
     ActionRow(
         icon = if (selected) Icons.Rounded.Check else null,
         label = title,
         accent = palette.accent,
-        tint = if (selected) palette.accent else Color.White.copy(alpha = 0.85f),
+        tint = if (selected) palette.accent else menuColors.label.copy(alpha = 0.85f),
         onClick = onClick,
     )
 }
@@ -800,22 +794,24 @@ internal fun ActionRow(
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
+    val menuColors = iosMenuColors()
     AuraActionRow(
         icon = icon,
         label = label,
         description = description,
         iconTint = tint ?: accent,
+        labelColor = menuColors.label,
         enabled = enabled,
         trailing = trailing ?: value?.let { v ->
             {
                 Surface(
                     shape = RoundedCornerShape(8.dp).continuous(),
-                    color = Color.White.copy(alpha = 0.10f),
+                    color = menuColors.label.copy(alpha = 0.09f),
                 ) {
                     Text(
                         text = v,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = menuColors.label.copy(alpha = 0.85f),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }

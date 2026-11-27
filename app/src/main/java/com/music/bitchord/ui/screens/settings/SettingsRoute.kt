@@ -7,7 +7,8 @@ enum class SettingsRoute(val id: String) {
     CONTENT("content"),
     STORAGE("storage"),
     NETWORK("network"),
-    ADVANCED("advanced");
+    ADVANCED("advanced"),
+    ABOUT("about");
 
     companion object {
         fun fromId(id: String?): SettingsRoute? = entries.firstOrNull { it.id == id }

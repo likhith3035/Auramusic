@@ -11,6 +11,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -173,6 +175,7 @@ fun FloatingBottomBar(
     val haptics = rememberHaptics()
     val density = LocalDensity.current
     val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+    val currentTabs by rememberUpdatedState(tabs)
 
     var rowSize by remember { mutableStateOf(IntSize.Zero) }
     val gapPx = with(density) { 6.dp.toPx() }
@@ -187,6 +190,7 @@ fun FloatingBottomBar(
     val tabStepPx = if (rowSize.width > 0 && n > 0) {
         (rowSize.width + gapPx) / n
     } else 0f
+    val currentTabStepPx by rememberUpdatedState(tabStepPx)
 
     val pillTargetPx = if (tabStepPx > 0f) {
         selectedIndex * tabStepPx + dragOffset
@@ -282,14 +286,16 @@ fun FloatingBottomBar(
                         onDragStart = { totalDrag = 0f },
                         onDragCancel = { dragOffset = 0f },
                         onDragEnd = {
-                            if (tabStepPx > 0f) {
-                                val ratio = totalDrag / tabStepPx
+                            val step = currentTabStepPx
+                            val lastIdx = currentTabs.lastIndex
+                            if (step > 0f && lastIdx >= 0) {
+                                val ratio = totalDrag / step
                                 val shift = when {
                                     ratio > 0.35f -> kotlin.math.max(1, ratio.roundToInt())
                                     ratio < -0.35f -> kotlin.math.min(-1, ratio.roundToInt())
                                     else -> 0
                                 }
-                                val newIndex = (currentSelectedIndex + shift).coerceIn(0, tabs.lastIndex)
+                                val newIndex = (currentSelectedIndex + shift).coerceIn(0, lastIdx)
                                 if (newIndex != currentSelectedIndex) {
                                     onTabSelected(newIndex)
                                 }
@@ -297,9 +303,12 @@ fun FloatingBottomBar(
                             dragOffset = 0f
                         },
                         onHorizontalDrag = { _, delta ->
+                            val step = currentTabStepPx
+                            val lastIdx = currentTabs.lastIndex
+                            if (step <= 0f || lastIdx <= 0) return@detectHorizontalDragGestures
                             totalDrag += delta
                             val rawPx = when {
-                                totalDrag > 0 && currentSelectedIndex == tabs.lastIndex ->
+                                totalDrag > 0 && currentSelectedIndex == lastIdx ->
                                     totalDrag * 0.25f
                                 totalDrag < 0 && currentSelectedIndex == 0 ->
                                     totalDrag * 0.25f
@@ -308,8 +317,8 @@ fun FloatingBottomBar(
                             dragOffset = rawPx
 
                             val approxTab =
-                                (currentSelectedIndex + dragOffset / tabStepPx)
-                                    .coerceIn(0f, tabs.lastIndex.toFloat())
+                                (currentSelectedIndex + dragOffset / step)
+                                    .coerceIn(0f, lastIdx.toFloat())
                                     .roundToInt()
                             if (approxTab != lastHapticTab) {
                                 haptics.play(Haptic.Tick)
@@ -385,9 +394,11 @@ private fun BottomBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(RoundedCornerShape(percent = 50))
-            .clickable(
+            .selectable(
+                selected = selected,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                role = Role.Tab,
             ) {
                 if (!selected) haptics.play(Haptic.Select)
                 onClick()
@@ -396,7 +407,7 @@ private fun BottomBarItem(
     ) {
         Icon(
             imageVector = tab.icon,
-            contentDescription = tab.label,
+            contentDescription = null,
             tint = tint,
             modifier = Modifier
                 .size(25.dp)
