@@ -6,11 +6,10 @@ import com.music.bitchord.ui.theme.NothingThemeTokens
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.sharedui.resources.*
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.Image
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import com.music.bitchord.ui.components.ShelfRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -156,6 +156,7 @@ fun HomeScreen(
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
 
     val homeScope = rememberCoroutineScope()
+    val topBarInset = (contentPadding.calculateTopPadding() - HOME_TITLE_LIFT).coerceAtLeast(0.dp)
 
     PullToRefresh(
         refreshing = refreshing,
@@ -171,17 +172,18 @@ fun HomeScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().then(if (nothingOsMode) Modifier.background(NothingThemeTokens.Black) else Modifier),
-            // The heading sits higher than the other tabs' first row: pull the
-            // whole feed up by [HOME_TITLE_LIFT] with it.
+            // Weather header owns topBarInset internally so its sky feathers gently under the
+            // transparent top bar with zero horizontal box edge while keeping text clear below it.
             contentPadding = PaddingValues(
-                top = (contentPadding.calculateTopPadding() - HOME_TITLE_LIFT).coerceAtLeast(0.dp),
+                top = 0.dp,
                 bottom = contentPadding.calculateBottomPadding(),
             ),
         ) {
-            item {
+            item(key = "aura_greeting_header", contentType = "greeting_header") {
                 AuraGreetingHeader(
                     accountName = accountName,
                     nothingOsMode = nothingOsMode,
+                    topInset = topBarInset,
                     currentSongTitle = currentSong?.title,
                     isPlaying = isPlaying,
                     onResumeClick = onPlayPause,
@@ -274,7 +276,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.itemsIndexedShelves(
     onRecentsViewTypeToggle: () -> Unit,
 ) {
     shelves.forEachIndexed { index, shelf ->
-        item(key = shelf.title + index) {
+        val contentType = when {
+            index == 0 && shelf.title.equals(RECENTS_TITLE, ignoreCase = true) -> "recent_shelf"
+            index == 0 && firstIsHero -> "hero_shelf"
+            else -> "card_shelf"
+        }
+        item(key = "${shelf.title}_$index", contentType = contentType) {
             val openItem: (ShelfItem) -> Unit = { item -> onItemClick(item, shelf.title) }
             if (index == 0 && shelf.title.equals(RECENTS_TITLE, ignoreCase = true)) {
                 RecentShelf(
@@ -326,13 +333,18 @@ private fun RecentShelf(
             onViewTypeToggle = onViewTypeToggle,
         )
         if (viewType == LibraryViewType.LIST) {
+            val columns = remember(shelf.items) { shelf.items.chunked(RECENT_TRACKS_PER_COLUMN) }
             BoxWithConstraints {
                 val columnWidth = trackColumnWidth(maxWidth)
                 ShelfRow(
                     contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(shelf.items.chunked(RECENT_TRACKS_PER_COLUMN)) { column ->
+                    itemsIndexed(
+                        items = columns,
+                        key = { colIdx, col -> "col_${colIdx}_${col.firstOrNull()?.stableId() ?: colIdx}" },
+                        contentType = { _, _ -> "recent_column" },
+                    ) { _, column ->
                         Column(Modifier.width(columnWidth)) {
                             column.forEach { item ->
                                 RecentTrackRow(
@@ -354,7 +366,11 @@ private fun RecentShelf(
                     contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    items(shelf.items) { item ->
+                    itemsIndexed(
+                        items = shelf.items,
+                        key = { idx, item -> "recent_card_${idx}_${item.stableId()}" },
+                        contentType = { _, _ -> "hero_card" },
+                    ) { _, item ->
                         HeroCard(
                             item = item,
                             onClick = { onItemClick(item) },
@@ -512,76 +528,6 @@ fun CompactTrackRow(
         }
     }
 }
-
-/**
- * Listen now's large heading, with the wordmark stacked above it.
- *
- * Only the home tab carries it — the top bar no longer shows the logo, so this
- * is where the app's mark lives. Its height is taken from the heading's own
- * font size rather than a fixed dp, so the two keep their proportion under the
- * system font scale.
- */
-@Composable
-private fun HomeTitle(title: String, modifier: Modifier = Modifier) {
-    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
-    if (nothingOsMode) {
-        Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                Text(
-                    text = "A U R A",
-                    style = MaterialTheme.typography.displayMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 4.sp,
-                    ),
-                    color = NothingThemeTokens.White,
-                )
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(NothingThemeTokens.Red),
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Light,
-                    letterSpacing = 1.sp,
-                ),
-                color = NothingThemeTokens.MutedText,
-            )
-        }
-    } else {
-        val style = MaterialTheme.typography.displayLarge
-        val logoHeight = with(LocalDensity.current) { (style.fontSize * LOGO_TO_FONT).toDp() }
-        Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
-            Icon(
-                painter = painterResource(Res.drawable.ic_logo),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier
-                    .padding(bottom = 14.dp)
-                    .height(logoHeight)
-                    .aspectRatio(LOGO_ASPECT),
-            )
-            Text(
-                text = title,
-                style = style,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-    }
-}
-
-/** The wordmark's height against the heading's font size. */
-private const val LOGO_TO_FONT = 0.9f
-
-/** ic_logo's viewport, 730 x 484. */
-private const val LOGO_ASPECT = 730f / 484f
 
 /**
  * Shared by the home feed, Explore and Library so headings line up across tabs.
@@ -842,7 +788,11 @@ private fun HeroShelf(
                 contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(shelf.items) { item ->
+                itemsIndexed(
+                    items = shelf.items,
+                    key = { idx, item -> "hero_${idx}_${item.stableId()}" },
+                    contentType = { _, _ -> "hero_card" },
+                ) { _, item ->
                     HeroCard(
                         item = item,
                         onClick = { onItemClick(item) },
@@ -944,8 +894,12 @@ internal fun Shelf(
             contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            leadingCard?.let { card -> item(key = "leading") { card() } }
-            items(shelf.items) { item ->
+            leadingCard?.let { card -> item(key = "leading", contentType = "leading_card") { card() } }
+            itemsIndexed(
+                items = shelf.items,
+                key = { idx, item -> "shelf_${idx}_${item.stableId()}" },
+                contentType = { _, _ -> "shelf_card" },
+            ) { _, item ->
                 ShelfCard(
                     item = item,
                     onClick = { onItemClick(item) },
@@ -1038,7 +992,7 @@ private fun ServiceCard(colors: List<Color>, trackKey: String, icon: ImageVector
         MeshGradientBackground(
             palette = palette,
             trackKey = trackKey,
-            continuous = true,
+            continuous = false,
             blurRadius = 24.dp,
         )
         Icon(
@@ -1049,6 +1003,8 @@ private fun ServiceCard(colors: List<Color>, trackKey: String, icon: ImageVector
         )
     }
 }
+
+private fun ShelfItem.stableId(): String = videoId ?: browseId ?: title
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1062,6 +1018,7 @@ internal fun ShelfCard(
     isCurrent: Boolean = false,
     isPlaying: Boolean = false,
 ) {
+    val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
@@ -1080,7 +1037,7 @@ internal fun ShelfCard(
                     MeshGradientBackground(
                         palette = palette,
                         trackKey = "local:downloads",
-                        continuous = true,
+                        continuous = false,
                         blurRadius = 24.dp,
                     )
                     Icon(
@@ -1112,7 +1069,6 @@ internal fun ShelfCard(
                 icon = Icons.Rounded.Storage,
             )
             else -> {
-                val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
                 val shelfShape = if (nothingOsMode) RoundedCornerShape(20.dp) else RoundedCornerShape(12.dp)
                 Box(
                     modifier = Modifier
@@ -1149,7 +1105,6 @@ internal fun ShelfCard(
                 )
                 Spacer(Modifier.width(4.dp))
             }
-            val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
             val cardTitleColor = if (isCurrent) {
                 if (nothingOsMode) NothingThemeTokens.Red else PlayingAccent
             } else {

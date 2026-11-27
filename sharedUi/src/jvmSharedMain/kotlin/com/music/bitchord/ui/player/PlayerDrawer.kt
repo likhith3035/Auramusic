@@ -41,12 +41,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -179,11 +184,17 @@ fun PlayerDrawer(
         }
     }
 
+    val drawerSurface = MaterialTheme.colorScheme.surface
+    val onDrawerSurface = MaterialTheme.colorScheme.onSurface
     Box(
         modifier = modifier
             .fillMaxSize()
             .containSheetGestures()
             .background(SCRIM_COLOR.copy(alpha = SCRIM_COLOR.alpha * scrimAlpha))
+            .semantics {
+                contentDescription = "Close drawer"
+                role = Role.Button
+            }
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -211,14 +222,14 @@ fun PlayerDrawer(
                 .clip(DRAWER_SHAPE)
                 .then(
                     if (reduceDynamicBlur) {
-                        Modifier.background(Color(0xFF121212))
+                        Modifier.background(drawerSurface)
                     } else {
                         Modifier
                             .optimizedHazeEffect(
                                 state = hazeState,
-                                style = HazeMaterials.regular(Color(0xFF141414)),
+                                style = HazeMaterials.regular(drawerSurface),
                             )
-                            .background(Color(0xFF121212).copy(alpha = 0.9f))
+                            .background(drawerSurface.copy(alpha = 0.92f))
                     }
                 )
                 .clickable(
@@ -251,7 +262,7 @@ fun PlayerDrawer(
                     .padding(bottom = 12.dp)
                     .size(width = 36.dp, height = 4.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.25f)),
+                    .background(onDrawerSurface.copy(alpha = 0.25f)),
             )
             Text(
                 text = title,
@@ -259,7 +270,7 @@ fun PlayerDrawer(
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                 ),
-                color = Color.White,
+                color = onDrawerSurface,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 4.dp, bottom = titleGap),

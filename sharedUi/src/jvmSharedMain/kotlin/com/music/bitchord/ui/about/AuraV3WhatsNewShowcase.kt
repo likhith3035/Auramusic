@@ -58,6 +58,24 @@ private data class V3FeatureHighlight(
 
 private val V3_FEATURES = listOf(
     V3FeatureHighlight(
+        title = "Taste Engine: Languages, Singers & Directors",
+        subtitle = "Pick your music languages, favorite music directors, and vocalists with dynamic similar-creator cascades and live 10s previews.",
+        tag = "PERSONALIZED",
+        icon = Icons.Rounded.AutoAwesome,
+    ),
+    V3FeatureHighlight(
+        title = "YouTube Link Audio Player & Chapters",
+        subtitle = "Paste any YouTube or live stream URL to listen in audio mode with chapter chips, seek resume memory, and queue integration.",
+        tag = "DIRECT LINKS",
+        icon = Icons.Rounded.Headphones,
+    ),
+    V3FeatureHighlight(
+        title = "Nothing OS Aesthetic Mode",
+        subtitle = "AMOLED pitch-black surfaces, crisp slate outlines, and signature Nothing Red accents across the player, intro, and Settings.",
+        tag = "THEMES",
+        icon = Icons.Rounded.Palette,
+    ),
+    V3FeatureHighlight(
         title = "Dynamic Equalizer & Live Curve",
         subtitle = "Real-time 7-band acoustic spectrum curve, responsive tone matrix pad, and 1-tap soundstage presets.",
         tag = "ACOUSTIC",
@@ -70,28 +88,10 @@ private val V3_FEATURES = listOf(
         icon = Icons.Rounded.Groups,
     ),
     V3FeatureHighlight(
-        title = "Audio Output Route Switcher",
-        subtitle = "Interactive audio pill on the player to see and switch between connected headphones, speakers, or system audio.",
-        tag = "ROUTING",
-        icon = Icons.Rounded.Headphones,
-    ),
-    V3FeatureHighlight(
-        title = "Behind the Track & Studio Specs",
-        subtitle = "Detailed bitrates, sample rates, lossless tags, duration, songwriters, and track background information.",
-        tag = "STUDIO",
-        icon = Icons.Rounded.AutoAwesome,
-    ),
-    V3FeatureHighlight(
         title = "Organized Offline Library",
         subtitle = "Browse your downloaded and local tracks neatly structured in dedicated Songs, Artists, and Albums tabs.",
         tag = "LIBRARY",
         icon = Icons.Rounded.LibraryMusic,
-    ),
-    V3FeatureHighlight(
-        title = "Personalized App Icons",
-        subtitle = "Customize your home screen with Azure, Obsidian, Crimson, Amethyst, and Prism app icon styles.",
-        tag = "THEMES",
-        icon = Icons.Rounded.Palette,
     ),
 )
 
@@ -128,6 +128,7 @@ fun AuraV3WhatsNewShowcase(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -154,7 +155,7 @@ fun AuraV3WhatsNewShowcase(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "Version 3.2 • Major Update",
+                            text = "Version 3.3 • Major Update",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -163,7 +164,7 @@ fun AuraV3WhatsNewShowcase(
 
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
@@ -288,7 +289,7 @@ private fun FeatureCard(item: V3FeatureHighlight) {
                         Text(
                             text = item.tag,
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
                         )

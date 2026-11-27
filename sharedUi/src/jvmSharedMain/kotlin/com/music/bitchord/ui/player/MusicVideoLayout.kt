@@ -37,6 +37,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -142,6 +143,7 @@ internal fun FullscreenVideoPlayer(
     var currentBrightnessValue by remember(screenBrightness) { mutableFloatStateOf(screenBrightness) }
     var currentVolumeValue by remember(systemVolume) { mutableFloatStateOf(systemVolume) }
     var hudHideJob by remember { mutableStateOf<Job?>(null) }
+    var seekNoticeJob by remember { mutableStateOf<Job?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -186,12 +188,16 @@ internal fun FullscreenVideoPlayer(
                     var accumulatedSeekSeconds = 0
 
                     awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Main)
-                            if (isLocked) continue
-                            val changes = event.changes
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                if (isLocked) continue
+                                val changes = event.changes
+                                if (changes.any { it.pressed && !it.previousPressed }) {
+                                    touches++
+                                }
 
-                            if (changes.size >= 2) {
+                                if (changes.size >= 2) {
                                 singleTapJob?.cancel()
                                 holdJob?.cancel()
                                 if (isFastForwarding) {
@@ -337,7 +343,8 @@ internal fun FullscreenVideoPlayer(
                                                         seekNoticeSide = 1
                                                         seekNoticeSeconds = accumulatedSeekSeconds
                                                     }
-                                                    launch {
+                                                    seekNoticeJob?.cancel()
+                                                    seekNoticeJob = launch {
                                                         delay(700L)
                                                         seekNoticeSide = 0
                                                         accumulatedSeekSeconds = 0
@@ -365,6 +372,14 @@ internal fun FullscreenVideoPlayer(
                                         }
                                     }
                                 }
+                            }
+                        }
+                        } finally {
+                            singleTapJob?.cancel()
+                            holdJob?.cancel()
+                            if (isFastForwarding) {
+                                isFastForwarding = false
+                                PlayerPlatform.host.restorePlaybackSpeed()
                             }
                         }
                     }
@@ -814,7 +829,7 @@ internal fun VideoCornerControls(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.LockOpen,
-                    contentDescription = null,
+                    contentDescription = "Lock controls",
                     tint = Color.White,
                     modifier = Modifier.size(18.dp),
                 )
@@ -823,15 +838,15 @@ internal fun VideoCornerControls(
         VideoQualityBox(onClick = onOpenQuality)
         Box(
             modifier = Modifier
-                .size(30.dp)
+                .size(40.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.38f))
-                .clickable(onClick = onToggleFullscreen),
+                .clickable(role = Role.Button, onClick = onToggleFullscreen),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (fullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
-                contentDescription = null,
+                contentDescription = if (fullscreen) "Exit fullscreen" else "Fullscreen",
                 tint = Color.White,
                 modifier = Modifier.size(22.dp),
             )

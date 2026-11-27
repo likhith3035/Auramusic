@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.NorthWest
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -58,10 +59,12 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -72,12 +75,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import coil3.compose.AsyncImage
+import com.music.bitchord.data.link.ParsedYouTubeLink
 import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.BrowseType
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -89,6 +94,9 @@ import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.SearchHistoryEntity
 import com.music.bitchord.data.model.EntityType
+import com.music.bitchord.ui.components.CopiedYouTubeLinkBanner
+import com.music.bitchord.ui.components.DirectLinkCard
+import com.music.bitchord.ui.components.DirectLinkUiState
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.RowMoreButton
@@ -167,6 +175,23 @@ fun SearchScreen(
      * about the results, and the switcher would just push them down.
      */
     sourceSwitcher: (@Composable () -> Unit)? = null,
+    directLink: DirectLinkUiState? = null,
+    onDirectLinkSelectMode: (Boolean) -> Unit = {},
+    onDirectLinkPlay: (Song, Long) -> Unit = { _, _ -> },
+    onDirectLinkPlayNext: (Song) -> Unit = {},
+    onDirectLinkAddToQueue: (Song) -> Unit = {},
+    onDirectLinkDownload: (Song) -> Unit = {},
+    onDirectLinkOpenBrowse: (BrowseItem) -> Unit = {},
+    onDirectLinkPlayCollection: (List<Song>, BrowseItem) -> Unit = { _, _ -> },
+    onDirectLinkOpenExternal: (String) -> Unit = {},
+    onDirectLinkRetry: () -> Unit = {},
+    clipboardPrompt: ParsedYouTubeLink? = null,
+    onClipboardPromptOpen: (ParsedYouTubeLink) -> Unit = {},
+    onClipboardPromptDismiss: () -> Unit = {},
+    voiceClarityEnabled: Boolean = false,
+    onToggleVoiceClarity: () -> Unit = {},
+    onDirectLinkDownloadAll: (List<Song>) -> Unit = {},
+    onSearchPasteClick: (() -> Unit)? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -196,6 +221,7 @@ fun SearchScreen(
     // appear as a dropdown beneath the text completions rather than floating
     // after the search has committed.
     val showTypeahead = typeaheadResults.isNotEmpty() && suggesting
+    val hasDirectLink = directLink != null && !searchingLibrary
     LaunchedEffect(listState, results, loadingMore, searchingLibrary) {
         if (results !is UiState.Success || searchingLibrary) return@LaunchedEffect
         snapshotFlow {
@@ -206,6 +232,7 @@ fun SearchScreen(
         }
     }
     val nothingOsMode by AppUi.host.nothingOsMode.collectAsStateWithLifecycle()
+    var confirmClearHistory by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -230,6 +257,13 @@ fun SearchScreen(
                         stringResource(Res.string.search_hint)
                     },
                     modifier = Modifier.padding(start = PAGE_GUTTER, end = PAGE_GUTTER, bottom = 4.dp),
+                    onPasteClick = if (clipboardPrompt == null && onSearchPasteClick != null) {
+                        {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                            onSearchPasteClick()
+                        }
+                    } else null,
                 )
             }
             if (sourceSwitcher != null) {
@@ -247,7 +281,7 @@ fun SearchScreen(
             // they stay up for an empty or failed search too, or picking a filter
             // that finds nothing would take away the control needed to leave it.
             // They are YouTube's categories, so the Library source has none.
-            if (results != null && !suggesting && !searchingLibrary) {
+            if (results != null && !suggesting && !searchingLibrary && !hasDirectLink) {
                 SearchFilterTabs(filter = filter, onFilterChange = onFilterChange)
             }
         }
@@ -267,6 +301,67 @@ fun SearchScreen(
                     onSongLongPress = onSongLongPress,
                     onSongSwipe = onSongSwipe,
                 )
+                hasDirectLink -> {
+                    directLink?.let { activeLink ->
+                        item(key = "search:direct-link") {
+                            DirectLinkCard(
+                                state = activeLink,
+                                currentSong = currentSong,
+                                isPlaying = isPlaying,
+                                voiceClarityEnabled = voiceClarityEnabled,
+                                onToggleVoiceClarity = onToggleVoiceClarity,
+                                onSelectStudioMatch = onDirectLinkSelectMode,
+                                onPlayTrack = onDirectLinkPlay,
+                                onPlayNext = onDirectLinkPlayNext,
+                                onAddToQueue = onDirectLinkAddToQueue,
+                                onDownload = onDirectLinkDownload,
+                                onDownloadAll = onDirectLinkDownloadAll,
+                                onSongMore = onSongLongPress,
+                                onOpenCollection = onDirectLinkOpenBrowse,
+                                onPlayCollection = onDirectLinkPlayCollection,
+                                onOpenExternalUrl = onDirectLinkOpenExternal,
+                                onRetry = onDirectLinkRetry,
+                            )
+                        }
+                        if (activeLink is DirectLinkUiState.Ready && activeLink.relatedTracks.isNotEmpty()) {
+                            item(key = "search:direct-link:related-header") {
+                                Text(
+                                    text = "Related",
+                                    modifier = Modifier.padding(
+                                        start = PAGE_GUTTER,
+                                        end = PAGE_GUTTER,
+                                        top = 8.dp,
+                                        bottom = 4.dp,
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            itemsIndexed(
+                                items = activeLink.relatedTracks,
+                                key = { index, song -> "direct_related_${song.videoId}_$index" },
+                            ) { index, song ->
+                                SongRow(
+                                    song = song,
+                                    onClick = { onSongClick(activeLink.relatedTracks, index) },
+                                    onLongPress = { onSongLongPress(song) },
+                                    onSwipeToQueue = { onSongSwipe(song) },
+                                    isCurrent = song.isSameTrackAs(currentSong),
+                                    isPlaying = isPlaying && song.isSameTrackAs(currentSong),
+                                    searchPlayingStyle = true,
+                                    activeTint = PlayingAccent,
+                                )
+                                if (index < activeLink.relatedTracks.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 suggesting -> {
                     searchSuggestions(
                         suggestions = suggestions,
@@ -291,17 +386,32 @@ fun SearchScreen(
                         )
                     }
                 }
-                results == null -> if (history.isEmpty()) {
-                    item { MessageState(stringResource(Res.string.search_empty)) }
-                } else {
-                    recentSearches(
-                        history = history,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        onClick = onHistoryClick,
-                        onRemove = onHistoryRemove,
-                        onClear = onHistoryClear,
-                    )
+                results == null -> {
+                    if (clipboardPrompt != null) {
+                        item(key = "search:clipboard-prompt:${clipboardPrompt.canonicalUrl}") {
+                            CopiedYouTubeLinkBanner(
+                                link = clipboardPrompt,
+                                onPlayLink = { link ->
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    onClipboardPromptOpen(link)
+                                },
+                                onDismiss = onClipboardPromptDismiss,
+                            )
+                        }
+                    }
+                    if (history.isEmpty()) {
+                        item { MessageState(stringResource(Res.string.search_empty)) }
+                    } else {
+                        recentSearches(
+                            history = history,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            onClick = onHistoryClick,
+                            onRemove = onHistoryRemove,
+                            onClear = { confirmClearHistory = true },
+                        )
+                    }
                 }
                 results is UiState.Loading -> songListSkeleton(circular = filter == SearchFilter.ARTISTS)
                 results is UiState.Error -> item { MessageState(results.message) }
@@ -388,6 +498,42 @@ fun SearchScreen(
                     }
                 }
             }
+        }
+        if (confirmClearHistory && history.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { confirmClearHistory = false },
+                containerColor = if (nothingOsMode) NothingThemeTokens.Surface else MaterialTheme.colorScheme.surfaceContainerHigh,
+                titleContentColor = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.onSurface,
+                textContentColor = if (nothingOsMode) NothingThemeTokens.MutedText else MaterialTheme.colorScheme.onSurfaceVariant,
+                title = { Text("Clear recent searches?") },
+                text = {
+                    Text(
+                        "This will remove all ${history.size} recent searches and played links from your history.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmClearHistory = false
+                            onHistoryClear()
+                        },
+                    ) {
+                        Text(
+                            text = "Clear all",
+                            color = if (nothingOsMode) NothingThemeTokens.Red else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClearHistory = false }) {
+                        Text(
+                            text = "Cancel",
+                            color = if (nothingOsMode) NothingThemeTokens.White else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+            )
         }
     }
 }

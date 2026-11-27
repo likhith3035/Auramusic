@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.music.bitchord.data.settings.LibrarySort
 import com.music.bitchord.data.settings.LibraryViewType
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -21,6 +22,11 @@ interface AppUiHost {
     val homeRecentsViewType: StateFlow<LibraryViewType>
 
     fun setHomeRecentsViewType(value: LibraryViewType)
+
+    /** Selected typography personality index for the Home celestial clock. */
+    val homeClockStyleIndex: StateFlow<Int> get() = DefaultClockStyleIndex
+
+    fun setHomeClockStyleIndex(index: Int) {}
 
     /** Playlist browse ids pinned to the front of the Library's Playlists shelf, in pin order. */
     val pinnedPlaylists: StateFlow<List<String>>
@@ -68,3 +74,5 @@ object AppUi {
  * refresh nobody asked for — so the desktop switches it off.
  */
 val LocalPullToRefreshEnabled = staticCompositionLocalOf { true }
+
+private val DefaultClockStyleIndex = MutableStateFlow(0)

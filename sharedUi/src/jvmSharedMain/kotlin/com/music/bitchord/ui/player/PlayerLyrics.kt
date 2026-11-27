@@ -89,6 +89,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -887,6 +888,25 @@ private fun SweptLyricLine(
         }
     }
 
+    val density = LocalDensity.current
+    val maxFeatherPx = remember(density) { with(density) { WIPE_FEATHER.toPx() }.coerceAtLeast(1f) }
+    val ltrFeatherBrush = remember(maxFeatherPx) {
+        Brush.horizontalGradient(
+            0f to Color.White,
+            1f to Color.Transparent,
+            startX = 0f,
+            endX = maxFeatherPx,
+        )
+    }
+    val rtlFeatherBrush = remember(maxFeatherPx) {
+        Brush.horizontalGradient(
+            0f to Color.White,
+            1f to Color.Transparent,
+            startX = 0f,
+            endX = -maxFeatherPx,
+        )
+    }
+
     val sweep = Modifier.drawWithContent {
         val position = drawnAt()
         when {
@@ -898,7 +918,15 @@ private fun SweptLyricLine(
             // Not started: nothing lit, the dim copy is the whole of it.
             position <= line.timeMs -> Unit
             else -> layout?.let {
-                sweepTo(it, line.revealedChars(position), line.sweepSpans, feather)
+                sweepTo(
+                    layout = it,
+                    revealedChars = line.revealedChars(position),
+                    spans = line.sweepSpans,
+                    feather = feather,
+                    maxFeatherPx = maxFeatherPx,
+                    ltrFeatherBrush = ltrFeatherBrush,
+                    rtlFeatherBrush = rtlFeatherBrush,
+                )
             }
         }
     }
@@ -1335,6 +1363,9 @@ private fun ContentDrawScope.sweepTo(
     revealedChars: Float,
     spans: List<IntRange>,
     feather: Boolean,
+    maxFeatherPx: Float,
+    ltrFeatherBrush: Brush,
+    rtlFeatherBrush: Brush,
 ) {
     if (revealedChars <= 0f) return
     val textLen = layout.layoutInput.text.length
@@ -1438,15 +1469,18 @@ private fun ContentDrawScope.sweepTo(
         // is cut short by the end of the row, so the last letters keep fading
         // up instead of being cut off.
         clipRect(top = top, bottom = bottom) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    0f to Color.White,
-                    1f to Color.Transparent,
-                    startX = safeCharPos,
-                    endX = if (rtl) safeCharPos - featherPx else safeCharPos + featherPx,
-                ),
-                blendMode = BlendMode.DstIn,
-            )
+            val featherScale = (featherPx / maxFeatherPx).coerceIn(0.001f, 1f)
+            val featherBrush = if (rtl) rtlFeatherBrush else ltrFeatherBrush
+            translate(left = safeCharPos) {
+                scale(scaleX = featherScale, scaleY = 1f, pivot = Offset.Zero) {
+                    drawRect(
+                        brush = featherBrush,
+                        topLeft = Offset(-safeCharPos / featherScale, top),
+                        size = Size(size.width / featherScale, bottom - top),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+            }
         }
     }
 }
@@ -1673,6 +1707,20 @@ private fun LyricsSkeleton(modifier: Modifier = Modifier) {
         // lights end to end in the time a long one takes to get halfway, and
         // the block reads as a row of separate things loading separately.
         val column = maxWidth
+        val density = LocalDensity.current
+        val fullPx = remember(density, column) { with(density) { column.toPx() }.coerceAtLeast(1f) }
+        val bandPx = remember(fullPx) { (fullPx * 0.45f).coerceAtLeast(1f) }
+        val shimmerBrush = remember(bandPx) {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.10f),
+                    Color.White.copy(alpha = 0.26f),
+                    Color.White.copy(alpha = 0.10f),
+                ),
+                startX = 0f,
+                endX = bandPx,
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(SKELETON_BLOCK_GAP)) {
             SKELETON_BLOCKS.forEach { rows ->
                 Column(verticalArrangement = Arrangement.spacedBy(SKELETON_LEADING)) {
@@ -1682,24 +1730,15 @@ private fun LyricsSkeleton(modifier: Modifier = Modifier) {
                                 .fillMaxWidth(fraction)
                                 .height(SKELETON_BAR)
                                 .clip(RoundedCornerShape(4.dp))
-                                // Read in the draw block, not the body: a
-                                // pageful of these would otherwise recompose on
-                                // every frame, and all any of them needs per
-                                // frame is a fresh gradient.
-                                .drawWithCache {
-                                    val full = column.toPx()
-                                    val band = full * 0.45f
-                                    val startX = -band + sweep.value * (full + band * 2)
-                                    val brush = Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.10f),
-                                            Color.White.copy(alpha = 0.26f),
-                                            Color.White.copy(alpha = 0.10f),
-                                        ),
-                                        startX = startX,
-                                        endX = startX + band,
-                                    )
-                                    onDrawBehind { drawRect(brush) }
+                                .drawBehind {
+                                    val startX = -bandPx + sweep.value * (fullPx + bandPx * 2)
+                                    translate(left = startX) {
+                                        drawRect(
+                                            brush = shimmerBrush,
+                                            topLeft = Offset(-startX, 0f),
+                                            size = size,
+                                        )
+                                    }
                                 },
                         )
                     }

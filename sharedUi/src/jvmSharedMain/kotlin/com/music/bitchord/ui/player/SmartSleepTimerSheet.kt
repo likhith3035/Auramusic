@@ -21,9 +21,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
@@ -89,7 +91,7 @@ fun SmartSleepTimerSheet(
     val status by SmartSleepTimer.status.collectAsStateWithLifecycle()
     val mode by SmartSleepTimer.mode.collectAsStateWithLifecycle()
 
-    var selectedTab by remember(mode) {
+    var selectedTab by remember {
         mutableStateOf(
             if (mode is SleepTimerMode.SongCount) SleepTimerTab.SONG_COUNT else SleepTimerTab.DURATION
         )
@@ -543,10 +545,12 @@ private fun DurationTimerPane(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-                .clickable {
-                    SmartSleepTimer.finishCurrentSongOnExpiry.value = !finishCurrentSong
-                }
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                .toggleable(
+                    value = finishCurrentSong,
+                    role = Role.Switch,
+                    onValueChange = { SmartSleepTimer.finishCurrentSongOnExpiry.value = it },
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -554,21 +558,21 @@ private fun DurationTimerPane(
                 Text(
                     text = "Finish current song completely",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "Playback will smoothly end after the track rather than cutting off at zero.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.width(12.dp))
             Switch(
                 checked = finishCurrentSong,
-                onCheckedChange = { SmartSleepTimer.finishCurrentSongOnExpiry.value = it },
+                onCheckedChange = null,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color.White.copy(alpha = 0.35f),
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
                 ),
             )
         }
@@ -581,11 +585,15 @@ private fun DurationTimerPane(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-                .clickable {
-                    SmartSleepTimer.fadeOutEnabled.value = !fadeOutEnabled
-                    haptics.play(if (!fadeOutEnabled) Haptic.ToggleOn else Haptic.ToggleOff)
-                }
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                .toggleable(
+                    value = fadeOutEnabled,
+                    role = Role.Switch,
+                    onValueChange = {
+                        SmartSleepTimer.fadeOutEnabled.value = it
+                        haptics.play(if (it) Haptic.ToggleOn else Haptic.ToggleOff)
+                    },
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -593,24 +601,21 @@ private fun DurationTimerPane(
                 Text(
                     text = "Gentle volume fade-out",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "Gradually decreases volume over final 30 seconds before stopping.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.width(12.dp))
             Switch(
                 checked = fadeOutEnabled,
-                onCheckedChange = {
-                    SmartSleepTimer.fadeOutEnabled.value = it
-                    haptics.play(if (it) Haptic.ToggleOn else Haptic.ToggleOff)
-                },
+                onCheckedChange = null,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color.White.copy(alpha = 0.35f),
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
                 ),
             )
         }

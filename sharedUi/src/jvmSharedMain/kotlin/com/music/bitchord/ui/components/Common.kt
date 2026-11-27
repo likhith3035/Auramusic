@@ -3,6 +3,7 @@ package com.music.bitchord.ui.components
 import com.music.bitchord.ui.LocalPullToRefreshEnabled
 import com.music.bitchord.ui.AppUiHost
 import com.music.bitchord.ui.AppUi
+import com.music.bitchord.ui.player.PlayerSettings
 import com.music.bitchord.sharedui.resources.*
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -43,6 +44,10 @@ import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import kotlin.math.abs
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -660,25 +665,79 @@ val PlayingAccent = Color(0xFFFB4A62)
 
 @Composable
 fun SearchPlayingBars(modifier: Modifier = Modifier) {
-    val heights = listOf(0.38f, 0.78f, 0.52f).mapIndexed { index, minimum ->
-        val transition = rememberInfiniteTransition(label = "search playing bar $index")
-        val height by transition.animateFloat(
-            initialValue = minimum,
-            targetValue = 1f - (index * 0.12f),
-            animationSpec = infiniteRepeatable(
-                animation = keyframes {
-                    durationMillis = 520 + index * 130
-                    minimum at 0
-                    1f at (260 + index * 50)
-                    minimum at durationMillis
-                },
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "search bar height $index",
-        )
-        height
+    val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
+    if (reduceAnimation) {
+        Box(
+            modifier = modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.Black.copy(alpha = 0.52f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.size(width = 13.dp, height = 14.dp)) {
+                val barW = 3.dp.toPx()
+                val gap = 2.dp.toPx()
+                val radius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+                val staticHeights = floatArrayOf(0.45f, 0.85f, 0.60f)
+                for (i in 0..2) {
+                    val h = size.height * staticHeights[i]
+                    drawRoundRect(
+                        color = Color.White,
+                        topLeft = Offset(i * (barW + gap), size.height - h),
+                        size = Size(barW, h),
+                        cornerRadius = radius,
+                    )
+                }
+            }
+        }
+        return
     }
-    // The plate is a fixed square so only the bars move, never the box around them.
+
+    // One transition + Canvas draw avoids 3 transitions and per-frame relayouts across visible cards.
+    val transition = rememberInfiniteTransition(label = "search playing bars")
+    val bar0 = transition.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 520
+                0.38f at 0
+                1f at 260
+                0.38f at 520
+            },
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "search bar 0",
+    )
+    val bar1 = transition.animateFloat(
+        initialValue = 0.78f,
+        targetValue = 0.88f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 650
+                0.78f at 0
+                1f at 310
+                0.78f at 650
+            },
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "search bar 1",
+    )
+    val bar2 = transition.animateFloat(
+        initialValue = 0.52f,
+        targetValue = 0.76f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 780
+                0.52f at 0
+                1f at 360
+                0.52f at 780
+            },
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "search bar 2",
+    )
+    // The plate is a fixed square so only the Canvas bars draw, never relayouting parent rows.
     Box(
         modifier = modifier
             .size(24.dp)
@@ -686,20 +745,31 @@ fun SearchPlayingBars(modifier: Modifier = Modifier) {
             .background(Color.Black.copy(alpha = 0.52f)),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            modifier = Modifier.height(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            heights.forEach { height ->
-                Box(
-                    Modifier
-                        .width(3.dp)
-                        .height(14.dp * height)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White),
-                )
-            }
+        Canvas(modifier = Modifier.size(width = 13.dp, height = 14.dp)) {
+            val barW = 3.dp.toPx()
+            val gap = 2.dp.toPx()
+            val radius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            val h0 = size.height * bar0.value
+            val h1 = size.height * bar1.value
+            val h2 = size.height * bar2.value
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(0f, size.height - h0),
+                size = Size(barW, h0),
+                cornerRadius = radius,
+            )
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(barW + gap, size.height - h1),
+                size = Size(barW, h1),
+                cornerRadius = radius,
+            )
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset((barW + gap) * 2f, size.height - h2),
+                size = Size(barW, h2),
+                cornerRadius = radius,
+            )
         }
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhoneAndroid
-import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Usb
@@ -45,21 +45,19 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.ui.unit.sp
-import com.music.bitchord.connect.AuraConnectManager
-import com.music.bitchord.data.connect.AuraConnectDevice
-import com.music.bitchord.data.connect.AuraDeviceType
-import com.music.bitchord.data.connect.AuraPlaybackState
-import com.music.bitchord.data.model.Song
-import com.music.bitchord.ui.icons.BitChordIcons
-import com.music.bitchord.ui.theme.NothingThemeTokens
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +66,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,14 +75,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.connect.AuraConnectManager
+import com.music.bitchord.data.connect.AuraConnectDevice
+import com.music.bitchord.data.connect.AuraDeviceType
+import com.music.bitchord.data.connect.AuraPlaybackState
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.sharedui.resources.*
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
+import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.theme.NothingThemeTokens
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -127,6 +136,10 @@ internal fun AudioOutputSheet(
     val connectDevices by AuraConnectManager.discoveredDevices.collectAsStateWithLifecycle()
     val connectedDevice by AuraConnectManager.connectedDevice.collectAsStateWithLifecycle()
     val remotePlayback by AuraConnectManager.remotePlaybackState.collectAsStateWithLifecycle()
+    val pairingDevice by AuraConnectManager.pairingRequiredForDevice.collectAsStateWithLifecycle()
+    val pairingError by AuraConnectManager.pairingError.collectAsStateWithLifecycle()
+    val connectError by AuraConnectManager.connectionError.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
         AuraConnectManager.startDiscovery()
@@ -192,6 +205,28 @@ internal fun AudioOutputSheet(
                         },
                     )
                 }
+            }
+
+            if (pairingDevice != null) {
+                Spacer(Modifier.height(8.dp))
+                AuraConnectPairingCard(
+                    device = pairingDevice!!,
+                    error = pairingError,
+                    onPair = { pin ->
+                        val target = pairingDevice ?: return@AuraConnectPairingCard
+                        coroutineScope.launch { AuraConnectManager.pairWithPin(target, pin) }
+                    },
+                    onCancel = { AuraConnectManager.dismissPairingPrompt() },
+                )
+            }
+            if (!connectError.isNullOrBlank() && pairingDevice == null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = connectError.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = NothingThemeTokens.Red,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
 
             if (connectedDevice != null && remotePlayback != null) {
@@ -617,6 +652,77 @@ private fun AuraConnectDeviceRow(
     }
 }
 
+@Composable
+private fun AuraConnectPairingCard(
+    device: AuraConnectDevice,
+    error: String?,
+    onPair: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var pinInput by remember(device.id) { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ROW_SHAPE)
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, NothingThemeTokens.Red.copy(alpha = 0.45f), ROW_SHAPE)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Pair with ${device.name}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+        )
+        Text(
+            text = "Enter the 6-digit PIN shown in ${device.name}'s Audio Output settings.",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.65f),
+        )
+        OutlinedTextField(
+            value = pinInput,
+            onValueChange = { raw -> pinInput = raw.filter { it.isDigit() }.take(6) },
+            singleLine = true,
+            placeholder = { Text("6-digit PIN") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = NothingThemeTokens.Red,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.labelSmall,
+                color = NothingThemeTokens.Red,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = onCancel) {
+                Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = { onPair(pinInput) },
+                enabled = pinInput.length == 6,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = NothingThemeTokens.Red,
+                    contentColor = Color.White,
+                ),
+            ) {
+                Text("Pair")
+            }
+        }
+    }
+}
+
 private fun formatAuraTime(ms: Long): String {
     if (ms <= 0) return "0:00"
     val totalSeconds = ms / 1000
@@ -989,7 +1095,7 @@ private fun AuraRemoteControlCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Rounded.QueueMusic,
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                         contentDescription = null,
                         tint = NothingThemeTokens.Red,
                         modifier = Modifier.size(18.dp),

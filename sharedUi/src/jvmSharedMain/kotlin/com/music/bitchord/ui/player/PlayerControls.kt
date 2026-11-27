@@ -113,7 +113,11 @@ import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -859,6 +863,7 @@ internal fun CircleGlyph(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                role = Role.Button,
             ) {
                 haptics.play(haptic)
                 onClick()
@@ -915,7 +920,8 @@ private fun TransportGlyph(
     val currentOnHoldEnd by rememberUpdatedState(onHoldEnd)
     val scope = rememberCoroutineScope()
 
-    val gestureModifier = if (onHoldStart != null || onHoldEnd != null) {
+    val hasHoldGestures = onHoldStart != null || onHoldEnd != null
+    val gestureModifier = if (hasHoldGestures) {
         Modifier.pointerInput(enabled) {
             if (!enabled) return@pointerInput
             var holdActive = false
@@ -950,6 +956,7 @@ private fun TransportGlyph(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
             enabled = enabled,
+            role = Role.Button,
         ) {
             haptics.play(haptic)
             onClick()
@@ -958,6 +965,19 @@ private fun TransportGlyph(
     Box(
         modifier = Modifier
             .size(touchSize)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                this.contentDescription = contentDescription
+                if (!enabled) {
+                    disabled()
+                } else if (hasHoldGestures) {
+                    onClick {
+                        haptics.play(haptic)
+                        currentOnClick()
+                        true
+                    }
+                }
+            }
             .then(gestureModifier),
         contentAlignment = Alignment.Center,
     ) {

@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ fun SearchField(
     /** What the empty field says it is for — the one part that changes per screen. */
     placeholder: String = stringResource(Res.string.search_hint),
     modifier: Modifier = Modifier,
+    onPasteClick: (() -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -135,6 +137,21 @@ fun SearchField(
                 Icon(
                     Icons.Rounded.Close,
                     contentDescription = stringResource(Res.string.clear_search),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else if (onPasteClick != null) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onPasteClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.ContentPaste,
+                    contentDescription = "Paste YouTube link",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )

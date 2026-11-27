@@ -1739,14 +1739,22 @@ fun NowPlayingScreen(
                             ),
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
+                    Box(
                         modifier = Modifier
-                            .size(18.dp)
-                            .clickable { showCellularVideoSwitchBanner = false },
-                    )
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                                showCellularVideoSwitchBanner = false
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Dismiss banner",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }
@@ -2146,6 +2154,8 @@ fun NowPlayingScreen(
                             onPlayPause = onPlayPause,
                             onNext = onNext,
                             compact = true,
+                            currentPositionMs = { position.positionMs },
+                            onSeek = { targetMs -> if (controlsLocked) onBlockedControl() else onSeek(targetMs) },
                         )
                     },
                 )
@@ -2369,6 +2379,8 @@ fun NowPlayingScreen(
                                     onPlayPause = onPlayPause,
                                     onNext = onNext,
                                     compact = compact,
+                                    currentPositionMs = { position.positionMs },
+                                    onSeek = { targetMs -> if (controlsLocked) onBlockedControl() else onSeek(targetMs) },
                                 )
                             },
                             volume = if (hideVolumeBar) {
@@ -3376,16 +3388,20 @@ fun NowPlayingScreen(
                                     drawContent()
                                     val shown = sleeveShown()
                                     if (shown > 0f) {
+                                        val startY = size.height * (1f - stillFadeFraction())
+                                        val endY = size.height
+                                        val bucketed = (shown * 255f).roundToInt() / 255f
                                         drawRect(
                                             // Along smootherstep, not a straight ramp,
                                             // so neither end of the dissolve shows as a line.
                                             brush = Brush.verticalGradient(
-                                                colorStops = Array(FADE_CURVE_STOPS + 1) { i ->
-                                                    val t = i / FADE_CURVE_STOPS.toFloat()
-                                                    t to Color.Black.copy(alpha = 1f - shown * smootherStep(t))
-                                                },
-                                                startY = size.height * (1f - stillFadeFraction()),
-                                                endY = size.height,
+                                                0f to Color.Black.copy(alpha = 1f),
+                                                0.25f to Color.Black.copy(alpha = 1f - bucketed * 0.1035f),
+                                                0.5f to Color.Black.copy(alpha = 1f - bucketed * 0.5f),
+                                                0.75f to Color.Black.copy(alpha = 1f - bucketed * 0.8965f),
+                                                1f to Color.Black.copy(alpha = 1f - bucketed),
+                                                startY = startY,
+                                                endY = endY,
                                             ),
                                             blendMode = BlendMode.DstIn,
                                         )
@@ -3918,39 +3934,41 @@ fun NowPlayingScreen(
                             // away: with it up, the screen is the player again and the
                             // glyph is its menu. A pick in progress keeps its Close
                             // whichever way the controls are.
-                            if (onDownload != null && song.localUri == null) {
-                                val downloaded = song.videoId in com.music.bitchord.ui.AppUi.host.downloadedIds()
+                            if (!collapsePastHalf && !lyricsOpen && !queueOpen) {
+                                if (onDownload != null && song.localUri == null) {
+                                    val downloaded = song.videoId in com.music.bitchord.ui.AppUi.host.downloadedIds()
+                                    CircleGlyph(
+                                        icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                                        contentDescription = stringResource(
+                                            if (downloaded) Res.string.downloaded else Res.string.download,
+                                        ),
+                                        onClick = {
+                                            if (downloaded) {
+                                                onOpenMenu()
+                                            } else {
+                                                onDownload()
+                                            }
+                                        },
+                                        active = downloaded,
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
                                 CircleGlyph(
-                                    icon = if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
-                                    contentDescription = stringResource(
-                                        if (downloaded) Res.string.downloaded else Res.string.download,
-                                    ),
-                                    onClick = {
-                                        if (downloaded) {
-                                            onOpenMenu()
-                                        } else {
-                                            onDownload()
-                                        }
-                                    },
-                                    active = downloaded,
+                                    icon = Icons.Rounded.Bedtime,
+                                    contentDescription = stringResource(Res.string.sleep_timer),
+                                    onClick = { showSleepTimerSheet = true },
+                                    active = sleepTimerStatus != SleepTimerStatus.OFF,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                val isDjConsoleActive by DjSessionState.isDjActive.collectAsStateWithLifecycle()
+                                CircleGlyph(
+                                    icon = Icons.Rounded.DiscFull,
+                                    contentDescription = "Dual-Deck DJ Mode",
+                                    onClick = { showDjDecks = true },
+                                    active = isDjConsoleActive || showDjDecks,
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            CircleGlyph(
-                                icon = Icons.Rounded.Bedtime,
-                                contentDescription = stringResource(Res.string.sleep_timer),
-                                onClick = { showSleepTimerSheet = true },
-                                active = sleepTimerStatus != SleepTimerStatus.OFF,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            val isDjConsoleActive by DjSessionState.isDjActive.collectAsStateWithLifecycle()
-                            CircleGlyph(
-                                icon = Icons.Rounded.DiscFull,
-                                contentDescription = "Dual-Deck DJ Mode",
-                                onClick = { showDjDecks = true },
-                                active = isDjConsoleActive || showDjDecks,
-                            )
-                            Spacer(Modifier.width(8.dp))
                             val lyricsShareGlyphVisible = lyricsOpen && collapseDone && lyricsShareEnabled &&
                                 !lyrics.isNullOrEmpty() && (!lyricsControlsOpen || lyricPicker.picking)
                             CircleGlyph(
@@ -4307,6 +4325,8 @@ fun NowPlayingScreen(
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onNext = onNext,
+                        currentPositionMs = { position.positionMs },
+                        onSeek = { targetMs -> if (controlsLocked) onBlockedControl() else onSeek(targetMs) },
                     )
 
                     // Keep the volume slot's full footprint when its contents are

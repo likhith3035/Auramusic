@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -57,6 +59,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.YtMusicRepository
@@ -813,10 +816,10 @@ private fun DeckCard(
                     Spacer(Modifier.height(4.dp))
 
                     // Sleek Modern Monospace Time Readout
-                    val posSec = positionMs / 1000L
-                    val posText = String.format("%02d:%02d", posSec / 60, posSec % 60)
+                    val posSec = (positionMs / 1000L).coerceAtLeast(0L)
+                    val posText = formatDeckTime(posSec)
                     val remSec = (durationMs - positionMs).coerceAtLeast(0L) / 1000L
-                    val remText = String.format("-%02d:%02d", remSec / 60, remSec % 60)
+                    val remText = formatDeckTime(remSec, negative = true)
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1754,9 +1757,15 @@ private fun NothingTurntable(
     var lastHapticTickAngle by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(isPlaying, isDragging) {
+        var lastFrameNs = 0L
         while (isActive && isPlaying && !isDragging) {
-            rotationAngle = (rotationAngle + 2.0f) % 360f
-            delay(16L) // ~60 FPS
+            withFrameNanos { frameNs ->
+                if (lastFrameNs != 0L) {
+                    val deltaSec = (frameNs - lastFrameNs) / 1_000_000_000f
+                    rotationAngle = (rotationAngle + deltaSec * 120f) % 360f
+                }
+                lastFrameNs = frameNs
+            }
         }
     }
 
@@ -2072,6 +2081,8 @@ private fun DjQueueAndSearchModal(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Song>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+    var retryTrigger by remember { mutableIntStateOf(0) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
     // Harmonic profile for Deck A
@@ -2080,10 +2091,11 @@ private fun DjQueueAndSearchModal(
     }
 
     // Trigger debounced online search
-    LaunchedEffect(searchQuery) {
+    LaunchedEffect(searchQuery, retryTrigger) {
         val q = searchQuery.trim()
         if (q.isBlank()) {
             searchResults = emptyList()
+            searchError = null
             isSearching = false
             return@LaunchedEffect
         }
@@ -2091,18 +2103,28 @@ private fun DjQueueAndSearchModal(
         searchJob = scope.launch {
             delay(350L)
             isSearching = true
-            val res = YtMusicRepository.search(q, SearchFilter.SONGS)
-            if (res.isSuccess) {
-                val songs = res.getOrNull().orEmpty().mapNotNull { item ->
-                    when (item) {
-                        is SearchResult.Track -> item.song
-                        is SearchResult.TopTrack -> item.song
-                        else -> null
+            searchError = null
+            try {
+                val res = YtMusicRepository.search(q, SearchFilter.SONGS)
+                if (res.isSuccess) {
+                    val songs = res.getOrNull().orEmpty().mapNotNull { item ->
+                        when (item) {
+                            is SearchResult.Track -> item.song
+                            is SearchResult.TopTrack -> item.song
+                            else -> null
+                        }
                     }
+                    searchResults = songs
+                } else {
+                    searchError = res.exceptionOrNull()?.message ?: "Search failed"
                 }
-                searchResults = songs
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                searchError = e.message ?: "Search failed"
+            } finally {
+                isSearching = false
             }
-            isSearching = false
         }
     }
 
@@ -2216,19 +2238,19 @@ private fun DjQueueAndSearchModal(
                         Spacer(Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
-                                .size(20.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
                                 .background(NothingThemeTokens.Border)
-                                .clickable {
+                                .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                                     searchQuery = ""
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
-                                contentDescription = "Clear",
+                                contentDescription = "Clear search",
                                 tint = NothingThemeTokens.White,
-                                modifier = Modifier.size(12.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                     }
@@ -2248,6 +2270,22 @@ private fun DjQueueAndSearchModal(
                                 fontFamily = FontFamily.Monospace,
                             )
                         }
+                    } else if (searchError != null) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text(
+                                text = searchError ?: "Search failed",
+                                color = NothingThemeTokens.Red,
+                                fontSize = 12.sp,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = { retryTrigger++ }) {
+                                Text("Retry", color = NothingThemeTokens.White)
+                            }
+                        }
                     } else if (searchResults.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
@@ -2261,7 +2299,7 @@ private fun DjQueueAndSearchModal(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            items(searchResults) { s ->
+                            items(searchResults, key = { it.videoId }) { s ->
                                 val songProfile = remember(s.videoId) { AuraNeuralDjEngine.analyzeSong(s) }
                                 val relationship = if (profileA != null) {
                                     profileA.key.getRelationship(songProfile.key)
@@ -2384,6 +2422,14 @@ private fun DjQueueAndSearchModal(
                         }
                     }
                 } else {
+                    val queueKeys = remember(queue) {
+                        val counts = HashMap<String, Int>(queue.size)
+                        queue.map { song ->
+                            val seen = (counts[song.videoId] ?: 0) + 1
+                            counts[song.videoId] = seen
+                            "q_${song.videoId}#$seen"
+                        }
+                    }
                     // Queue Mode (Native Aura App Queue Style)
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -2560,7 +2606,7 @@ private fun DjQueueAndSearchModal(
                                 }
                             }
                         } else {
-                            itemsIndexed(queue, key = { index, song -> "q_${song.videoId}_$index" }) { index, s ->
+                            itemsIndexed(queue, key = { index, _ -> queueKeys[index] }) { index, s ->
                                 val songProfile = remember(s.videoId) { AuraNeuralDjEngine.analyzeSong(s) }
                                 val relationship = if (profileA != null) {
                                     profileA.key.getRelationship(songProfile.key)
@@ -2568,11 +2614,22 @@ private fun DjQueueAndSearchModal(
                                     HarmonicRelationship.EXACT
                                 }
 
+                                val density = LocalDensity.current
                                 var dragOffsetY by remember { mutableFloatStateOf(0f) }
+                                var rowHeightPx by remember { mutableFloatStateOf(0f) }
+                                val spacingPx = with(density) { 6.dp.toPx() }
+                                val fallbackStridePx = with(density) { 56.dp.toPx() }
+                                val stridePx = if (rowHeightPx > 0f) rowHeightPx + spacingPx else fallbackStridePx
+                                val currentIndex by rememberUpdatedState(index)
+                                val currentQueueSize by rememberUpdatedState(queue.size)
+                                val currentOnReorder by rememberUpdatedState(onReorder)
+                                val currentStridePx by rememberUpdatedState(stridePx)
 
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .zIndex(if (dragOffsetY != 0f) 1f else 0f)
+                                        .onSizeChanged { rowHeightPx = it.height.toFloat() }
                                         .offset { IntOffset(0, dragOffsetY.roundToInt()) }
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(NothingThemeTokens.SurfaceElevated)
@@ -2585,7 +2642,7 @@ private fun DjQueueAndSearchModal(
                                         modifier = Modifier
                                             .size(32.dp)
                                             .clip(CircleShape)
-                                            .pointerInput(index, queue.size) {
+                                            .pointerInput(Unit) {
                                                 detectDragGestures(
                                                     onDragStart = {
                                                         haptics.play(Haptic.Select)
@@ -2599,15 +2656,17 @@ private fun DjQueueAndSearchModal(
                                                     onDrag = { change, dragAmount ->
                                                         change.consume()
                                                         dragOffsetY += dragAmount.y
-                                                        val rowThreshold = 46.dp.toPx()
-                                                        if (dragOffsetY > rowThreshold && index + 1 < queue.size) {
+                                                        val stride = currentStridePx
+                                                        val threshold = stride * 0.65f
+                                                        val idx = currentIndex
+                                                        if (dragOffsetY > threshold && idx + 1 < currentQueueSize) {
                                                             haptics.play(Haptic.Tick)
-                                                            onReorder(index, index + 1)
-                                                            dragOffsetY -= rowThreshold
-                                                        } else if (dragOffsetY < -rowThreshold && index > 0) {
+                                                            currentOnReorder(idx, idx + 1)
+                                                            dragOffsetY -= stride
+                                                        } else if (dragOffsetY < -threshold && idx > 0) {
                                                             haptics.play(Haptic.Tick)
-                                                            onReorder(index, index - 1)
-                                                            dragOffsetY += rowThreshold
+                                                            currentOnReorder(idx, idx - 1)
+                                                            dragOffsetY += stride
                                                         }
                                                     },
                                                 )
@@ -2745,4 +2804,11 @@ private fun DjQueueAndSearchModal(
             }
         }
     }
+}
+
+private fun formatDeckTime(totalSeconds: Long, negative: Boolean = false): String {
+    val safe = totalSeconds.coerceAtLeast(0L)
+    val mins = (safe / 60L).toString().padStart(2, '0')
+    val secs = (safe % 60L).toString().padStart(2, '0')
+    return if (negative) "-$mins:$secs" else "$mins:$secs"
 }
