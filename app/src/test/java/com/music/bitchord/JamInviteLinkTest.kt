@@ -108,6 +108,17 @@ class JamInviteLinkTest {
     }
 
     @Test
+    fun `rejects cleartext http server overrides on invites`() {
+        val schemeInvite = JamInviteLink.parseInvite("auramusic://party/ABC123?server=http%3A%2F%2Fattacker.example.com")
+        assertEquals("ABC123", schemeInvite?.code)
+        assertNull(schemeInvite?.serverUrl)
+
+        val webInvite = JamInviteLink.parseInvite("https://bitchord.kushagrasingh.in/invite/ABC123?server=http%3A%2F%2Fattacker.example.com")
+        assertEquals("ABC123", webInvite?.code)
+        assertEquals("https://bitchord.kushagrasingh.in", webInvite?.serverUrl)
+    }
+
+    @Test
     fun `switch party result sealed hierarchy holds expected properties`() {
         val success: com.music.bitchord.data.listentogether.ListenTogether.SwitchPartyResult =
             com.music.bitchord.data.listentogether.ListenTogether.SwitchPartyResult.Success("ABC123")

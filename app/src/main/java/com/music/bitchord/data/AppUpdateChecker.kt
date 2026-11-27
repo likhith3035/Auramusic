@@ -2,6 +2,9 @@ package com.music.bitchord.data
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -19,8 +22,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.net.URI
+import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * BitChord ships as a sideloaded APK off GitHub Releases rather than through
@@ -42,7 +49,45 @@ object AppUpdateChecker {
         /** The release's own Markdown body, shown as this update's "what's new". */
         val notes: String?,
         val isMandatory: Boolean = false,
+        val expectedSha256: String? = null,
     )
+
+    private val updateHttpClient: OkHttpClient by lazy {
+        Http.client.newBuilder()
+            .addNetworkInterceptor { chain ->
+                val url = chain.request().url.toString()
+                if (!isAllowedUpdateUrl(url)) {
+                    throw SecurityException("Blocked redirect to untrusted update host")
+                }
+                chain.proceed(chain.request())
+            }
+            .build()
+    }
+
+    internal fun isAllowedUpdateUrl(rawUrl: String?): Boolean {
+        val raw = rawUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val uri = runCatching { URI(raw) }.getOrNull() ?: return false
+        if (!uri.scheme.equals("https", ignoreCase = true)) return false
+        val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return false
+        return host == "github.com" ||
+            host.endsWith(".github.com") ||
+            host == "githubusercontent.com" ||
+            host.endsWith(".githubusercontent.com")
+    }
+
+    internal fun sanitizeVersionForFilename(rawVersion: String): String {
+        val cleaned = rawVersion.trim()
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .replace("..", "_")
+            .trim('.')
+            .take(48)
+        return cleaned.ifBlank { "latest" }
+    }
+
+    private fun parseSha256Digest(raw: String?): String? {
+        val candidate = raw?.trim()?.removePrefix("sha256:")?.lowercase(Locale.ROOT) ?: return null
+        return candidate.takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
+    }
 
     private const val CACHE_SUBDIR = "updates"
 
@@ -87,7 +132,7 @@ object AppUpdateChecker {
             .url(url)
             .header("User-Agent", "AuraMusic")
             .build()
-        val body = Http.client.newCall(request).execute().use { response ->
+        val body = updateHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) null else response.body?.string()
         } ?: return@runCatching null
 
@@ -99,13 +144,14 @@ object AppUpdateChecker {
         }
 
         val tag = release["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-        val releaseUrl = release["html_url"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-        val apkUrl = apkAssetUrl(release)
+        val releaseUrl = release["html_url"]?.jsonPrimitive?.contentOrNull
+            ?.takeIf(::isAllowedUpdateUrl) ?: return@runCatching null
+        val (apkUrl, sha256) = apkAssetSelection(release)
         val notes = release["body"]?.jsonPrimitive?.contentOrNull
         val latest = tag.removePrefix("v")
         val isMandatory = notes?.contains("[MANDATORY]", ignoreCase = true) == true ||
             release["isMandatory"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
-        UpdateInfo(latest, releaseUrl, apkUrl, notes, isMandatory)
+        UpdateInfo(latest, releaseUrl, apkUrl, notes, isMandatory, sha256)
     }.getOrNull()
 
     private fun fetchFromFallbackJson(): UpdateInfo? = runCatching {
@@ -113,19 +159,21 @@ object AppUpdateChecker {
             .url(FALLBACK_VERSION_URL)
             .header("User-Agent", "AuraMusic")
             .build()
-        val body = Http.client.newCall(request).execute().use { response ->
+        val body = updateHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) null else response.body?.string()
         } ?: return@runCatching null
         val root = json.parseToJsonElement(body) as? JsonObject ?: return@runCatching null
         val version = root["version"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-        val url = root["releaseUrl"]?.jsonPrimitive?.contentOrNull
+        val url = (root["releaseUrl"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/likhith3035/Auramusic/releases")
+            .takeIf(::isAllowedUpdateUrl)
             ?: "https://github.com/likhith3035/Auramusic/releases"
-        val apkUrl = root["apkUrl"]?.jsonPrimitive?.contentOrNull
+        val apkUrl = root["apkUrl"]?.jsonPrimitive?.contentOrNull?.takeIf(::isAllowedUpdateUrl)
+        val expectedSha256 = parseSha256Digest(root["sha256"]?.jsonPrimitive?.contentOrNull)
         val notes = root["notes"]?.jsonPrimitive?.contentOrNull
         val isMandatory = root["isMandatory"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true ||
             notes?.contains("[MANDATORY]", ignoreCase = true) == true
         val latest = version.removePrefix("v")
-        UpdateInfo(latest, url, apkUrl, notes, isMandatory)
+        UpdateInfo(latest, url, apkUrl, notes, isMandatory, expectedSha256)
     }.getOrNull()
 
     suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
@@ -154,15 +202,24 @@ object AppUpdateChecker {
      * 3. Falls back to a universal APK if available.
      * 4. Falls back to any uploaded APK.
      */
-    private fun apkAssetUrl(release: JsonObject): String? = runCatching {
+    private fun apkAssetSelection(release: JsonObject): Pair<String?, String?> = runCatching {
         val assets = release["assets"]?.jsonArray
             ?.mapNotNull { it as? JsonObject }
             ?.filter { asset ->
                 asset["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk", ignoreCase = true) == true &&
-                    asset["state"]?.jsonPrimitive?.contentOrNull == "uploaded"
+                    asset["state"]?.jsonPrimitive?.contentOrNull == "uploaded" &&
+                    isAllowedUpdateUrl(asset["browser_download_url"]?.jsonPrimitive?.contentOrNull)
             } ?: emptyList()
 
-        if (assets.isEmpty()) return@runCatching null
+        if (assets.isEmpty()) return@runCatching (null to null)
+
+        fun pick(asset: JsonObject?): Pair<String?, String?>? {
+            if (asset == null) return null
+            val url = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf(::isAllowedUpdateUrl) ?: return null
+            val digest = parseSha256Digest(asset["digest"]?.jsonPrimitive?.contentOrNull)
+            return url to digest
+        }
 
         val deviceAbis = Build.SUPPORTED_ABIS.map { it.lowercase() }
 
@@ -172,9 +229,7 @@ object AppUpdateChecker {
                 val name = asset["name"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
                 name.contains(abi) || (abi == "arm64-v8a" && (name.contains("arm64") || name.contains("aarch64")))
             }
-            if (matched != null) {
-                return@runCatching matched["browser_download_url"]?.jsonPrimitive?.contentOrNull
-            }
+            pick(matched)?.let { return@runCatching it }
         }
 
         // 2. Universal build fallback
@@ -182,13 +237,11 @@ object AppUpdateChecker {
             val name = asset["name"]?.jsonPrimitive?.contentOrNull?.lowercase().orEmpty()
             name.contains("universal")
         }
-        if (universal != null) {
-            return@runCatching universal["browser_download_url"]?.jsonPrimitive?.contentOrNull
-        }
+        pick(universal)?.let { return@runCatching it }
 
         // 3. Fallback to first uploaded APK
-        assets.firstOrNull()?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
-    }.getOrNull()
+        pick(assets.firstOrNull()) ?: (null to null)
+    }.getOrElse { null to null }
 
     /**
      * Streams the current update's APK into the app cache, reporting progress
@@ -197,6 +250,10 @@ object AppUpdateChecker {
     suspend fun downloadApk(context: Context): Unit = withContext(Dispatchers.IO) {
         val info = _available.value ?: return@withContext
         val url = info.apkUrl ?: return@withContext
+        if (!isAllowedUpdateUrl(url)) {
+            _download.value = DownloadState.Failed("Blocked untrusted update URL")
+            return@withContext
+        }
         downloadCancelled = false
         _download.value = DownloadState.Downloading(0f, 0L, 0L, 0L)
         AppUpdateNotificationHelper.showProgress(context, info.version, 0, 0L, 0L, 0L)
@@ -205,11 +262,14 @@ object AppUpdateChecker {
             val dir = File(context.cacheDir, CACHE_SUBDIR).apply { mkdirs() }
             // Drop anything left over from an earlier attempt.
             dir.listFiles()?.forEach { it.delete() }
-            val target = File(dir, "bitchord-${info.version}.apk")
+            val safeVersion = sanitizeVersionForFilename(info.version)
+            val target = File(dir, "bitchord-$safeVersion.apk")
+            check(target.canonicalFile.parentFile == dir.canonicalFile) { "Invalid update path" }
 
             val request = Request.Builder().url(url).build()
             var total = 0L
-            Http.client.newCall(request).execute().use { response ->
+            val sha256Digest = MessageDigest.getInstance("SHA-256")
+            updateHttpClient.newCall(request).execute().use { response ->
                 check(response.isSuccessful) { "Download failed: HTTP ${response.code}" }
                 val body = response.body ?: error("Empty download body")
                 total = body.contentLength().takeIf { it > 0 } ?: 0L
@@ -231,6 +291,7 @@ object AppUpdateChecker {
                             }
                             val read = input.read(buffer)
                             if (read == -1) break
+                            sha256Digest.update(buffer, 0, read)
                             output.write(buffer, 0, read)
                             readTotal += read
 
@@ -273,7 +334,19 @@ object AppUpdateChecker {
 
             // Verify integrity
             if (total > 0L && target.length() < total) {
+                target.delete()
                 error("Downloaded APK is incomplete: got ${target.length()} of $total bytes")
+            }
+            info.expectedSha256?.let { expected ->
+                val actual = sha256Digest.digest().joinToString("") { "%02x".format(it) }
+                if (!actual.equals(expected, ignoreCase = true)) {
+                    target.delete()
+                    error("Downloaded APK failed SHA-256 verification")
+                }
+            }
+            if (!verifyApkSignatureMatchesInstalled(context, target)) {
+                target.delete()
+                error("Downloaded APK signature does not match installed app")
             }
 
             _download.value = DownloadState.Ready(target)
@@ -309,6 +382,11 @@ object AppUpdateChecker {
      * the user is sent to that one switch first and taps Install again after.
      */
     fun installApk(context: Context, file: File) {
+        if (!verifyApkSignatureMatchesInstalled(context, file)) {
+            _download.value = DownloadState.Failed("Downloaded APK signature mismatch")
+            file.delete()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !context.packageManager.canRequestPackageInstalls()
         ) {
@@ -329,6 +407,40 @@ object AppUpdateChecker {
         }
         context.startActivity(installIntent)
     }
+
+    @Suppress("DEPRECATION")
+    private fun signingDigests(info: PackageInfo?): Set<String> {
+        if (info == null) return emptySet()
+        val sigs: Array<Signature> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signingInfo = info.signingInfo ?: return emptySet()
+            if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners
+            else signingInfo.signingCertificateHistory
+        } else {
+            info.signatures ?: emptyArray()
+        }
+        val md = MessageDigest.getInstance("SHA-256")
+        return sigs.map { sig ->
+            md.digest(sig.toByteArray()).joinToString("") { "%02x".format(it) }
+        }.toSet()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyApkSignatureMatchesInstalled(context: Context, apkFile: File): Boolean = runCatching {
+        if (!apkFile.isFile) return@runCatching false
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+        val installedInfo = pm.getPackageInfo(context.packageName, flags)
+        val installedDigests = signingDigests(installedInfo)
+        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return@runCatching false
+        if (archiveInfo.packageName != context.packageName) return@runCatching false
+        val archiveDigests = signingDigests(archiveInfo)
+        installedDigests.isNotEmpty() && archiveDigests.isNotEmpty() &&
+            installedDigests.any { it in archiveDigests }
+    }.getOrDefault(false)
 
     /** A version split into its numeric dotted parts and whether it carries a "-suffix" (e.g. "-beta2"). */
     private data class ParsedVersion(val parts: List<Int>, val isPreRelease: Boolean)

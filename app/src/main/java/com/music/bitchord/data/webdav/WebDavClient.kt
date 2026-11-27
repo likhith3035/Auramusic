@@ -222,7 +222,7 @@ object WebDavClient {
                 }
                 val body = response.body?.string().orEmpty()
                 if (body.isBlank()) return@runCatching emptyList()
-                parseMultistatus(body, dirUrl)
+                parseMultistatus(body, dirUrl).filter { entry -> isSameOrigin(dirUrl, entry.url) }
             }
         }
     }
@@ -235,7 +235,16 @@ object WebDavClient {
     fun parseMultistatus(xml: String, dirUrl: String): List<Entry> {
         if (xml.isBlank()) return emptyList()
         val doc = runCatching {
-            val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            val factory = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+                isXIncludeAware = false
+                isExpandEntityReferences = false
+                runCatching { setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true) }
+                runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+                runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+                runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+                runCatching { setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false) }
+            }
             factory.newDocumentBuilder().parse(xml.byteInputStream(Charsets.UTF_8))
         }.getOrNull() ?: return emptyList()
         val responses = doc.getElementsByTagNameNS("*", "response")
@@ -280,6 +289,12 @@ object WebDavClient {
     private fun isSameUrl(a: String, b: String): Boolean {
         fun norm(u: String) = u.trim().trimEnd('/').lowercase()
         return norm(a) == norm(b)
+    }
+
+    internal fun isSameOrigin(a: String, b: String): Boolean {
+        val originA = WebDavConfig.originOf(a) ?: return false
+        val originB = WebDavConfig.originOf(b) ?: return false
+        return originA == originB
     }
 
     private fun decodedName(url: String): String = runCatching {

@@ -228,8 +228,12 @@ object LastFM {
     fun normalizeEndpoint(endpoint: String): String {
         val uri = URI(endpoint.trim())
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
-        require(scheme == "http" || scheme == "https")
-        require(!uri.host.isNullOrBlank())
+        val host = uri.host?.lowercase(Locale.ROOT)
+        require(!host.isNullOrBlank())
+        val isLoopback = host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host == "::1"
+        require(scheme == "https" || (scheme == "http" && isLoopback)) {
+            "Last.fm endpoint must use HTTPS"
+        }
         require(uri.query == null && uri.fragment == null)
 
         val path =

@@ -4,6 +4,11 @@ import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -24,14 +29,27 @@ object ListenBrainzManager {
         return withContext(Dispatchers.IO) {
             try {
                 val durationMs = durationMsOverride ?: parseDurationMs(song.durationText)
-                // The API rejects a zero/negative duration_ms, and it is
-                // optional — so only send it when it is actually known.
-                val durationPart = if (durationMs > 0) "\"duration_ms\":$durationMs," else ""
                 val releaseName = song.albumName.orEmpty()
-                val releasePart = if (releaseName.isBlank()) "" else "\"release_name\":\"${escapeJson(releaseName)}\","
                 val artist = if (primaryArtistOnly) song.artist.primaryArtist() else song.artist
-                val trackMetadata = """{"track_metadata":{"artist_name":"${escapeJson(artist)}","track_name":"${escapeJson(song.title)}",$releasePart"additional_info":{${durationPart}"position_ms":$positionMs,"submission_client":"BitChord"}}}"""
-                val bodyJson = "{\"listen_type\":\"playing_now\",\"payload\":[$trackMetadata]}"
+                val bodyJson = buildJsonObject {
+                    put("listen_type", "playing_now")
+                    putJsonArray("payload") {
+                        addJsonObject {
+                            putJsonObject("track_metadata") {
+                                put("artist_name", artist)
+                                put("track_name", song.title)
+                                if (releaseName.isNotBlank()) put("release_name", releaseName)
+                                putJsonObject("additional_info") {
+                                    // The API rejects a zero/negative duration_ms, and it is
+                                    // optional — so only send it when it is actually known.
+                                    if (durationMs > 0) put("duration_ms", durationMs)
+                                    put("position_ms", positionMs)
+                                    put("submission_client", "BitChord")
+                                }
+                            }
+                        }
+                    }
+                }.toString()
                 Log.d(TAG, "submitPlayingNow: $bodyJson")
                 val body = bodyJson.toRequestBody("application/json".toMediaType())
                 val request =
@@ -47,7 +65,7 @@ object ListenBrainzManager {
                         Log.d(TAG, "playing_now submitted for ${song.title}")
                         true
                     } else {
-                        val bodyText = try { resp.body?.string() ?: "" } catch (_: Exception) { "" }
+                        val bodyText = try { resp.body.string() } catch (_: Exception) { "" }
                         Log.w(TAG, "playing_now submit failed: ${resp.code} - $bodyText")
                         false
                     }
@@ -71,17 +89,32 @@ object ListenBrainzManager {
         return withContext(Dispatchers.IO) {
             try {
                 val durationMs = durationMsOverride ?: parseDurationMs(song.durationText)
-                val durationPart = if (durationMs > 0) "\"duration_ms\":$durationMs," else ""
                 val releaseName = song.albumName.orEmpty()
-                val releasePart = if (releaseName.isBlank()) "" else "\"release_name\":\"${escapeJson(releaseName)}\","
                 var listenedAtStart = startMs / 1000L
                 val MIN_LISTEN_TS = 1033430400L
                 if (listenedAtStart < MIN_LISTEN_TS) {
                     listenedAtStart = System.currentTimeMillis() / 1000L
                 }
                 val artist = if (primaryArtistOnly) song.artist.primaryArtist() else song.artist
-                val trackMetadata = """{"listened_at":$listenedAtStart,"track_metadata":{"artist_name":"${escapeJson(artist)}","track_name":"${escapeJson(song.title)}",$releasePart"additional_info":{${durationPart}"start_ms":$startMs,"end_ms":$endMs,"submission_client":"BitChord"}}}"""
-                val bodyJson = "{\"listen_type\":\"single\",\"payload\":[$trackMetadata]}"
+                val bodyJson = buildJsonObject {
+                    put("listen_type", "single")
+                    putJsonArray("payload") {
+                        addJsonObject {
+                            put("listened_at", listenedAtStart)
+                            putJsonObject("track_metadata") {
+                                put("artist_name", artist)
+                                put("track_name", song.title)
+                                if (releaseName.isNotBlank()) put("release_name", releaseName)
+                                putJsonObject("additional_info") {
+                                    if (durationMs > 0) put("duration_ms", durationMs)
+                                    put("start_ms", startMs)
+                                    put("end_ms", endMs)
+                                    put("submission_client", "BitChord")
+                                }
+                            }
+                        }
+                    }
+                }.toString()
                 Log.d(TAG, "submitFinished: $bodyJson")
                 val body = bodyJson.toRequestBody("application/json".toMediaType())
                 val request =
@@ -97,7 +130,7 @@ object ListenBrainzManager {
                         Log.d(TAG, "finished listen submitted for ${song.title}")
                         true
                     } else {
-                        val bodyText = try { resp.body?.string() ?: "" } catch (_: Exception) { "" }
+                        val bodyText = try { resp.body.string() } catch (_: Exception) { "" }
                         Log.w(TAG, "finished listen submit failed: ${resp.code} - $bodyText")
                         false
                     }
@@ -117,6 +150,4 @@ object ListenBrainzManager {
         val seconds = parts[1].toLongOrNull() ?: return 0L
         return (minutes * 60 + seconds) * 1000
     }
-
-    private fun escapeJson(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
 }

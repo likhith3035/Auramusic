@@ -382,4 +382,29 @@ ${rows.joinToString("\n")}
             assertEquals("MKCOL", server.takeRequest().method)
         }
     }
+
+    @Test
+    fun `webdav auth checks full scheme host and port`() {
+        WebDavAuth.update("https://cloud.example.com/music", "user", "pass")
+        try {
+            assertTrue(WebDavAuth.shouldAuthorizeOrigin("https", "cloud.example.com", 443))
+            assertFalse(WebDavAuth.shouldAuthorizeOrigin("http", "cloud.example.com", 80))
+            assertFalse(WebDavAuth.shouldAuthorizeOrigin("https", "cloud.example.com", 8443))
+            assertNull(WebDavCoilAuth.authHeaderFor("http://cloud.example.com/cover.jpg"))
+        } finally {
+            WebDavAuth.update("", "", "")
+        }
+    }
+
+    @Test
+    fun `update checker enforces github https allowlist and safe filename`() {
+        assertTrue(com.music.bitchord.data.AppUpdateChecker.isAllowedUpdateUrl("https://github.com/likhith3035/Auramusic/releases"))
+        assertTrue(com.music.bitchord.data.AppUpdateChecker.isAllowedUpdateUrl("https://objects.githubusercontent.com/abc.apk"))
+        assertFalse(com.music.bitchord.data.AppUpdateChecker.isAllowedUpdateUrl("http://github.com/likhith3035/Auramusic/releases"))
+        assertFalse(com.music.bitchord.data.AppUpdateChecker.isAllowedUpdateUrl("https://github.com.evil.com/fake.apk"))
+        val sanitized = com.music.bitchord.data.AppUpdateChecker.sanitizeVersionForFilename("../../bad/1.0")
+        assertFalse(sanitized.contains(".."))
+        assertFalse(sanitized.contains("/"))
+        assertEquals("____bad_1.0", sanitized)
+    }
 }

@@ -75,6 +75,7 @@ object Backup {
             context.contentResolver.openOutputStream(target, "wt")
                 ?.use { it.write(text.toByteArray()) }
                 ?: error("Couldn't open that file for writing")
+            AppSettings.setLastBackupTimestampMs(System.currentTimeMillis())
             buckets.size
         }
     }

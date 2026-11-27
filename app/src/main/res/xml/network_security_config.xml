@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">last.fm</domain>
+        <domain includeSubdomains="true">audioscrobbler.com</domain>
+        <domain includeSubdomains="true">libre.fm</domain>
+        <domain includeSubdomains="true">listenbrainz.org</domain>
+        <domain includeSubdomains="true">auramusic-kjov.onrender.com</domain>
+        <domain includeSubdomains="true">bitchord.kushagrasingh.in</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">githubusercontent.com</domain>
+        <domain includeSubdomains="true">youtube.com</domain>
+        <domain includeSubdomains="true">googlevideo.com</domain>
+        <domain includeSubdomains="true">spotify.com</domain>
+        <domain includeSubdomains="true">lrclib.net</domain>
+        <domain includeSubdomains="true">musixmatch.com</domain>
+        <domain includeSubdomains="true">genius.com</domain>
+    </domain-config>
+</network-security-config>

@@ -91,6 +91,8 @@ class SmbTest {
         // same-named stranger.
         assertNull(SmbConfig.relativePath("smb://nas/Other/song.mp3", "Music"))
         assertNull(SmbConfig.relativePath("smb://nas/Music", "Music"))
+        assertNull(SmbConfig.relativePath("smb://nas/Music/../Other/song.mp3", "Music"))
+        assertNull(SmbConfig.relativePath("smb://nas/Music/./song.mp3", "Music"))
         assertNull(SmbConfig.relativePath("not a url", "Music"))
     }
 

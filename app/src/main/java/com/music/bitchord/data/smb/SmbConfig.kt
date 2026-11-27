@@ -77,12 +77,19 @@ object SmbConfig {
      * fails loudly rather than opening a same-named stranger.
      */
     fun relativePath(streamUrl: String, share: String): String? {
-        // [host, share, ...path]. These URIs never carry userinfo — see the
-        // note on SmbAuth — so there is nothing to strip.
-        val segments = streamUrl.removePrefix("smb://").split('/').filter { it.isNotBlank() }
+        if (!streamUrl.startsWith("smb://", ignoreCase = true)) return null
+        val cleaned = streamUrl.removePrefix("smb://").substringBefore('?').substringBefore('#')
+        val segments = cleaned.split('/').filter { it.isNotBlank() }
         if (segments.size < 3) return null
         if (!segments[1].equals(share.trim().trim('/'), ignoreCase = true)) return null
-        val path = segments.drop(2).joinToString("/").substringBefore('?').substringBefore('#')
+        val relSegments = segments.drop(2)
+        if (relSegments.any { seg ->
+                seg == "." || seg == ".." || seg.contains('\\') || seg.any { it.code < 0x20 }
+            }
+        ) {
+            return null
+        }
+        val path = relSegments.joinToString("/")
         return path.takeIf { it.isNotBlank() }
     }
 

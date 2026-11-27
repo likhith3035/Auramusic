@@ -54,6 +54,8 @@ object SmbConnection {
         val shareName = SmbAuth.share
         require(host.isNotBlank() && shareName.isNotBlank()) { "SMB is not configured" }
         val config = SmbConfig.builder()
+            .withSigningRequired(true)
+            .withEncryptData(true)
             .withTimeout(20, TimeUnit.SECONDS)
             .withReadTimeout(30, TimeUnit.SECONDS)
             .withWriteTimeout(30, TimeUnit.SECONDS)

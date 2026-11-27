@@ -167,10 +167,10 @@ class PoTokenWebView private constructor(
             "https://www.youtube.com/api/jnn/v1/Create",
             "[ \"$REQUEST_KEY\" ]",
         ) { responseBody ->
-            val parsedChallengeData = parseChallengeData(responseBody)
+            val parsedChallengeJsonLiteral = org.json.JSONObject.quote(parseChallengeData(responseBody))
             webView.evaluateJavascript(
                 """try {
-                    data = $parsedChallengeData
+                    data = JSON.parse($parsedChallengeJsonLiteral)
                     runBotGuard(data).then(function (result) {
                         this.webPoSignalOutput = result.webPoSignalOutput
                         $JS_INTERFACE.onRunBotguardResult(result.botguardResponse)
@@ -206,7 +206,7 @@ class PoTokenWebView private constructor(
         TrackLog.d(TAG, "botguardResponse: $botguardResponse")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
-            "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
+            org.json.JSONArray().put(REQUEST_KEY).put(botguardResponse).toString(),
         ) { responseBody ->
             TrackLog.d(TAG, "GenerateIT response received")
             try {
@@ -289,9 +289,10 @@ class PoTokenWebView private constructor(
                 // The IIFE keeps requestKey/u8Identifier lexically captured per call: bare globals
                 // here would let a concurrent call reassign them before this call's promise
                 // resolves, delivering this token to the other call's continuation.
+                val quotedRequestKey = org.json.JSONObject.quote(requestKey)
                 webView.evaluateJavascript(
                     """(function() {
-                        var requestKey = "$requestKey"
+                        var requestKey = $quotedRequestKey
                         try {
                             var u8Identifier = ${stringToU8(identifier)}
                             obtainPoToken(u8Identifier).then(function(poTokenU8) {
@@ -384,7 +385,7 @@ class PoTokenWebView private constructor(
             // otherwise strand its connection).
             val (httpCode, body) = withContext(Dispatchers.IO) {
                 httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                    response.code to if (response.code == 200) response.body?.string() else null
+                    response.code to if (response.code == 200) response.body.string() else null
                 }
             }
             // Treat an empty 200 body as a failure too: handleResponseBody would otherwise pass

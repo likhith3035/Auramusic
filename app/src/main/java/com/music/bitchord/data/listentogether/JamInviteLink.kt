@@ -121,13 +121,19 @@ object JamInviteLink {
     private fun sanitizeServerUrl(raw: String?): String? {
         val trimmed = raw?.trim()?.trimEnd('/') ?: return null
         if (trimmed.isBlank()) return null
-        val withScheme = if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+        if (trimmed.startsWith("http://", ignoreCase = true)) return null
+        val withScheme = if (trimmed.startsWith("https://", ignoreCase = true)) {
             trimmed
-        } else {
+        } else if (!trimmed.contains("://")) {
             "https://$trimmed"
+        } else {
+            return null
         }
         val uri = runCatching { URI(withScheme) }.getOrNull() ?: return null
-        if (uri.host.isNullOrBlank()) return null
+        if (uri.scheme?.lowercase() != "https" || uri.host.isNullOrBlank()) return null
+        if (!uri.userInfo.isNullOrEmpty() || !uri.rawQuery.isNullOrEmpty() || !uri.rawFragment.isNullOrEmpty()) {
+            return null
+        }
         return withScheme
     }
 

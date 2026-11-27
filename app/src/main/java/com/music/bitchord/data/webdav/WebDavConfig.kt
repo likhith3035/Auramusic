@@ -54,6 +54,14 @@ object WebDavConfig {
         java.net.URI(normalizeUrl(url)).host?.lowercase(Locale.ROOT)
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
+    fun originOf(url: String): Triple<String, String, Int>? = runCatching {
+        val uri = java.net.URI(normalizeUrl(url))
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)?.takeIf { it == "http" || it == "https" } ?: return@runCatching null
+        val host = uri.host?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() } ?: return@runCatching null
+        val port = if (uri.port > 0) uri.port else if (scheme == "https") 443 else 80
+        Triple(scheme, host, port)
+    }.getOrNull()
+
     fun isAudioFile(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
         return ext in audioExtensions
@@ -91,5 +99,12 @@ object WebDavConfig {
 }
 
 /** Publishes the saved server's credentials to the shared HTTP client. */
-fun WebDavAuth.update(url: String, username: String, password: String) =
-    update(WebDavConfig.hostOf(url), WebDavConfig.basicAuthHeader(username, password))
+fun WebDavAuth.update(url: String, username: String, password: String) {
+    val origin = WebDavConfig.originOf(url)
+    val header = WebDavConfig.basicAuthHeader(username, password)
+    if (origin == null) {
+        updateOrigin(null, null, -1, header)
+    } else {
+        updateOrigin(origin.first, origin.second, origin.third, header)
+    }
+}
