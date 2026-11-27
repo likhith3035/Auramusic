@@ -4,14 +4,23 @@ import android.app.SearchManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
+import com.music.bitchord.data.link.ParsedYouTubeLink
+import com.music.bitchord.data.link.YouTubeLinkKind
+import com.music.bitchord.data.link.YouTubeLinkParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** What an intent from outside the app turned out to be asking for. */
 sealed interface LinkRequest {
-    /** A song, by video id — `watch?v=`, a `youtu.be` short link, a Short. */
-    data class Track(val videoId: String) : LinkRequest
+    /** A song, music video, Short, or live broadcast by video id. */
+    data class Track(
+        val videoId: String,
+        val startPositionMs: Long = 0L,
+        val playlistBrowseId: String? = null,
+        val isShort: Boolean = false,
+        val isLive: Boolean = false,
+    ) : LinkRequest
 
     /** An album, playlist or artist page, by browse id. */
     data class Page(val browseId: String) : LinkRequest
@@ -65,10 +74,8 @@ object MusicLink {
     fun consume(intent: Intent?): Boolean {
         if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false)) return false
         val request = when (intent.action) {
-            Intent.ACTION_VIEW -> intent.data?.let(::parse)
-            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
-                ?.let(::firstUrl)
-                ?.let { parse(Uri.parse(it)) }
+            Intent.ACTION_VIEW -> intent.dataString?.let(::parseText) ?: intent.data?.let(::parse)
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let(::parseText)
             // The assistant's "play <something>". An empty query is the whole
             // point of the Resume case: "play music" names nothing, and the
             // useful answer is to carry on with what was already on.
@@ -98,68 +105,25 @@ object MusicLink {
     /**
      * What a YouTube or YouTube Music URL points at, or null for one this app
      * has nothing to show for.
-     *
-     * Deliberately forgiving about the host: `music.youtube.com`,
-     * `www.youtube.com`, `m.youtube.com` and `youtu.be` all address the same
-     * catalogue with the same ids, and a link is just as likely to arrive
-     * through a share sheet — where the manifest's host list never applies —
-     * as through the browser.
      */
-    fun parse(uri: Uri): LinkRequest? {
-        val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
-        val segments = uri.pathSegments.orEmpty()
-        if (host == "youtu.be") {
-            return segments.firstOrNull()?.let(::track)
-        }
-        if (host != "youtube.com" && host != "music.youtube.com" && host != "m.youtube.com") {
-            return null
-        }
-        val list = uri.getQueryParameter("list")?.trim().orEmpty()
-        return when (segments.firstOrNull()) {
-            // A watch link often carries the playlist it was opened from as
-            // well. The video is what was tapped, so it wins; the list only
-            // stands in when the link names no video at all, which is how YT
-            // Music writes "play this album" links.
-            "watch" -> uri.getQueryParameter("v")?.let(::track) ?: playlist(list)
-            "playlist" -> playlist(list)
-            // A Short and an embed are both a bare id in the path.
-            "shorts", "embed", "v" -> segments.getOrNull(1)?.let(::track)
-            // `channel/UC…` is an artist; `browse/MPREb…` is a release. Both
-            // are browse ids already, so neither needs rewriting.
-            "channel", "browse" -> segments.getOrNull(1)?.takeIf { it.isNotBlank() }
-                ?.let(LinkRequest::Page)
-            "search" -> uri.getQueryParameter("q")?.trim()?.takeIf { it.isNotEmpty() }
-                ?.let { LinkRequest.Search(it, play = false) }
-            // A link to nothing in particular — music.youtube.com itself, an
-            // account page. Opening the app on its own tab is the right answer,
-            // and that has already happened by the time this is read.
-            else -> list.takeIf { it.isNotEmpty() }?.let { playlist(it) }
-        }
+    fun parse(uri: Uri): LinkRequest? = parseText(uri.toString())
+
+    /** Parses raw URL or share-sheet text into a typed [LinkRequest], or null if unsupported. */
+    fun parseText(text: String): LinkRequest? =
+        YouTubeLinkParser.parse(text)?.let(::fromParsed)
+
+    internal fun fromParsed(parsed: ParsedYouTubeLink): LinkRequest? = when (parsed.kind) {
+        YouTubeLinkKind.TRACK, YouTubeLinkKind.SHORTS, YouTubeLinkKind.LIVE ->
+            parsed.videoId?.let { videoId ->
+                LinkRequest.Track(
+                    videoId = videoId,
+                    startPositionMs = (parsed.startSeconds * 1000L).coerceAtLeast(0L),
+                    playlistBrowseId = parsed.playlistBrowseId,
+                    isShort = parsed.kind == YouTubeLinkKind.SHORTS,
+                    isLive = parsed.kind == YouTubeLinkKind.LIVE,
+                )
+            }
+        YouTubeLinkKind.PAGE -> parsed.browseId?.let(LinkRequest::Page)
+        YouTubeLinkKind.SEARCH -> parsed.searchQuery?.let { LinkRequest.Search(it, play = false) }
     }
-
-    private fun track(videoId: String): LinkRequest.Track? =
-        videoId.trim().takeIf { it.isNotEmpty() }?.let(LinkRequest::Track)
-
-    /**
-     * A playlist id as the browse id its page is fetched under.
-     *
-     * `VL` is the prefix every playlist browse carries — an album's
-     * `OLAK5uy_…` share id included, which is the shape a "share this album"
-     * link out of YT Music actually has.
-     */
-    private fun playlist(listId: String): LinkRequest.Page? {
-        if (listId.isEmpty()) return null
-        return LinkRequest.Page(if (listId.startsWith("VL")) listId else "VL$listId")
-    }
-
-    /**
-     * The first http(s) URL in shared text.
-     *
-     * Share sheets rarely send the bare link: YT Music sends the song's title
-     * and a newline before it, other apps wrap it in a sentence.
-     */
-    private fun firstUrl(text: String): String? =
-        URL_IN_TEXT.find(text)?.value
-
-    private val URL_IN_TEXT = Regex("""https?://\S+""")
 }
