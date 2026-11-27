@@ -200,4 +200,14 @@
     <string name="search_library_empty">ค้นหาเพลงในโฟลเดอร์เพลงในเครื่องของคุณ</string>
     <string name="search_library_hint">เพลง ศิลปิน และอัลบั้ม</string>
     <string name="search_library_no_results">ไม่มีอะไรในเพลงในเครื่องตรงกับ “%1$s”</string>
+    <string name="auto_lock_bluetooth">ล็อกอัตโนมัติไปยัง Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">ส่งเสียงเพลงไปยังลำโพง Bluetooth เท่านั้น</string>
+    <string name="download">ดาวน์โหลด</string>
+    <string name="sleep_timer">ตัวจับเวลาปิดเพลง</string>
+    <string name="video_quality">คุณภาพวิดีโอ</string>
+    <string name="video_quality_auto">อัตโนมัติ</string>
+    <string name="mix_view_bars">%1$d ห้อง</string>
+    <string name="mix_view_one_bar">1 ห้อง</string>
+    <string name="mix_view_seconds">%1$d วิ</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

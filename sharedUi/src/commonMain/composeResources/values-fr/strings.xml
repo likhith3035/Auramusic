@@ -200,4 +200,14 @@
     <string name="search_library_empty">Recherche les titres de votre dossier Musique locale.</string>
     <string name="search_library_hint">Titres, artistes et albums</string>
     <string name="search_library_no_results">Rien dans Musique locale ne correspond à « %1$s ».</string>
+    <string name="auto_lock_bluetooth">Verrouiller sur Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Diffuser la musique uniquement sur des enceintes Bluetooth</string>
+    <string name="download">Télécharger</string>
+    <string name="sleep_timer">Minuteur de veille</string>
+    <string name="video_quality">Qualité vidéo</string>
+    <string name="video_quality_auto">Auto</string>
+    <string name="mix_view_bars">%1$d mesures</string>
+    <string name="mix_view_one_bar">1 mesure</string>
+    <string name="mix_view_seconds">%1$d s</string>
+    <string name="mix_view_bpm">%1$d BPM</string>
 </resources>

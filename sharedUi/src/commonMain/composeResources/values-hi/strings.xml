@@ -200,4 +200,14 @@
     <string name="search_library_empty">आपके लोकल म्यूज़िक फ़ोल्डर के गाने खोजें.</string>
     <string name="search_library_hint">गाने, कलाकार और एल्बम</string>
     <string name="search_library_no_results">लोकल म्यूज़िक में “%1$s” से मेल खाता कुछ नहीं.</string>
+    <string name="auto_lock_bluetooth">Bluetooth पर ऑटो-लॉक</string>
+    <string name="auto_lock_bluetooth_subtitle">संगीत केवल Bluetooth स्पीकर पर चलाएं</string>
+    <string name="download">डाउनलोड करें</string>
+    <string name="sleep_timer">स्लीप टाइमर</string>
+    <string name="video_quality">वीडियो क्वालिटी</string>
+    <string name="video_quality_auto">ऑटो</string>
+    <string name="mix_view_bars">%1$d बार</string>
+    <string name="mix_view_one_bar">1 बार</string>
+    <string name="mix_view_seconds">%1$d से.</string>
+    <string name="mix_view_bpm">%1$d BPM</string>
 </resources>

@@ -200,4 +200,14 @@
     <string name="search_library_empty">Tìm các bài hát trong thư mục Nhạc cục bộ của bạn.</string>
     <string name="search_library_hint">Bài hát, nghệ sĩ và album</string>
     <string name="search_library_no_results">Không có gì trong Nhạc cục bộ khớp với “%1$s”.</string>
+    <string name="auto_lock_bluetooth">Tự động khóa Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Chỉ phát nhạc qua loa Bluetooth</string>
+    <string name="download">Tải xuống</string>
+    <string name="sleep_timer">Hẹn giờ tắt</string>
+    <string name="video_quality">Chất lượng video</string>
+    <string name="video_quality_auto">Tự động</string>
+    <string name="mix_view_bars">%1$d ô nhịp</string>
+    <string name="mix_view_one_bar">1 ô nhịp</string>
+    <string name="mix_view_seconds">%1$d giây</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

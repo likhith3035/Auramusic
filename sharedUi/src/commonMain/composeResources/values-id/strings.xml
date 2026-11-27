@@ -200,4 +200,14 @@
     <string name="search_library_empty">Cari lagu di folder Musik Lokal Anda.</string>
     <string name="search_library_hint">Lagu, Artis, dan Album</string>
     <string name="search_library_no_results">Tidak ada di Musik Lokal yang cocok dengan “%1$s”.</string>
+    <string name="auto_lock_bluetooth">Kunci otomatis ke Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Arahkan musik hanya ke speaker Bluetooth</string>
+    <string name="download">Unduh</string>
+    <string name="sleep_timer">Timer tidur</string>
+    <string name="video_quality">Kualitas video</string>
+    <string name="video_quality_auto">Otomatis</string>
+    <string name="mix_view_bars">%1$d Bar</string>
+    <string name="mix_view_one_bar">1 Bar</string>
+    <string name="mix_view_seconds">%1$d dtk</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

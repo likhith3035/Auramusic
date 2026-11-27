@@ -50,9 +50,9 @@
         android:background="@drawable/widget_brand_badge_bg"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingLeft="7dp"
+        android:paddingStart="7dp"
         android:paddingTop="3dp"
-        android:paddingRight="8dp"
+        android:paddingEnd="8dp"
         android:paddingBottom="3dp">
 
         <ImageView
@@ -64,12 +64,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="4dp"
+            android:layout_marginStart="4dp"
             android:fontFamily="@font/sf_pro_display_semibold"
             android:includeFontPadding="false"
-            android:text="AuraMusic"
+            android:text="@string/app_name"
             android:textColor="#EEFFFFFF"
-            android:textSize="10.5sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -79,8 +79,8 @@
         android:layout_gravity="bottom"
         android:gravity="center_horizontal|bottom"
         android:orientation="vertical"
-        android:paddingLeft="@dimen/widget_band_padding"
-        android:paddingRight="@dimen/widget_band_padding"
+        android:paddingStart="@dimen/widget_band_padding"
+        android:paddingEnd="@dimen/widget_band_padding"
         android:paddingBottom="4dp">
 
         <TextView
@@ -92,8 +92,8 @@
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:textColor="#FFFFFFFF"
             android:textSize="13.5sp" />
 
@@ -108,8 +108,8 @@
             android:gravity="center_horizontal"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:textColor="#A0B4DE"
             android:textSize="11sp" />
 

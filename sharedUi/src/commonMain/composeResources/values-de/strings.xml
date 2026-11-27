@@ -200,4 +200,14 @@
     <string name="search_library_empty">Durchsuche die Songs in deinem Ordner für lokale Musik.</string>
     <string name="search_library_hint">Songs, Künstler und Alben</string>
     <string name="search_library_no_results">Nichts in der lokalen Musik passt zu „%1$s“.</string>
+    <string name="auto_lock_bluetooth">Automatisch auf Bluetooth sperren</string>
+    <string name="auto_lock_bluetooth_subtitle">Musik ausschließlich über Bluetooth-Lautsprecher ausgeben</string>
+    <string name="download">Herunterladen</string>
+    <string name="sleep_timer">Sleep-Timer</string>
+    <string name="video_quality">Videoqualität</string>
+    <string name="video_quality_auto">Automatisch</string>
+    <string name="mix_view_bars">%1$d Takte</string>
+    <string name="mix_view_one_bar">1 Takt</string>
+    <string name="mix_view_seconds">%1$d Sek.</string>
+    <string name="mix_view_bpm">%1$d BPM</string>
 </resources>

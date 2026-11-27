@@ -938,7 +938,7 @@
 
     <string name="selected_account">Wybrane konto</string>
 
-    <string name="shelf_100_on_repeat">Ciągłe powtarzanie</string>
+    <string name="shelf_100_on_repeat" formatted="false">Ciągłe powtarzanie</string>
 
     <string name="shelf_artists_on_the_rise">Wschodzący artyści</string>
 

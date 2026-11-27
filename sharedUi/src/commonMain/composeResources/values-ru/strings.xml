@@ -200,4 +200,14 @@
     <string name="search_library_empty">Поиск треков в папке локальной музыки.</string>
     <string name="search_library_hint">Треки, исполнители и альбомы</string>
     <string name="search_library_no_results">В локальной музыке нет ничего, совпадающего с «%1$s».</string>
+    <string name="auto_lock_bluetooth">Автопривязка к Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Воспроизводить музыку только на Bluetooth-устройствах</string>
+    <string name="download">Загрузить</string>
+    <string name="sleep_timer">Таймер сна</string>
+    <string name="video_quality">Качество видео</string>
+    <string name="video_quality_auto">Авто</string>
+    <string name="mix_view_bars">%1$d такт.</string>
+    <string name="mix_view_one_bar">1 такт</string>
+    <string name="mix_view_seconds">%1$d сек.</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

@@ -905,7 +905,7 @@
 
     <string name="selected_account">חשבון נבחר</string>
 
-    <string name="shelf_100_on_repeat">בלופ חוזר</string>
+    <string name="shelf_100_on_repeat" formatted="false">בלופ חוזר</string>
 
     <string name="shelf_artists_on_the_rise">אמנים בצמיחה</string>
 

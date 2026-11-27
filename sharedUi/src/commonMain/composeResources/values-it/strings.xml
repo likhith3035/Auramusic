@@ -200,4 +200,14 @@
     <string name="search_library_empty">Cerca i brani nella cartella Musica locale.</string>
     <string name="search_library_hint">Brani, artisti e album</string>
     <string name="search_library_no_results">Nulla in Musica locale corrisponde a «%1$s».</string>
+    <string name="auto_lock_bluetooth">Blocco automatico su Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Invia la musica solo agli altoparlanti Bluetooth</string>
+    <string name="download">Download</string>
+    <string name="sleep_timer">Timer di spegnimento</string>
+    <string name="video_quality">Qualità video</string>
+    <string name="video_quality_auto">Auto</string>
+    <string name="mix_view_bars">%1$d battute</string>
+    <string name="mix_view_one_bar">1 battuta</string>
+    <string name="mix_view_seconds">%1$d s</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

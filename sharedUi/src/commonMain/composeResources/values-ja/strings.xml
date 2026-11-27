@@ -200,4 +200,14 @@
     <string name="search_library_empty">ローカル音楽フォルダ内の曲を検索します。</string>
     <string name="search_library_hint">曲・アーティスト・アルバム</string>
     <string name="search_library_no_results">ローカル音楽に「%1$s」に一致するものはありません。</string>
+    <string name="auto_lock_bluetooth">Bluetoothに自動ロック</string>
+    <string name="auto_lock_bluetooth_subtitle">音楽をBluetoothスピーカーのみに出力する</string>
+    <string name="download">ダウンロード</string>
+    <string name="sleep_timer">スリープタイマー</string>
+    <string name="video_quality">画質</string>
+    <string name="video_quality_auto">自動</string>
+    <string name="mix_view_bars">%1$d 小節</string>
+    <string name="mix_view_one_bar">1 小節</string>
+    <string name="mix_view_seconds">%1$d 秒</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

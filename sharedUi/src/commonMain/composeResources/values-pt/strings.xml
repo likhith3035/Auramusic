@@ -200,4 +200,14 @@
     <string name="search_library_empty">Pesquise as músicas da sua pasta de Música local.</string>
     <string name="search_library_hint">Músicas, artistas e álbuns</string>
     <string name="search_library_no_results">Nada na Música local corresponde a “%1$s”.</string>
+    <string name="auto_lock_bluetooth">Bloqueio automático no Bluetooth</string>
+    <string name="auto_lock_bluetooth_subtitle">Direcionar música apenas para caixas Bluetooth</string>
+    <string name="download">Baixar</string>
+    <string name="sleep_timer">Temporizador de sono</string>
+    <string name="video_quality">Qualidade de vídeo</string>
+    <string name="video_quality_auto">Automático</string>
+    <string name="mix_view_bars">%1$d compassos</string>
+    <string name="mix_view_one_bar">1 compasso</string>
+    <string name="mix_view_seconds">%1$d s</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>

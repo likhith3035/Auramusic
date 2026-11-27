@@ -200,4 +200,14 @@
     <string name="search_library_empty">搜索本地音乐文件夹中的歌曲。</string>
     <string name="search_library_hint">歌曲、艺人和专辑</string>
     <string name="search_library_no_results">本地音乐中没有与「%1$s」匹配的内容。</string>
+    <string name="auto_lock_bluetooth">自动锁定到蓝牙</string>
+    <string name="auto_lock_bluetooth_subtitle">仅将音乐输出到蓝牙扬声器</string>
+    <string name="download">下载</string>
+    <string name="sleep_timer">睡眠定时器</string>
+    <string name="video_quality">视频画质</string>
+    <string name="video_quality_auto">自动</string>
+    <string name="mix_view_bars">%1$d 小节</string>
+    <string name="mix_view_one_bar">1 小节</string>
+    <string name="mix_view_seconds">%1$d 秒</string>
+    <string name="mix_view_bpm">%1$d bpm</string>
 </resources>
