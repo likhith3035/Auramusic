@@ -54,7 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -88,6 +90,45 @@ fun AuraWeatherLocationSheet(
     val focusManager = LocalFocusManager.current
 
     val weather by AuraWeatherRepository.currentWeather.collectAsStateWithLifecycle()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val sheetBg = when {
+        nothingOsMode && isDark -> NothingThemeTokens.Surface
+        nothingOsMode -> Color(0xFFF3F3F7)
+        isDark -> Color(0xFF121420)
+        else -> Color(0xFFF8FAFC)
+    }
+    val cardBg = when {
+        nothingOsMode && isDark -> NothingThemeTokens.SurfaceElevated
+        nothingOsMode -> Color(0xFFE7E7EE)
+        isDark -> Color(0xFF181B29)
+        else -> Color(0xFFF1F5F9)
+    }
+    val subtleSurfaceBg = when {
+        nothingOsMode && isDark -> NothingThemeTokens.Surface
+        nothingOsMode -> Color(0xFFE7E7EE)
+        isDark -> Color.White.copy(alpha = 0.08f)
+        else -> Color(0xFFE2E8F0)
+    }
+    val subtleActionBg = when {
+        nothingOsMode && isDark -> NothingThemeTokens.SurfaceElevated
+        nothingOsMode -> Color(0xFFE7E7EE)
+        isDark -> Color.White.copy(alpha = 0.06f)
+        else -> Color(0xFFE2E8F0)
+    }
+    val borderStrokeColor = when {
+        nothingOsMode && isDark -> NothingThemeTokens.Border
+        nothingOsMode -> Color(0xFFD4D4DC)
+        isDark -> Color.White.copy(alpha = 0.12f)
+        else -> Color(0xFFCBD5E1)
+    }
+    val primaryText = if (isDark) Color.White else Color(0xFF0F172A)
+    val mutedText = when {
+        nothingOsMode && isDark -> NothingThemeTokens.MutedText
+        isDark -> Color.White.copy(alpha = 0.60f)
+        else -> Color(0xFF475569)
+    }
+    val accentBlueOrRed = if (nothingOsMode) NothingThemeTokens.Red else if (isDark) Color(0xFF00D2FF) else Color(0xFF0284C7)
+    val skyInfoAccent = if (nothingOsMode) mutedText else if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
 
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<AuraLocationResult>>(emptyList()) }
@@ -110,7 +151,7 @@ fun AuraWeatherLocationSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (nothingOsMode) NothingThemeTokens.Surface else Color(0xFF121420),
+        containerColor = sheetBg,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         dragHandle = {
             Box(
@@ -119,7 +160,7 @@ fun AuraWeatherLocationSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(percent = 50))
-                    .background(if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.22f)),
+                    .background(if (nothingOsMode && isDark) NothingThemeTokens.Border else if (isDark) Color.White.copy(alpha = 0.22f) else Color(0xFF94A3B8).copy(alpha = 0.45f)),
             )
         },
     ) {
@@ -144,14 +185,14 @@ fun AuraWeatherLocationSheet(
                             fontSize = if (nothingOsMode) 13.sp else 16.sp,
                             letterSpacing = if (nothingOsMode) 1.2.sp else (-0.2).sp,
                         ),
-                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                        color = primaryText,
                     )
                     Text(
                         text = if (weather.isCustomLocation) "Custom location selected" else "Auto-detected via coarse IP",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                         ),
-                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.6f),
+                        color = mutedText,
                     )
                 }
 
@@ -167,7 +208,7 @@ fun AuraWeatherLocationSheet(
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = "Close",
-                        tint = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.75f),
+                        tint = primaryText.copy(alpha = 0.75f),
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -178,10 +219,10 @@ fun AuraWeatherLocationSheet(
             // Current Weather Summary Card
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color(0xFF181B29),
+                color = cardBg,
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.08f),
+                    color = borderStrokeColor,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -197,16 +238,13 @@ fun AuraWeatherLocationSheet(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(
-                                        if (nothingOsMode) NothingThemeTokens.Red.copy(alpha = 0.16f)
-                                        else Color(0xFF00D2FF).copy(alpha = 0.16f)
-                                    ),
+                                    .background(accentBlueOrRed.copy(alpha = 0.16f)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.LocationOn,
                                     contentDescription = null,
-                                    tint = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
+                                    tint = accentBlueOrRed,
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
@@ -218,7 +256,7 @@ fun AuraWeatherLocationSheet(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp,
                                     ),
-                                    color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                                    color = primaryText,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -226,7 +264,7 @@ fun AuraWeatherLocationSheet(
                                     Text(
                                         text = weather.country!!,
                                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.55f),
+                                        color = mutedText,
                                     )
                                 }
                             }
@@ -235,10 +273,10 @@ fun AuraWeatherLocationSheet(
                         // °C / °F Switcher Pill
                         Surface(
                             shape = RoundedCornerShape(percent = 50),
-                            color = if (nothingOsMode) NothingThemeTokens.Surface else Color.White.copy(alpha = 0.08f),
+                            color = subtleSurfaceBg,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
-                                if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.15f),
+                                borderStrokeColor,
                             ),
                             modifier = Modifier.clickable {
                                 AuraWeatherRepository.toggleTemperatureUnit()
@@ -250,9 +288,7 @@ fun AuraWeatherLocationSheet(
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(percent = 50),
-                                    color = if (!weather.isFahrenheit) {
-                                        if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)
-                                    } else Color.Transparent,
+                                    color = if (!weather.isFahrenheit) accentBlueOrRed else Color.Transparent,
                                 ) {
                                     Text(
                                         text = "°C",
@@ -260,15 +296,13 @@ fun AuraWeatherLocationSheet(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 10.sp,
                                         ),
-                                        color = if (!weather.isFahrenheit) Color.White else (if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.5f)),
+                                        color = if (!weather.isFahrenheit) Color.White else mutedText,
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                     )
                                 }
                                 Surface(
                                     shape = RoundedCornerShape(percent = 50),
-                                    color = if (weather.isFahrenheit) {
-                                        if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)
-                                    } else Color.Transparent,
+                                    color = if (weather.isFahrenheit) accentBlueOrRed else Color.Transparent,
                                 ) {
                                     Text(
                                         text = "°F",
@@ -276,7 +310,7 @@ fun AuraWeatherLocationSheet(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 10.sp,
                                         ),
-                                        color = if (weather.isFahrenheit) Color.White else (if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.5f)),
+                                        color = if (weather.isFahrenheit) Color.White else mutedText,
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                     )
                                 }
@@ -299,7 +333,7 @@ fun AuraWeatherLocationSheet(
                                 fontSize = 36.sp,
                                 letterSpacing = (-1).sp,
                             ),
-                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                            color = primaryText,
                         )
 
                         Text(
@@ -308,7 +342,7 @@ fun AuraWeatherLocationSheet(
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 14.sp,
                             ),
-                            color = if (nothingOsMode) NothingThemeTokens.White else Color(0xFF7DD3FC),
+                            color = if (nothingOsMode) primaryText else if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1),
                         )
                     }
 
@@ -324,7 +358,7 @@ fun AuraWeatherLocationSheet(
                                     Icon(
                                         imageVector = Icons.Rounded.WaterDrop,
                                         contentDescription = null,
-                                        tint = if (nothingOsMode) NothingThemeTokens.MutedText else Color(0xFF38BDF8),
+                                        tint = skyInfoAccent,
                                         modifier = Modifier.size(13.dp),
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -333,7 +367,7 @@ fun AuraWeatherLocationSheet(
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontSize = 10.5.sp,
                                         ),
-                                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.65f),
+                                        color = mutedText,
                                     )
                                 }
                             }
@@ -342,7 +376,7 @@ fun AuraWeatherLocationSheet(
                                     Icon(
                                         imageVector = Icons.Rounded.Air,
                                         contentDescription = null,
-                                        tint = if (nothingOsMode) NothingThemeTokens.MutedText else Color(0xFF38BDF8),
+                                        tint = skyInfoAccent,
                                         modifier = Modifier.size(13.dp),
                                     )
                                     Spacer(Modifier.width(4.dp))
@@ -351,7 +385,7 @@ fun AuraWeatherLocationSheet(
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontSize = 10.5.sp,
                                         ),
-                                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.65f),
+                                        color = mutedText,
                                     )
                                 }
                             }
@@ -366,10 +400,10 @@ fun AuraWeatherLocationSheet(
             if (weather.isCustomLocation) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.06f),
+                    color = subtleActionBg,
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.10f),
+                        borderStrokeColor,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -387,7 +421,7 @@ fun AuraWeatherLocationSheet(
                         Icon(
                             imageVector = Icons.Rounded.MyLocation,
                             contentDescription = null,
-                            tint = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
+                            tint = accentBlueOrRed,
                             modifier = Modifier.size(14.dp),
                         )
                         Spacer(Modifier.width(6.dp))
@@ -397,7 +431,7 @@ fun AuraWeatherLocationSheet(
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 11.5.sp,
                             ),
-                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                            color = primaryText,
                         )
                     }
                 }
@@ -419,7 +453,7 @@ fun AuraWeatherLocationSheet(
                             fontSize = 11.5.sp,
                             letterSpacing = if (nothingOsMode) 1.sp else (-0.2).sp,
                         ),
-                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                        color = primaryText,
                     )
                     val currentOverride = AuraWeatherRepository.currentManualVisualOverride()
                     if (currentOverride != null) {
@@ -429,7 +463,7 @@ fun AuraWeatherLocationSheet(
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 10.5.sp,
                             ),
-                            color = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF38BDF8),
+                            color = skyInfoAccent.let { if (nothingOsMode) NothingThemeTokens.Red else it },
                         )
                     }
                 }
@@ -459,18 +493,10 @@ fun AuraWeatherLocationSheet(
                         val isSelected = (currentOverride == sceneType) || (sceneType == null && currentOverride == null)
                         Surface(
                             shape = RoundedCornerShape(percent = 50),
-                            color = if (isSelected) {
-                                if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)
-                            } else {
-                                if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.08f)
-                            },
+                            color = if (isSelected) accentBlueOrRed else subtleActionBg,
                             border = androidx.compose.foundation.BorderStroke(
                                 width = 1.dp,
-                                color = if (isSelected) {
-                                    Color.Transparent
-                                } else {
-                                    if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.12f)
-                                },
+                                color = if (isSelected) Color.Transparent else borderStrokeColor,
                             ),
                             modifier = Modifier.clickable {
                                 AuraWeatherRepository.setManualVisualOverride(sceneType)
@@ -482,7 +508,7 @@ fun AuraWeatherLocationSheet(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     fontSize = 11.sp,
                                 ),
-                                color = if (isSelected) Color.White else (if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.75f)),
+                                color = if (isSelected) Color.White else primaryText.copy(alpha = 0.78f),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
@@ -495,10 +521,10 @@ fun AuraWeatherLocationSheet(
             // City Search Box
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color(0xFF181B29),
+                color = cardBg,
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.12f),
+                    color = borderStrokeColor,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -509,7 +535,7 @@ fun AuraWeatherLocationSheet(
                     Icon(
                         imageVector = Icons.Rounded.Search,
                         contentDescription = null,
-                        tint = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.45f),
+                        tint = mutedText,
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -518,7 +544,7 @@ fun AuraWeatherLocationSheet(
                             Text(
                                 text = "Search any city or town worldwide...",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
-                                color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.4f),
+                                color = mutedText,
                             )
                         }
                         BasicTextField(
@@ -527,9 +553,9 @@ fun AuraWeatherLocationSheet(
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.5.sp,
-                                color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                                color = primaryText,
                             ),
-                            cursorBrush = SolidColor(if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)),
+                            cursorBrush = SolidColor(accentBlueOrRed),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                             modifier = Modifier.fillMaxWidth(),
@@ -539,17 +565,23 @@ fun AuraWeatherLocationSheet(
                         CircularProgressIndicator(
                             modifier = Modifier.size(14.dp),
                             strokeWidth = 1.5.dp,
-                            color = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
+                            color = accentBlueOrRed,
                         )
                     } else if (searchQuery.isNotEmpty()) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Clear search",
-                            tint = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.45f),
+                        Box(
                             modifier = Modifier
-                                .size(16.dp)
-                                .clickable { searchQuery = "" },
-                        )
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button) { searchQuery = "" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Clear search",
+                                tint = mutedText,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -573,19 +605,20 @@ fun AuraWeatherLocationSheet(
                             Text(
                                 text = "No matching cities found",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.45f),
+                                color = mutedText,
                             )
                         }
                     }
                 }
 
-                items(searchResults) { result ->
+                items(
+                    items = searchResults,
+                    key = { "${it.name}_${it.country}_${it.latitude}_${it.longitude}" },
+                ) { result ->
                     val isSelected = weather.city == result.name && weather.isCustomLocation
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (isSelected) {
-                            if (nothingOsMode) NothingThemeTokens.SurfaceElevated else Color.White.copy(alpha = 0.10f)
-                        } else Color.Transparent,
+                        color = if (isSelected) subtleSurfaceBg else Color.Transparent,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -611,7 +644,7 @@ fun AuraWeatherLocationSheet(
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.5.sp,
                                     ),
-                                    color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                                    color = primaryText,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -622,7 +655,7 @@ fun AuraWeatherLocationSheet(
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontSize = 11.sp,
                                         ),
-                                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.55f),
+                                        color = mutedText,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -633,7 +666,7 @@ fun AuraWeatherLocationSheet(
                                 Icon(
                                     imageVector = Icons.Rounded.Check,
                                     contentDescription = "Selected",
-                                    tint = if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF),
+                                    tint = accentBlueOrRed,
                                     modifier = Modifier.size(16.dp),
                                 )
                             }

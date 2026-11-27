@@ -1,9 +1,13 @@
 package com.music.bitchord.data.telemetry
 
+import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.Http
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -20,8 +24,10 @@ import java.util.UUID
  */
 object AuraTelemetryClient {
 
+    private const val TAG = "AuraTelemetry"
     private const val HEARTBEAT_ENDPOINT = "https://auramusic-stats.onrender.com/api/heartbeat"
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var storageDir: File? = null
     private var cachedInstallId: String? = null
@@ -51,16 +57,14 @@ object AuraTelemetryClient {
 
         val installId = cachedInstallId ?: getOrCreateInstallId()
 
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             try {
-                val jsonPayload = """
-                    {
-                        "installId": "$installId",
-                        "version": "$version",
-                        "platform": "$platform",
-                        "osVersion": "$osVersion"
-                    }
-                """.trimIndent()
+                val jsonPayload = buildJsonObject {
+                    put("installId", installId)
+                    put("version", version)
+                    put("platform", platform)
+                    put("osVersion", osVersion)
+                }.toString()
 
                 val request = Request.Builder()
                     .url(HEARTBEAT_ENDPOINT)
@@ -72,10 +76,12 @@ object AuraTelemetryClient {
                     if (response.isSuccessful) {
                         lastPingDate = today
                         saveStoredState(today)
+                    } else {
+                        Log.w(TAG, "Heartbeat failed with HTTP ${response.code}")
                     }
                 }
-            } catch (_: Exception) {
-                // Silently swallow network exceptions
+            } catch (e: Exception) {
+                Log.d(TAG, "Heartbeat skipped: ${e.message ?: e::class.simpleName}")
             }
         }
     }
@@ -91,8 +97,8 @@ object AuraTelemetryClient {
             if (dateFile.exists()) {
                 lastPingDate = dateFile.readText().trim()
             }
-        } catch (_: Exception) {
-            // Ignore storage read errors
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load telemetry state: ${e.message}")
         }
     }
 
@@ -104,8 +110,8 @@ object AuraTelemetryClient {
         if (dir != null && dir.exists()) {
             try {
                 File(dir, "aura_install_id.txt").writeText(id)
-            } catch (_: Exception) {
-                // Ignore storage write errors
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to persist install ID: ${e.message}")
             }
         }
         return id
@@ -117,8 +123,8 @@ object AuraTelemetryClient {
         val dir = storageDir ?: return
         try {
             File(dir, "aura_last_ping.txt").writeText(today)
-        } catch (_: Exception) {
-            // Ignore storage write errors
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to save last ping date: ${e.message}")
         }
     }
 }

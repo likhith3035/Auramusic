@@ -123,4 +123,62 @@ class AuraWeatherSolarTest {
         assertEquals(WeatherVisualType.RAIN, rainyDuringSunset.visualType)
         assertEquals("Rainy", rainyDuringSunset.label)
     }
+
+    @Test
+    fun initRestoresPersistedWeatherCacheAndFahrenheitUnit() {
+        val dir = java.nio.file.Files.createTempDirectory("aura_weather_cache_test").toFile()
+        try {
+            AuraWeatherRepository.resetForTests()
+            AuraWeatherRepository.init(dir)
+            AuraWeatherRepository.setTemperatureUnit(true)
+
+            val cacheFile = java.io.File(dir, "aura_weather_cache.json")
+            cacheFile.writeText(
+                """
+                {
+                  "isFahrenheit": true,
+                  "customLocation": {
+                    "name": "Tokyo",
+                    "country": "Japan",
+                    "admin1": "Tokyo",
+                    "latitude": 35.6762,
+                    "longitude": 139.6503
+                  },
+                  "cachedLat": 35.6762,
+                  "cachedLon": 139.6503,
+                  "cachedCity": "Tokyo",
+                  "cachedCountry": "Japan",
+                  "cachedWeatherCode": 61,
+                  "cachedTemperatureC": 20,
+                  "cachedHumidity": 80,
+                  "cachedWindSpeedKmH": 12.5,
+                  "cachedApiIsDay": false,
+                  "cachedUtcOffsetSeconds": 32400,
+                  "lastFetchTimeMs": ${System.currentTimeMillis()}
+                }
+                """.trimIndent(),
+            )
+
+            AuraWeatherRepository.resetForTests()
+            AuraWeatherRepository.init(dir)
+
+            val restored = AuraWeatherRepository.currentWeather.value
+            assertEquals("Tokyo", restored.city)
+            assertEquals(true, restored.isFahrenheit)
+            assertEquals(true, restored.isCustomLocation)
+            assertEquals(20, restored.temperatureC)
+            assertEquals("68°F", restored.displayTemperature)
+            assertEquals(WeatherVisualType.RAIN, restored.visualType)
+            assertEquals("Rainy", restored.conditionLabel)
+            assertEquals(false, restored.isDay)
+
+            // Corrupt JSON should never crash init
+            cacheFile.writeText("{not valid json")
+            AuraWeatherRepository.resetForTests()
+            AuraWeatherRepository.init(dir)
+        } finally {
+            AuraWeatherRepository.resetForTests()
+            dir.deleteRecursively()
+        }
+    }
 }

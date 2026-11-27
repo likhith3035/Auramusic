@@ -6,29 +6,33 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -41,24 +45,31 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.weather.AuraWeatherRepository
+import com.music.bitchord.ui.AppUi
 import com.music.bitchord.ui.player.PlayerSettings
+import com.music.bitchord.ui.rememberIsForeground
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.ui.components.PAGE_GUTTER
@@ -255,15 +266,14 @@ enum class TimeOfDay(
     fun pickSubtitle(): String = subtitles.random()
 
     companion object {
-        fun current(): TimeOfDay {
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            return when (hour) {
-                in 5..11 -> MORNING
-                in 12..16 -> AFTERNOON
-                in 17..21 -> EVENING
-                else -> NIGHT
-            }
+        fun fromHour(hour: Int): TimeOfDay = when (hour) {
+            in 5..11 -> MORNING
+            in 12..16 -> AFTERNOON
+            in 17..21 -> EVENING
+            else -> NIGHT
         }
+
+        fun current(): TimeOfDay = fromHour(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
     }
 }
 
@@ -278,7 +288,8 @@ fun AuraGreetingHeader(
     accountName: String?,
     nothingOsMode: Boolean,
     modifier: Modifier = Modifier,
-    timeOfDay: TimeOfDay = remember { TimeOfDay.current() },
+    topInset: Dp = 0.dp,
+    timeOfDay: TimeOfDay? = null,
     currentSongTitle: String? = null,
     isPlaying: Boolean = false,
     onResumeClick: (() -> Unit)? = null,
@@ -290,6 +301,7 @@ fun AuraGreetingHeader(
 
     val weather by AuraWeatherRepository.currentWeather.collectAsStateWithLifecycle()
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val isForeground = rememberIsForeground()
     var showWeatherSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -303,9 +315,10 @@ fun AuraGreetingHeader(
         )
     }
 
-    // Real-time ticking clock aligned to minute boundaries
+    // Real-time ticking clock aligned to minute boundaries (pauses while backgrounded)
     var clockCalendar by remember { mutableStateOf(Calendar.getInstance()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isForeground) {
+        if (!isForeground) return@LaunchedEffect
         while (true) {
             clockCalendar = Calendar.getInstance()
             AuraWeatherRepository.refreshCelestialState()
@@ -326,220 +339,377 @@ fun AuraGreetingHeader(
         SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(clockCalendar.time)
     }
 
-    val headlineGreeting = remember(timeOfDay, firstName) {
+    val currentHour = clockCalendar.get(Calendar.HOUR_OF_DAY)
+    val effectiveTimeOfDay = remember(timeOfDay, currentHour) {
+        timeOfDay ?: TimeOfDay.fromHour(currentHour)
+    }
+
+    val headlineGreeting = remember(effectiveTimeOfDay, firstName) {
         if (!firstName.isNullOrBlank()) {
-            "${timeOfDay.greeting}, $firstName"
+            "${effectiveTimeOfDay.greeting}, $firstName"
         } else {
-            timeOfDay.greeting
+            effectiveTimeOfDay.greeting
+        }
+    }
+
+    val ambientTimeSubtitle = remember(effectiveTimeOfDay) {
+        effectiveTimeOfDay.pickSubtitle()
+    }
+
+    val weatherSummary = remember(weather) {
+        buildString {
+            append(weather.displayTemperature)
+            append(" · ")
+            append(weather.conditionLabel)
+            if (!weather.city.isNullOrBlank()) {
+                append(" · ")
+                append(weather.city)
+            }
         }
     }
 
     val effectiveSubtitle = when {
         !currentSongTitle.isNullOrBlank() && isPlaying -> "Playing - $currentSongTitle"
         !currentSongTitle.isNullOrBlank() && !isPlaying -> "Paused - $currentSongTitle"
-        else -> "${weather.displayTemperature} · ${weather.conditionLabel}${if (!weather.city.isNullOrBlank()) " · " + weather.city else ""}"
+        else -> ambientTimeSubtitle
     }
 
-    // Animated equalizing soundwave bars for playback indicator
-    val infiniteTransition = rememberInfiniteTransition(label = "greeting_pulse")
-    val bar1 by infiniteTransition.animateFloat(
-        initialValue = 4f, targetValue = 13f,
-        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "gb1",
-    )
-    val bar2 by infiniteTransition.animateFloat(
-        initialValue = 11f, targetValue = 5f,
-        animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "gb2",
-    )
-    val bar3 by infiniteTransition.animateFloat(
-        initialValue = 6f, targetValue = 15f,
-        animationSpec = infiniteRepeatable(tween(480, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "gb3",
-    )
+    val appHost = remember { runCatching { AppUi.host }.getOrNull() }
+    val fallbackClockFlow = remember(appHost) {
+        if (appHost == null) kotlinx.coroutines.flow.MutableStateFlow(0) else null
+    }
+    val persistedClockIndex by (appHost?.homeClockStyleIndex ?: fallbackClockFlow!!).collectAsStateWithLifecycle()
+    var localClockStyleIndex by remember { mutableIntStateOf(0) }
+    val activeClockIndex = if (appHost != null) persistedClockIndex else localClockStyleIndex
 
-    // Frameless, full-bleed atmospheric canopy with living celestial canvas
+    val isDarkBackdrop = nothingOsMode || MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val blendColor = if (nothingOsMode) NothingThemeTokens.Black else MaterialTheme.colorScheme.background
+    val primaryInk = when {
+        nothingOsMode -> NothingThemeTokens.White
+        isDarkBackdrop -> Color.White
+        else -> Color(0xFF0F172A)
+    }
+    val secondaryInk = when {
+        nothingOsMode -> NothingThemeTokens.MutedText
+        isDarkBackdrop -> Color.White.copy(alpha = 0.80f)
+        else -> Color(0xFF334155)
+    }
+    val subtleInk = when {
+        nothingOsMode -> NothingThemeTokens.MutedText
+        isDarkBackdrop -> Color.White.copy(alpha = 0.72f)
+        else -> Color(0xFF475569)
+    }
+    val topContentPad = (topInset + 4.dp).coerceAtLeast(12.dp)
+
+    // Frameless, edge-feathered atmospheric canopy with living celestial canvas
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp),
+            .height(topInset + 204.dp),
     ) {
-        // Living weather canvas rendering photorealistic Sun / Moon and weather particle effects
         LivingWeatherCanvas(
             visualType = weather.visualType,
-            blendColor = if (nothingOsMode) NothingThemeTokens.Black else Color(0xFF0C0D14),
+            blendColor = blendColor,
             reduceAnimation = reduceAnimation,
             isDay = weather.isDay,
+            lightMode = !isDarkBackdrop,
+            topInset = topInset,
             modifier = Modifier.fillMaxSize(),
         )
 
-        var clockStyleIndex by remember { mutableStateOf(0) }
-        val activeClockStyle = AuraClockStyle.values()[clockStyleIndex % AuraClockStyle.values().size]
+        // Subtle tap target on the right celestial sky area for opening weather/location controls
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(top = topContentPad, end = 12.dp, bottom = 18.dp)
+                .width(120.dp)
+                .height(150.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .clickable { showWeatherSheet = true },
+        )
+
+        val styles = AuraClockStyle.entries
+        val activeClockStyle = styles[activeClockIndex.mod(styles.size)]
         val clockFontFamily = when {
             nothingOsMode || activeClockStyle.useMonospace -> FontFamily.Monospace
             activeClockStyle.useSerif -> FontFamily.Serif
             else -> MaterialTheme.typography.displayLarge.fontFamily ?: FontFamily.SansSerif
         }
-        val bodyFontFamily = if (nothingOsMode) FontFamily.Monospace else (MaterialTheme.typography.bodyMedium.fontFamily ?: FontFamily.SansSerif)
+        val bodyFontFamily = if (nothingOsMode) {
+            FontFamily.Monospace
+        } else {
+            MaterialTheme.typography.bodyMedium.fontFamily ?: FontFamily.SansSerif
+        }
+        val textShadowColor = if (isDarkBackdrop) {
+            Color.Black.copy(alpha = activeClockStyle.shadowAlpha)
+        } else {
+            Color.White.copy(alpha = 0.45f)
+        }
 
-        // Content overlay: Left side has clock, date, greeting, and subtitle (mood cards strip removed; height reduced cleanly)
-        // Top padding ensures clean separation from top bar actions and status bar
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 14.dp),
-            verticalArrangement = Arrangement.Top,
+                .padding(start = 20.dp, end = 20.dp, top = topContentPad, bottom = 14.dp),
         ) {
-            // Top Section: Real-Time Digital Clock & Date with tap-to-cycle typography personality
+            val celestialReserve = if (maxWidth < 360.dp) 64.dp else 92.dp
             Column(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable {
-                        clockStyleIndex = (clockStyleIndex + 1) % AuraClockStyle.values().size
-                    },
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Top,
             ) {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
+                // Top Section: Real-Time Digital Clock & Date with persisted tap-to-cycle font personality
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button) {
+                            val next = (activeClockIndex + 1).mod(styles.size)
+                            if (appHost != null) {
+                                appHost.setHomeClockStyleIndex(next)
+                            } else {
+                                localClockStyleIndex = next
+                            }
+                        },
                 ) {
-                    Text(
-                        text = clockTime,
-                        style = TextStyle(
-                            fontFamily = clockFontFamily,
-                            fontWeight = activeClockStyle.fontWeight,
-                            fontSize = activeClockStyle.fontSize.sp,
-                            letterSpacing = activeClockStyle.letterSpacing.sp,
-                            lineHeight = activeClockStyle.fontSize.sp,
-                            shadow = Shadow(
-                                color = Color.Black.copy(alpha = activeClockStyle.shadowAlpha),
-                                offset = Offset(0f, 3f),
-                                blurRadius = 8f,
-                            ),
-                        ),
-                        color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
-                    )
-                    if (clockPeriod.isNotBlank()) {
-                        Spacer(Modifier.width(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
                         Text(
-                            text = clockPeriod,
+                            text = clockTime,
                             style = TextStyle(
                                 fontFamily = clockFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp,
-                                letterSpacing = 0.5.sp,
+                                fontWeight = activeClockStyle.fontWeight,
+                                fontSize = activeClockStyle.fontSize.sp,
+                                letterSpacing = activeClockStyle.letterSpacing.sp,
+                                lineHeight = activeClockStyle.fontSize.sp,
                                 shadow = Shadow(
-                                    color = Color.Black.copy(alpha = 0.45f),
-                                    offset = Offset(0f, 2f),
-                                    blurRadius = 6f,
+                                    color = textShadowColor,
+                                    offset = Offset(0f, 3f),
+                                    blurRadius = 8f,
                                 ),
                             ),
-                            color = if (nothingOsMode) NothingThemeTokens.White else Color.White.copy(alpha = 0.90f),
-                            modifier = Modifier.padding(bottom = 6.dp),
+                            color = primaryInk,
                         )
+                        if (clockPeriod.isNotBlank()) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = clockPeriod,
+                                style = TextStyle(
+                                    fontFamily = clockFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 19.sp,
+                                    letterSpacing = 0.5.sp,
+                                    shadow = Shadow(
+                                        color = textShadowColor.copy(alpha = (textShadowColor.alpha * 0.85f).coerceIn(0f, 1f)),
+                                        offset = Offset(0f, 2f),
+                                        blurRadius = 6f,
+                                    ),
+                                ),
+                                color = primaryInk.copy(alpha = 0.90f),
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
                     }
-                }
 
-                Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(3.dp))
 
-                Text(
-                    text = clockDate,
-                    style = TextStyle(
-                        fontFamily = bodyFontFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.5.sp,
-                        letterSpacing = 0.2.sp,
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.35f),
-                            offset = Offset(0f, 1.5f),
-                            blurRadius = 4f,
-                        ),
-                    ),
-                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.88f),
-                )
-            }
-
-            Spacer(Modifier.height(22.dp))
-
-            // Middle Section: Dynamic Headline Greeting & Subtitle (Playback or Weather)
-            Column {
-                Text(
-                    text = headlineGreeting,
-                    style = TextStyle(
-                        fontFamily = bodyFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        letterSpacing = (-0.4).sp,
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.45f),
-                            offset = Offset(0f, 2f),
-                            blurRadius = 6f,
-                        ),
-                    ),
-                    color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Spacer(Modifier.height(3.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .then(
-                            if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                                Modifier.clickable { onResumeClick() }
-                            } else {
-                                Modifier.clickable { showWeatherSheet = true }
-                            }
-                        ),
-                ) {
-                    if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Resume",
-                            tint = if (nothingOsMode && isPlaying) NothingThemeTokens.Red else Color.White,
-                            modifier = Modifier.size(12.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                    }
                     Text(
-                        text = effectiveSubtitle,
+                        text = clockDate,
                         style = TextStyle(
                             fontFamily = bodyFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp,
-                            lineHeight = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.5.sp,
+                            letterSpacing = 0.2.sp,
                             shadow = Shadow(
-                                color = Color.Black.copy(alpha = 0.40f),
+                                color = textShadowColor.copy(alpha = (textShadowColor.alpha * 0.70f).coerceIn(0f, 1f)),
                                 offset = Offset(0f, 1.5f),
                                 blurRadius = 4f,
                             ),
                         ),
-                        color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.78f),
+                        color = secondaryInk,
+                    )
+                }
+
+                Spacer(Modifier.height(7.dp))
+
+                // Always-accessible tappable weather pill (even while music is playing)
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = when {
+                        nothingOsMode -> NothingThemeTokens.SurfaceElevated.copy(alpha = 0.75f)
+                        isDarkBackdrop -> Color.White.copy(alpha = 0.11f)
+                        else -> Color.White.copy(alpha = 0.58f)
+                    },
+                    border = BorderStroke(
+                        width = 0.8.dp,
+                        color = when {
+                            nothingOsMode -> NothingThemeTokens.Border
+                            isDarkBackdrop -> Color.White.copy(alpha = 0.14f)
+                            else -> Color(0xFF0F172A).copy(alpha = 0.10f)
+                        },
+                    ),
+                    modifier = Modifier
+                        .padding(end = celestialReserve)
+                        .heightIn(min = 32.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .clickable(role = Role.Button) { showWeatherSheet = true },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.LocationOn,
+                            contentDescription = "Weather & location",
+                            tint = if (nothingOsMode) NothingThemeTokens.Red else secondaryInk,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = weatherSummary,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = bodyFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 11.5.sp,
+                            ),
+                            color = primaryInk.copy(alpha = 0.90f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Bottom Section: Dynamic Headline Greeting & Playback/Atmospheric Subtitle
+                Column(modifier = Modifier.padding(end = celestialReserve)) {
+                    Text(
+                        text = headlineGreeting,
+                        style = TextStyle(
+                            fontFamily = bodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            letterSpacing = (-0.4).sp,
+                            shadow = Shadow(
+                                color = textShadowColor.copy(alpha = (textShadowColor.alpha * 0.85f).coerceIn(0f, 1f)),
+                                offset = Offset(0f, 2f),
+                                blurRadius = 6f,
+                            ),
+                        ),
+                        color = primaryInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (isPlaying && !currentSongTitle.isNullOrBlank()) {
-                        Spacer(Modifier.width(6.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.Bottom,
-                            modifier = Modifier.height(10.dp),
-                        ) {
-                            listOf(bar1, bar2, bar3).forEach { barH ->
-                                Box(
-                                    modifier = Modifier
-                                        .width(2.dp)
-                                        .height((barH * 0.7f).dp)
-                                        .clip(RoundedCornerShape(percent = 50))
-                                        .background(if (nothingOsMode) NothingThemeTokens.Red else Color(0xFF00D2FF)),
-                                )
-                            }
+
+                    Spacer(Modifier.height(3.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .heightIn(min = 32.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .then(
+                                if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                                    Modifier.clickable(role = Role.Button) { onResumeClick() }
+                                } else {
+                                    Modifier.clickable(role = Role.Button) { showWeatherSheet = true }
+                                },
+                            ),
+                    ) {
+                        if (onResumeClick != null && !currentSongTitle.isNullOrBlank()) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Resume",
+                                tint = if (nothingOsMode && isPlaying) NothingThemeTokens.Red else primaryInk,
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = effectiveSubtitle,
+                            style = TextStyle(
+                                fontFamily = bodyFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp,
+                                lineHeight = 17.sp,
+                                shadow = Shadow(
+                                    color = textShadowColor.copy(alpha = (textShadowColor.alpha * 0.72f).coerceIn(0f, 1f)),
+                                    offset = Offset(0f, 1.5f),
+                                    blurRadius = 4f,
+                                ),
+                            ),
+                            color = subtleInk,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (isPlaying && !currentSongTitle.isNullOrBlank()) {
+                            Spacer(Modifier.width(6.dp))
+                            GreetingWaveformBars(
+                                tint = if (nothingOsMode) NothingThemeTokens.Red else if (isDarkBackdrop) Color(0xFF00D2FF) else Color(0xFF0284C7),
+                                animated = !reduceAnimation && isForeground,
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GreetingWaveformBars(
+    tint: Color,
+    animated: Boolean,
+) {
+    // Only instantiate the infinite transition while playing and motion is enabled;
+    // draw directly inside Canvas so parent header layout never invalidates per frame.
+    if (!animated) {
+        Canvas(modifier = Modifier.size(width = 10.dp, height = 10.dp)) {
+            val barW = 2.dp.toPx()
+            val gap = 2.dp.toPx()
+            val corner = CornerRadius(barW * 0.5f, barW * 0.5f)
+            val heights = floatArrayOf(0.55f, 0.90f, 0.45f)
+            for (i in 0..2) {
+                val h = size.height * heights[i]
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(i * (barW + gap), size.height - h),
+                    size = Size(barW, h),
+                    cornerRadius = corner,
+                )
+            }
+        }
+        return
+    }
+
+    val transition = rememberInfiniteTransition(label = "greeting_pulse")
+    val bar1 = transition.animateFloat(
+        initialValue = 0.28f,
+        targetValue = 0.92f,
+        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "gb1",
+    )
+    val bar2 = transition.animateFloat(
+        initialValue = 0.78f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "gb2",
+    )
+    val bar3 = transition.animateFloat(
+        initialValue = 0.42f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(480, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "gb3",
+    )
+    Canvas(modifier = Modifier.size(width = 10.dp, height = 10.dp)) {
+        val barW = 2.dp.toPx()
+        val gap = 2.dp.toPx()
+        val corner = CornerRadius(barW * 0.5f, barW * 0.5f)
+        val h1 = size.height * bar1.value
+        val h2 = size.height * bar2.value
+        val h3 = size.height * bar3.value
+        drawRoundRect(tint, Offset(0f, size.height - h1), Size(barW, h1), corner)
+        drawRoundRect(tint, Offset(barW + gap, size.height - h2), Size(barW, h2), corner)
+        drawRoundRect(tint, Offset((barW + gap) * 2f, size.height - h3), Size(barW, h3), corner)
     }
 }
 
@@ -553,6 +723,7 @@ fun FeatureHighlightsStrip(
     nothingOsMode: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
@@ -560,13 +731,35 @@ fun FeatureHighlightsStrip(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
     ) {
-        items(AuraFeature.values()) { feature ->
+        items(
+            items = AuraFeature.entries,
+            key = { it.name },
+            contentType = { "feature_card" },
+        ) { feature ->
+            val cardBg = when {
+                nothingOsMode && isDarkTheme -> NothingThemeTokens.Surface
+                nothingOsMode -> Color(0xFFF3F3F7)
+                isDarkTheme -> Color(0xFF131622)
+                else -> Color(0xFFF3F5FA)
+            }
+            val cardBorder = when {
+                nothingOsMode && isDarkTheme -> NothingThemeTokens.Border
+                nothingOsMode -> Color(0xFFD4D4DC)
+                isDarkTheme -> Color.White.copy(alpha = 0.09f)
+                else -> Color(0xFF0F172A).copy(alpha = 0.09f)
+            }
+            val titleColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
+            val subtitleColor = when {
+                nothingOsMode && isDarkTheme -> NothingThemeTokens.MutedText
+                isDarkTheme -> Color.White.copy(alpha = 0.60f)
+                else -> Color(0xFF475569)
+            }
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = if (nothingOsMode) NothingThemeTokens.Surface else Color(0xFF131622),
+                color = cardBg,
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = if (nothingOsMode) NothingThemeTokens.Border else Color.White.copy(alpha = 0.09f),
+                    color = cardBorder,
                 ),
                 modifier = Modifier
                     .width(162.dp)
@@ -584,7 +777,7 @@ fun FeatureHighlightsStrip(
                                 .background(
                                     Brush.radialGradient(
                                         colors = listOf(
-                                            feature.gradientColors.first().copy(alpha = 0.22f),
+                                            feature.gradientColors.first().copy(alpha = if (isDarkTheme) 0.22f else 0.14f),
                                             Color.Transparent,
                                         ),
                                     ),
@@ -606,8 +799,10 @@ fun FeatureHighlightsStrip(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(percent = 50),
-                                color = if (nothingOsMode) NothingThemeTokens.SurfaceElevated else feature.gradientColors.first().copy(alpha = 0.18f),
-                                border = if (nothingOsMode) androidx.compose.foundation.BorderStroke(1.dp, NothingThemeTokens.Border) else null,
+                                color = if (nothingOsMode) {
+                                    if (isDarkTheme) NothingThemeTokens.SurfaceElevated else Color(0xFFE7E7EE)
+                                } else feature.gradientColors.first().copy(alpha = if (isDarkTheme) 0.18f else 0.14f),
+                                border = if (nothingOsMode) androidx.compose.foundation.BorderStroke(1.dp, cardBorder) else null,
                             ) {
                                 Text(
                                     text = feature.badge,
@@ -627,15 +822,16 @@ fun FeatureHighlightsStrip(
                                     .size(26.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(
-                                        if (nothingOsMode) NothingThemeTokens.SurfaceElevated
-                                        else feature.gradientColors.first().copy(alpha = 0.16f)
+                                        if (nothingOsMode) {
+                                            if (isDarkTheme) NothingThemeTokens.SurfaceElevated else Color(0xFFE7E7EE)
+                                        } else feature.gradientColors.first().copy(alpha = 0.16f)
                                     ),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = feature.icon,
                                     contentDescription = null,
-                                    tint = if (nothingOsMode) NothingThemeTokens.White else feature.gradientColors.first(),
+                                    tint = if (nothingOsMode) titleColor else feature.gradientColors.first(),
                                     modifier = Modifier.size(15.dp),
                                 )
                             }
@@ -650,7 +846,7 @@ fun FeatureHighlightsStrip(
                                     fontSize = 13.sp,
                                     letterSpacing = (-0.2).sp,
                                 ),
-                                color = if (nothingOsMode) NothingThemeTokens.White else Color.White,
+                                color = titleColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -668,7 +864,7 @@ fun FeatureHighlightsStrip(
                                         fontSize = 10.sp,
                                         lineHeight = 13.sp,
                                     ),
-                                    color = if (nothingOsMode) NothingThemeTokens.MutedText else Color.White.copy(alpha = 0.60f),
+                                    color = subtitleColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f),

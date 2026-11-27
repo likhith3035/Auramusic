@@ -8,12 +8,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import okhttp3.Request
+import java.io.File
 import java.net.URLEncoder
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -77,17 +84,24 @@ object AuraWeatherRepository {
     )
 
     private const val CACHE_DURATION_MS = 45 * 60 * 1000L // 45 minutes
+    private const val CACHE_FILE_NAME = "aura_weather_cache.json"
     private const val SUNRISE_PRE_WINDOW_MS = 30L * 60_000L
     private const val SUNRISE_POST_WINDOW_MS = 50L * 60_000L
     private const val SUNSET_PRE_WINDOW_MS = 45L * 60_000L
     private const val SUNSET_POST_WINDOW_MS = 40L * 60_000L
 
+    private val cacheLock = Any()
+
+    @Volatile
+    private var storageDir: File? = null
     @Volatile
     private var lastFetchTimeMs = 0L
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    @Volatile
     private var isFahrenheitPreference = false
+    @Volatile
     private var customLocation: AuraLocationResult? = null
 
     private val _currentWeather = MutableStateFlow(defaultFallbackWeather())
@@ -104,6 +118,12 @@ object AuraWeatherRepository {
     @Volatile
     private var cachedWeatherCode: Int? = null
     @Volatile
+    private var cachedTemperatureC: Int? = null
+    @Volatile
+    private var cachedHumidity: Int? = null
+    @Volatile
+    private var cachedWindSpeedKmH: Double? = null
+    @Volatile
     private var cachedApiIsDay: Boolean? = null
     @Volatile
     private var cachedUtcOffsetSeconds: Int? = null
@@ -111,6 +131,39 @@ object AuraWeatherRepository {
     private var cachedSolarWindows: List<DailySolarWindow> = emptyList()
     @Volatile
     private var manualVisualOverride: WeatherVisualType? = null
+
+    /**
+     * Binds a writable directory for persisting the last fetched local weather,
+     * custom location, solar windows, and unit preference across cold restarts.
+     */
+    fun init(directory: File) {
+        synchronized(cacheLock) {
+            storageDir = directory
+            loadCacheLocked()
+        }
+    }
+
+    internal fun resetForTests() {
+        synchronized(cacheLock) {
+            storageDir = null
+            lastFetchTimeMs = 0L
+            isFahrenheitPreference = false
+            customLocation = null
+            cachedLat = null
+            cachedLon = null
+            cachedCity = null
+            cachedCountry = null
+            cachedWeatherCode = null
+            cachedTemperatureC = null
+            cachedHumidity = null
+            cachedWindSpeedKmH = null
+            cachedApiIsDay = null
+            cachedUtcOffsetSeconds = null
+            cachedSolarWindows = emptyList()
+            manualVisualOverride = null
+            _currentWeather.value = defaultFallbackWeather()
+        }
+    }
 
     fun isCustomLocation(): Boolean = customLocation != null
 
@@ -175,6 +228,7 @@ object AuraWeatherRepository {
         isFahrenheitPreference = useFahrenheit
         val curr = _currentWeather.value
         _currentWeather.value = curr.copy(isFahrenheit = useFahrenheit)
+        persistState()
     }
 
     fun toggleTemperatureUnit() {
@@ -184,14 +238,163 @@ object AuraWeatherRepository {
     suspend fun setCustomLocation(location: AuraLocationResult?) {
         customLocation = location
         lastFetchTimeMs = 0L // invalidate cache
+        persistState()
         refresh(force = true)
     }
 
     suspend fun clearCustomLocation() {
         customLocation = null
         lastFetchTimeMs = 0L // invalidate cache
+        persistState()
         refresh(force = true)
     }
+
+    private fun persistState() {
+        synchronized(cacheLock) {
+            saveCacheLocked()
+        }
+    }
+
+    private fun saveCacheLocked() {
+        val dir = storageDir ?: return
+        runCatching {
+            if (!dir.exists()) dir.mkdirs()
+            val payload = buildJsonObject {
+                put("isFahrenheit", isFahrenheitPreference)
+                customLocation?.let { loc ->
+                    put(
+                        "customLocation",
+                        buildJsonObject {
+                            put("name", loc.name)
+                            loc.country?.let { put("country", it) }
+                            loc.admin1?.let { put("admin1", it) }
+                            put("latitude", loc.latitude)
+                            put("longitude", loc.longitude)
+                        },
+                    )
+                }
+                cachedLat?.let { put("cachedLat", it) }
+                cachedLon?.let { put("cachedLon", it) }
+                cachedCity?.let { put("cachedCity", it) }
+                cachedCountry?.let { put("cachedCountry", it) }
+                cachedWeatherCode?.let { put("cachedWeatherCode", it) }
+                cachedTemperatureC?.let { put("cachedTemperatureC", it) }
+                cachedHumidity?.let { put("cachedHumidity", it) }
+                cachedWindSpeedKmH?.let { put("cachedWindSpeedKmH", it) }
+                cachedApiIsDay?.let { put("cachedApiIsDay", it) }
+                cachedUtcOffsetSeconds?.let { put("cachedUtcOffsetSeconds", it) }
+                put("lastFetchTimeMs", lastFetchTimeMs)
+                if (cachedSolarWindows.isNotEmpty()) {
+                    put(
+                        "solarWindows",
+                        buildJsonArray {
+                            cachedSolarWindows.forEach { w ->
+                                add(
+                                    buildJsonObject {
+                                        put("sunriseEpochMs", w.sunriseEpochMs)
+                                        put("sunsetEpochMs", w.sunsetEpochMs)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+            File(dir, CACHE_FILE_NAME).writeText(payload.toString())
+        }
+    }
+
+    private fun loadCacheLocked() {
+        val file = storageDir?.let { File(it, CACHE_FILE_NAME) } ?: return
+        if (!file.isFile) return
+        val root = runCatching { json.parseToJsonElement(file.readText()).jsonObject }.getOrNull() ?: return
+
+        isFahrenheitPreference = root.bool("isFahrenheit") ?: false
+        customLocation = (root["customLocation"] as? JsonObject)?.let { loc ->
+            val name = loc.str("name") ?: return@let null
+            val lat = loc.dbl("latitude") ?: return@let null
+            val lon = loc.dbl("longitude") ?: return@let null
+            AuraLocationResult(
+                name = name,
+                country = loc.str("country"),
+                admin1 = loc.str("admin1"),
+                latitude = lat,
+                longitude = lon,
+            )
+        }
+        cachedLat = root.dbl("cachedLat")
+        cachedLon = root.dbl("cachedLon")
+        cachedCity = root.str("cachedCity")
+        cachedCountry = root.str("cachedCountry")
+        cachedWeatherCode = root.int("cachedWeatherCode")
+        cachedTemperatureC = root.int("cachedTemperatureC")
+        cachedHumidity = root.int("cachedHumidity")
+        cachedWindSpeedKmH = root.dbl("cachedWindSpeedKmH")
+        cachedApiIsDay = root.bool("cachedApiIsDay")
+        cachedUtcOffsetSeconds = root.int("cachedUtcOffsetSeconds")
+        lastFetchTimeMs = root.long("lastFetchTimeMs") ?: 0L
+        cachedSolarWindows = (root["solarWindows"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { el ->
+                val obj = el as? JsonObject ?: return@mapNotNull null
+                val rise = obj.long("sunriseEpochMs") ?: return@mapNotNull null
+                val set = obj.long("sunsetEpochMs") ?: return@mapNotNull null
+                if (set > rise) DailySolarWindow(rise, set) else null
+            }
+            .orEmpty()
+
+        val temp = cachedTemperatureC
+        val code = cachedWeatherCode
+        if (temp != null && code != null) {
+            val now = System.currentTimeMillis()
+            val fallbackIsDay = cachedApiIsDay ?: isDayTime(now, cachedUtcOffsetSeconds)
+            val mapped = mapWmoCode(
+                code = code,
+                fallbackIsDay = fallbackIsDay,
+                nowEpochMs = now,
+                solarWindows = cachedSolarWindows,
+                utcOffsetSeconds = cachedUtcOffsetSeconds,
+            )
+            val activeOverride = manualVisualOverride
+            val visualType = activeOverride ?: mapped.visualType
+            val label = if (activeOverride != null) conditionLabelForOverride(activeOverride) else mapped.label
+            val finalIsDay = if (activeOverride != null) activeOverride != WeatherVisualType.CLEAR_NIGHT else mapped.isDay
+            _currentWeather.value = AuraWeatherInfo(
+                temperatureC = temp,
+                conditionLabel = label,
+                visualType = visualType,
+                city = customLocation?.name ?: cachedCity,
+                country = customLocation?.country ?: cachedCountry,
+                isDay = finalIsDay,
+                moodPills = moodPillsFor(visualType, finalIsDay),
+                humidity = cachedHumidity,
+                windSpeedKmH = cachedWindSpeedKmH,
+                isCustomLocation = customLocation != null,
+                isFahrenheit = isFahrenheitPreference,
+            )
+        } else {
+            _currentWeather.value = _currentWeather.value.copy(
+                isFahrenheit = isFahrenheitPreference,
+                isCustomLocation = customLocation != null,
+                city = customLocation?.name ?: cachedCity,
+                country = customLocation?.country ?: cachedCountry,
+            )
+        }
+    }
+
+    private fun JsonObject.str(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    private fun JsonObject.int(key: String): Int? =
+        (this[key] as? JsonPrimitive)?.intOrNull
+
+    private fun JsonObject.long(key: String): Long? =
+        (this[key] as? JsonPrimitive)?.longOrNull
+
+    private fun JsonObject.dbl(key: String): Double? =
+        (this[key] as? JsonPrimitive)?.doubleOrNull
+
+    private fun JsonObject.bool(key: String): Boolean? =
+        (this[key] as? JsonPrimitive)?.booleanOrNull
 
     /**
      * Search cities and towns worldwide using Open-Meteo's keyless Geocoding API.
@@ -325,8 +528,12 @@ object AuraWeatherRepository {
                     }
                     val pills = moodPillsFor(visualType, finalIsDay)
 
+                    val tempC = tempRaw.roundToInt()
+                    cachedTemperatureC = tempC
+                    cachedHumidity = humidity
+                    cachedWindSpeedKmH = windSpeed
                     _currentWeather.value = AuraWeatherInfo(
-                        temperatureC = tempRaw.roundToInt(),
+                        temperatureC = tempC,
                         conditionLabel = conditionLabel,
                         visualType = visualType,
                         city = city,
@@ -339,6 +546,7 @@ object AuraWeatherRepository {
                         isFahrenheit = isFahrenheitPreference,
                     )
                     lastFetchTimeMs = now
+                    persistState()
                 }
             } catch (ignored: Exception) {
                 // Keep existing weather or fallback gracefully without crashing

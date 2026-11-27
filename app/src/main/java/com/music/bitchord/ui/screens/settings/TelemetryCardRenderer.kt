@@ -12,6 +12,8 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import com.music.bitchord.data.telemetry.GitHubDownloadsSummary
+import com.music.bitchord.data.telemetry.LiveNetworkPulse
 import com.music.bitchord.data.telemetry.TelemetryStats
 import com.music.bitchord.ui.replay.cacheForSharing
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,8 @@ object TelemetryCardRenderer {
 
     suspend fun renderMilestoneCard(
         stats: TelemetryStats,
+        livePulse: LiveNetworkPulse? = null,
+        githubDownloads: GitHubDownloadsSummary? = null,
     ): Bitmap = withContext(Dispatchers.Default) {
         val bitmap = Bitmap.createBitmap(CARD_WIDTH, CARD_HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -194,8 +198,44 @@ object TelemetryCardRenderer {
         }
         canvas.drawText("Recorded Installations", box2Rect.left + 28f, box2Rect.top + 175f, subNum2Paint)
 
+        if (livePulse != null || githubDownloads != null) {
+            currentY += boxHeight + 28f
+            val stripH = 112f
+            val leftStrip = RectF(contentLeft, currentY, contentLeft + boxWidth, currentY + stripH)
+            val rightStrip = RectF(contentLeft + boxWidth + 30f, currentY, contentRight, currentY + stripH)
+            canvas.drawRoundRect(leftStrip, 22f, 22f, boxBgPaint)
+            canvas.drawRoundRect(leftStrip, 22f, 22f, borderPaint)
+            canvas.drawRoundRect(rightStrip, 22f, 22f, boxBgPaint)
+            canvas.drawRoundRect(rightStrip, 22f, 22f, borderPaint)
+
+            val smallValPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFFFFFFFF.toInt()
+                textSize = 40f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val onlineText = livePulse?.onlineNow?.toString() ?: "—"
+            val onlineSub = livePulse?.let { "${it.androidOnline} Android · ${it.pcOnline} PC" } ?: "Presence offline"
+            canvas.drawText("LIVE LISTENERS NOW", leftStrip.left + 24f, leftStrip.top + 36f, boxLabelPaint)
+            canvas.drawText(onlineText, leftStrip.left + 24f, leftStrip.top + 86f, smallValPaint)
+            canvas.drawText(onlineSub, leftStrip.right - 24f, leftStrip.top + 84f, Paint(subtitlePaint).apply {
+                textAlign = Paint.Align.RIGHT
+                textSize = 20f
+            })
+
+            val dlText = githubDownloads?.totalDownloads?.toString() ?: "—"
+            val dlSub = githubDownloads?.let { "${it.androidDownloads} APK · ${it.desktopDownloads} PC" } ?: "GitHub unavailable"
+            canvas.drawText("GITHUB DOWNLOADS", rightStrip.left + 24f, rightStrip.top + 36f, boxLabelPaint)
+            canvas.drawText(dlText, rightStrip.left + 24f, rightStrip.top + 86f, smallValPaint)
+            canvas.drawText(dlSub, rightStrip.right - 24f, rightStrip.top + 84f, Paint(subtitlePaint).apply {
+                textAlign = Paint.Align.RIGHT
+                textSize = 20f
+            })
+            currentY += stripH + 28f
+        } else {
+            currentY += boxHeight + 40f
+        }
+
         // 6. 14-Day Activity Chart Panel
-        currentY += boxHeight + 40f
         val chartBoxHeight = 310f
         val chartRect = RectF(contentLeft, currentY, contentRight, currentY + chartBoxHeight)
         canvas.drawRoundRect(chartRect, 28f, 28f, boxBgPaint)
@@ -336,8 +376,10 @@ object TelemetryCardRenderer {
     suspend fun shareMilestoneCard(
         context: Context,
         stats: TelemetryStats,
+        livePulse: LiveNetworkPulse? = null,
+        githubDownloads: GitHubDownloadsSummary? = null,
     ) {
-        val bitmap = renderMilestoneCard(stats)
+        val bitmap = renderMilestoneCard(stats, livePulse, githubDownloads)
         val uri = cacheForSharing(context, bitmap, "telemetry_milestone.png") ?: return
 
         withContext(Dispatchers.Main) {
@@ -345,9 +387,11 @@ object TelemetryCardRenderer {
                 type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 clipData = ClipData.newRawUri(null, uri)
+                val dlPart = githubDownloads?.let { ", ${it.totalDownloads} GitHub release downloads" }.orEmpty()
+                val livePart = livePulse?.let { ", ${it.onlineNow} listening live" }.orEmpty()
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "AuraMusic Telemetry Milestone: ${stats.activeToday} active users today, ${stats.allTimeDevices} total devices recorded! https://github.com/likhith3035/Auramusic",
+                    "AuraMusic Telemetry Milestone: ${stats.activeToday} active users today$livePart$dlPart! https://github.com/likhith3035/Auramusic",
                 )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }

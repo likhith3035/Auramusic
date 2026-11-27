@@ -79,15 +79,18 @@ fun AuraSplashScreen(
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
     onPlayIntroCue: (() -> Unit)? = null,
+    reduceAnimation: Boolean = false,
+    fastTrack: Boolean = false,
+    playAudioCue: Boolean = true,
 ) {
     // Visible immediately on frame 1 — zero blank black screen
     val overallAlpha = remember { Animatable(1f) }
-    val entranceScale = remember { Animatable(0.92f) }
+    val entranceScale = remember { Animatable(if (reduceAnimation || fastTrack) 1f else 0.92f) }
     val exitScale = remember { Animatable(1.0f) }
 
     // Subtle living micro-phase breathing so the waveform is always active
     val infiniteTransition = rememberInfiniteTransition(label = "aura_waveform_living")
-    val idleBreathing by infiniteTransition.animateFloat(
+    val breathingAnim by infiniteTransition.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -96,6 +99,7 @@ fun AuraSplashScreen(
         ),
         label = "wave_idle_breathing",
     )
+    val idleBreathing = if (reduceAnimation || fastTrack) 0f else breathingAnim
 
     // Pre-allocated cubic Bézier curves corresponding to the authentic Aura brand geometry
     // Viewport coordinate space: 730 x 484, baseline Y = 242f
@@ -195,12 +199,40 @@ fun AuraSplashScreen(
     val path1 = remember { Path() }
     val path2 = remember { Path() }
     val path3 = remember { Path() }
+    val splashBrushCache = remember {
+        object {
+            var width = -1f
+            var height = -1f
+            var ambientGlow: Brush? = null
+            var wave3Brush: Brush? = null
+            var wave2Brush: Brush? = null
+            var wave1Brush: Brush? = null
+            var stroke3: Stroke? = null
+            var stroke2: Stroke? = null
+            var stroke1: Stroke? = null
+        }
+    }
 
     val punchySpring = remember { CubicBezierEasing(0.16f, 1f, 0.3f, 1f) }
 
-    LaunchedEffect(Unit) {
-        // 1. Play crystalline audio chime & tactile haptic tick immediately
-        onPlayIntroCue?.invoke()
+    LaunchedEffect(fastTrack, reduceAnimation) {
+        if (fastTrack) {
+            overallAlpha.animateTo(0f, animationSpec = tween(140, easing = FastOutSlowInEasing))
+            onFinished()
+            return@LaunchedEffect
+        }
+
+        // 1. Play crystalline audio chime & tactile haptic tick when allowed
+        if (playAudioCue) {
+            onPlayIntroCue?.invoke()
+        }
+
+        if (reduceAnimation) {
+            delay(280)
+            overallAlpha.animateTo(0f, animationSpec = tween(180, easing = FastOutSlowInEasing))
+            onFinished()
+            return@LaunchedEffect
+        }
 
         // 2. Punchy spring entrance: 0ms -> 380ms
         launch {
@@ -263,14 +295,48 @@ fun AuraSplashScreen(
                 fun mapX(x: Float): Float = offsetX + x * scale
                 fun mapY(y: Float): Float = offsetY + (baseY + (y - baseY) * liveProgress) * scale
 
-                // Ambient soft luminous glow behind the waveform
-                drawCircle(
-                    brush = Brush.radialGradient(
+                if (splashBrushCache.width != canvasW || splashBrushCache.height != canvasH) {
+                    splashBrushCache.width = canvasW
+                    splashBrushCache.height = canvasH
+                    splashBrushCache.ambientGlow = Brush.radialGradient(
                         colors = ambientGlowColors,
                         center = Offset(canvasW / 2f, canvasH / 2f),
                         radius = canvasW * 0.48f,
-                    ),
-                )
+                    )
+                    splashBrushCache.wave3Brush = Brush.linearGradient(
+                        colors = wave3Colors,
+                        start = Offset(mapX(130f), offsetY + baseY * scale),
+                        end = Offset(mapX(645f), offsetY + baseY * scale),
+                    )
+                    splashBrushCache.wave2Brush = Brush.linearGradient(
+                        colors = wave2Colors,
+                        start = Offset(mapX(95f), offsetY + baseY * scale),
+                        end = Offset(mapX(670f), offsetY + baseY * scale),
+                    )
+                    splashBrushCache.wave1Brush = Brush.linearGradient(
+                        colors = wave1Colors,
+                        start = Offset(mapX(60f), offsetY + baseY * scale),
+                        end = Offset(mapX(705f), offsetY + baseY * scale),
+                    )
+                    splashBrushCache.stroke3 = Stroke(
+                        width = wave3.strokeWidth * scale,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    )
+                    splashBrushCache.stroke2 = Stroke(
+                        width = wave2.strokeWidth * scale,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    )
+                    splashBrushCache.stroke1 = Stroke(
+                        width = wave1.strokeWidth * scale,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    )
+                }
+
+                // Ambient soft luminous glow behind the waveform
+                splashBrushCache.ambientGlow?.let { drawCircle(brush = it) }
 
                 // Helper to populate reusable Path without object allocation
                 fun populateWave(path: Path, wave: WaveDefinition) {
@@ -287,56 +353,29 @@ fun AuraSplashScreen(
 
                 // Wave 3 (Ambient Harmonic Layer)
                 populateWave(path3, wave3)
-                val brush3 = Brush.linearGradient(
-                    colors = wave3Colors,
-                    start = Offset(mapX(130f), offsetY + baseY * scale),
-                    end = Offset(mapX(645f), offsetY + baseY * scale),
-                )
                 drawPath(
                     path = path3,
-                    brush = brush3,
+                    brush = splashBrushCache.wave3Brush!!,
                     alpha = wave3.alpha,
-                    style = Stroke(
-                        width = wave3.strokeWidth * scale,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
+                    style = splashBrushCache.stroke3!!,
                 )
 
                 // Wave 2 (Secondary Resonance Layer)
                 populateWave(path2, wave2)
-                val brush2 = Brush.linearGradient(
-                    colors = wave2Colors,
-                    start = Offset(mapX(95f), offsetY + baseY * scale),
-                    end = Offset(mapX(670f), offsetY + baseY * scale),
-                )
                 drawPath(
                     path = path2,
-                    brush = brush2,
+                    brush = splashBrushCache.wave2Brush!!,
                     alpha = wave2.alpha,
-                    style = Stroke(
-                        width = wave2.strokeWidth * scale,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
+                    style = splashBrushCache.stroke2!!,
                 )
 
                 // Wave 1 (Primary Central Waveform)
                 populateWave(path1, wave1)
-                val brush1 = Brush.linearGradient(
-                    colors = wave1Colors,
-                    start = Offset(mapX(60f), offsetY + baseY * scale),
-                    end = Offset(mapX(690f), offsetY + baseY * scale),
-                )
                 drawPath(
                     path = path1,
-                    brush = brush1,
+                    brush = splashBrushCache.wave1Brush!!,
                     alpha = wave1.alpha,
-                    style = Stroke(
-                        width = wave1.strokeWidth * scale,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
+                    style = splashBrushCache.stroke1!!,
                 )
             }
 

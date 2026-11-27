@@ -30,14 +30,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Share
@@ -46,18 +49,22 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,6 +83,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -83,9 +91,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.data.telemetry.AnalyticsConfigSource
+import com.music.bitchord.data.telemetry.AnalyticsConnectionStatus
+import com.music.bitchord.data.telemetry.AuraAnalytics
 import com.music.bitchord.data.telemetry.AuraTelemetryClient
 import com.music.bitchord.data.telemetry.AuraTelemetryRepository
 import com.music.bitchord.data.telemetry.DailyHistoryItem
+import com.music.bitchord.data.telemetry.GitHubDownloadsSummary
+import com.music.bitchord.data.telemetry.LiveNetworkPulse
 import com.music.bitchord.data.telemetry.TelemetryStats
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -104,8 +117,14 @@ fun AuraTelemetryPulseSheet(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
+    val analyticsStatus by AuraAnalytics.status.collectAsStateWithLifecycle()
 
     var stats by remember { mutableStateOf<TelemetryStats?>(null) }
+    var livePulse by remember { mutableStateOf<LiveNetworkPulse?>(null) }
+    var livePulseError by remember { mutableStateOf<String?>(null) }
+    var githubDownloads by remember { mutableStateOf<GitHubDownloadsSummary?>(null) }
+    var githubDownloadsError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var loadingSeconds by remember { mutableStateOf(0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -114,6 +133,8 @@ fun AuraTelemetryPulseSheet(
     var isSharingCard by remember { mutableStateOf(false) }
     var reportCopiedNotice by remember { mutableStateOf<String?>(null) }
 
+    val onlineCountAnim = remember { Animatable(0f) }
+    val downloadCountAnim = remember { Animatable(0f) }
     val activeCountAnim = remember { Animatable(0f) }
     val allTimeCountAnim = remember { Animatable(0f) }
 
@@ -128,39 +149,69 @@ fun AuraTelemetryPulseSheet(
         }
     }
 
-    fun refreshStats() {
+    fun refreshStats(forceGitHubRefresh: Boolean = false) {
         coroutineScope.launch {
             isLoading = true
             errorMessage = null
-            AuraTelemetryRepository.fetchStats().fold(
+            livePulseError = null
+            githubDownloadsError = null
+
+            val snapshot = AuraTelemetryRepository.fetchDashboardSnapshot(forceRefresh = forceGitHubRefresh)
+            isLoading = false
+
+            snapshot.livePulseResult.fold(
+                onSuccess = { live ->
+                    livePulse = live
+                    launch {
+                        onlineCountAnim.snapTo(0f)
+                        onlineCountAnim.animateTo(live.onlineNow.toFloat(), tween(700))
+                    }
+                },
+                onFailure = { err ->
+                    livePulseError = err.message ?: "Presence unreachable"
+                },
+            )
+
+            snapshot.githubDownloadsResult.fold(
+                onSuccess = { dl ->
+                    githubDownloads = dl
+                    launch {
+                        downloadCountAnim.snapTo(0f)
+                        downloadCountAnim.animateTo(dl.totalDownloads.toFloat(), tween(800))
+                    }
+                },
+                onFailure = { err ->
+                    githubDownloadsError = err.message ?: "GitHub API unavailable"
+                },
+            )
+
+            snapshot.dailyHeartbeatResult.fold(
                 onSuccess = { res ->
                     stats = res
-                    isLoading = false
                     launch {
                         activeCountAnim.snapTo(0f)
                         activeCountAnim.animateTo(
                             targetValue = res.activeToday.toFloat(),
-                            animationSpec = tween(durationMillis = 800),
+                            animationSpec = tween(800),
                         )
                     }
                     launch {
                         allTimeCountAnim.snapTo(0f)
                         allTimeCountAnim.animateTo(
                             targetValue = res.allTimeDevices.toFloat(),
-                            animationSpec = tween(durationMillis = 900),
+                            animationSpec = tween(900),
                         )
                     }
                 },
                 onFailure = { err ->
-                    isLoading = false
-                    errorMessage = err.message ?: "Could not connect to telemetry server"
+                    errorMessage = err.message ?: "Could not connect to Render daily stats"
                 },
             )
         }
     }
 
     LaunchedEffect(Unit) {
-        refreshStats()
+        refreshStats(forceGitHubRefresh = false)
     }
 
     ModalBottomSheet(
@@ -180,15 +231,17 @@ fun AuraTelemetryPulseSheet(
             // Header
             TelemetryHeader(
                 isLoading = isLoading,
-                onRefresh = { refreshStats() },
+                onRefresh = { refreshStats(forceGitHubRefresh = true) },
                 onClose = onDismiss,
             )
 
             Spacer(Modifier.height(14.dp))
 
-            // Server Connection Status Ribbon with Smart Cold-Start Wake-up Display
+            // Multi-source real connection status ribbon
             ServerStatusRibbon(
                 stats = stats,
+                livePulse = livePulse,
+                githubDownloads = githubDownloads,
                 isLoading = isLoading,
                 loadingSeconds = loadingSeconds,
                 errorMessage = errorMessage,
@@ -196,33 +249,102 @@ fun AuraTelemetryPulseSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // Hero Metric Bento Grid
+            // Primary Real-Time Hero Grid (Live Online Now + GitHub Release Downloads)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Today's Active Users (DAU)
+                val live = livePulse
+                BentoStatCard(
+                    modifier = Modifier.weight(1f),
+                    title = "ONLINE NOW",
+                    value = if (live != null) onlineCountAnim.value.roundToInt().toString() else "--",
+                    subtitle = when {
+                        live != null -> "${live.androidOnline} Android · ${live.pcOnline} PC"
+                        livePulseError != null -> "Presence offline"
+                        else -> "Checking presence..."
+                    },
+                    tag = if (live != null) "LIVE" else "...",
+                    tagColor = if (live != null) Color(0xFF10B981) else Color(0xFFF59E0B),
+                    accentColor = Color(0xFF10B981),
+                )
+
+                val dl = githubDownloads
+                BentoStatCard(
+                    modifier = Modifier.weight(1f),
+                    title = "GITHUB DOWNLOADS",
+                    value = if (dl != null) downloadCountAnim.value.roundToInt().toString() else "--",
+                    subtitle = when {
+                        dl != null -> "${dl.androidDownloads} APK · ${dl.desktopDownloads} PC"
+                        githubDownloadsError != null -> "GitHub API unreachable"
+                        else -> "Loading releases..."
+                    },
+                    tag = "RELEASES",
+                    tagColor = Color(0xFF8B5CF6),
+                    accentColor = Color(0xFF8B5CF6),
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Secondary Heartbeat Grid (Render Daily Check-ins)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 BentoStatCard(
                     modifier = Modifier.weight(1f),
                     title = "ACTIVE TODAY",
-                    value = activeCountAnim.value.roundToInt().toString(),
-                    subtitle = "Unique devices today",
+                    value = if (stats != null) activeCountAnim.value.roundToInt().toString() else "--",
+                    subtitle = "Render daily heartbeats",
                     tag = "DAU",
                     tagColor = Color(0xFF10B981),
                     accentColor = MaterialTheme.colorScheme.primary,
                 )
 
-                // All-Time Total Installs
                 BentoStatCard(
                     modifier = Modifier.weight(1f),
-                    title = "ALL-TIME DEVICES",
-                    value = allTimeCountAnim.value.roundToInt().toString(),
-                    subtitle = "Total recorded installs",
-                    tag = "TOTAL",
+                    title = "RENDER DEVICES",
+                    value = if (stats != null) allTimeCountAnim.value.roundToInt().toString() else "--",
+                    subtitle = "Since last server restart",
+                    tag = "EPHEMERAL",
                     tagColor = Color(0xFF06B6D4),
                     accentColor = Color(0xFF06B6D4),
                 )
             }
+
+            if (stats != null && stats?.allTimeDevices == 0) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Render Free resets its local stats.json file whenever the container sleeps. Use PostHog below for permanent historical DAU/WAU/MAU and usage counts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Live Release Downloads & Listen Together Breakdown
+            if (githubDownloads != null || livePulse != null) {
+                ReleasesAndJamCard(
+                    downloads = githubDownloads,
+                    downloadsError = githubDownloadsError,
+                    livePulse = livePulse,
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // PostHog $0 Cloud Analytics Setup, Status & Live Verifier
+            PostHogAnalyticsCard(
+                status = analyticsStatus,
+                onOpenDashboard = {
+                    val dashboardUrl = analyticsStatus.host
+                        .replace("us.i.posthog.com", "us.posthog.com")
+                        .replace("eu.i.posthog.com", "eu.posthog.com")
+                    uriHandler.openUri(dashboardUrl)
+                },
+            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -253,7 +375,7 @@ fun AuraTelemetryPulseSheet(
                             onSuccess = { total ->
                                 isPinging = false
                                 pingNotice = "Heartbeat recorded! Today's active count: $total"
-                                refreshStats()
+                                refreshStats(forceGitHubRefresh = false)
                             },
                             onFailure = { err ->
                                 isPinging = false
@@ -267,38 +389,65 @@ fun AuraTelemetryPulseSheet(
             Spacer(Modifier.height(16.dp))
 
             // Export & Share Telemetry Milestone Card
-            val currentStats = stats
-            if (currentStats != null) {
-                ShareActionsCard(
-                    stats = currentStats,
-                    isSharing = isSharingCard,
-                    copiedNotice = reportCopiedNotice,
-                    onShareCard = {
-                        coroutineScope.launch {
-                            isSharingCard = true
-                            TelemetryCardRenderer.shareMilestoneCard(context, currentStats)
-                            isSharingCard = false
+            val shareStats = stats ?: TelemetryStats(
+                activeToday = livePulse?.onlineNow ?: 0,
+                allTimeDevices = 0,
+                versions = emptyMap(),
+                platforms = buildMap {
+                    livePulse?.let {
+                        put("Android", it.androidOnline)
+                        put("Desktop", it.pcOnline)
+                    }
+                },
+                dailyHistory = emptyList(),
+                latencyMs = livePulse?.latencyMs ?: 0L,
+                isOnline = livePulse != null || githubDownloads != null,
+            )
+            ShareActionsCard(
+                stats = shareStats,
+                isSharing = isSharingCard,
+                copiedNotice = reportCopiedNotice,
+                onShareCard = {
+                    coroutineScope.launch {
+                        isSharingCard = true
+                        TelemetryCardRenderer.shareMilestoneCard(
+                            context = context,
+                            stats = shareStats,
+                            livePulse = livePulse,
+                            githubDownloads = githubDownloads,
+                        )
+                        isSharingCard = false
+                    }
+                },
+                onCopyReport = {
+                    val report = buildString {
+                        appendLine("# AuraMusic Telemetry Report")
+                        appendLine("- Date: ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}")
+                        livePulse?.let {
+                            appendLine("- Online Now: ${it.onlineNow} (${it.androidOnline} Android, ${it.pcOnline} PC)")
+                            appendLine("- Active Jam Parties: ${it.activeParties} (${it.partyMembers} members)")
                         }
-                    },
-                    onCopyReport = {
-                        val report = buildString {
-                            appendLine("# AuraMusic Telemetry Report")
-                            appendLine("- Date: ${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}")
-                            appendLine("- Active Today (DAU): ${currentStats.activeToday}")
-                            appendLine("- All-Time Devices: ${currentStats.allTimeDevices}")
-                            appendLine("- Latency: ${currentStats.latencyMs} ms")
-                            appendLine("- Server: auramusic-stats.onrender.com")
-                            if (currentStats.versions.isNotEmpty()) {
-                                appendLine("- Versions: " + currentStats.versions.entries.joinToString { "v${it.key} (${it.value})" })
+                        githubDownloads?.let {
+                            appendLine("- GitHub Release Downloads: ${it.totalDownloads} (${it.androidDownloads} APK, ${it.desktopDownloads} PC)")
+                            it.latestTag?.let { tag ->
+                                appendLine("- Latest Release ($tag): ${it.latestReleaseDownloads} downloads")
                             }
                         }
-                        clipboardManager.setText(AnnotatedString(report))
-                        reportCopiedNotice = "Telemetry report copied to clipboard!"
-                    },
-                )
+                        stats?.let {
+                            appendLine("- Render Active Today: ${it.activeToday}")
+                            appendLine("- Render Recorded Devices: ${it.allTimeDevices}")
+                            if (it.versions.isNotEmpty()) {
+                                appendLine("- Versions: " + it.versions.entries.joinToString { v -> "v${v.key} (${v.value})" })
+                            }
+                        }
+                        appendLine("- PostHog Cloud Analytics: ${if (analyticsStatus.isConfigured) "Connected (${analyticsStatus.host})" else "Not Configured"}")
+                    }
+                    clipboardManager.setText(AnnotatedString(report))
+                    reportCopiedNotice = "Telemetry report copied to clipboard!"
+                },
+            )
 
-                Spacer(Modifier.height(16.dp))
-            }
+            Spacer(Modifier.height(16.dp))
 
             // Privacy Guarantee
             PrivacyGuaranteeCard()
@@ -384,24 +533,26 @@ private fun TelemetryHeader(
 @Composable
 private fun ServerStatusRibbon(
     stats: TelemetryStats?,
+    livePulse: LiveNetworkPulse?,
+    githubDownloads: GitHubDownloadsSummary?,
     isLoading: Boolean,
     loadingSeconds: Int,
     errorMessage: String?,
 ) {
-    val isOnline = stats != null && errorMessage == null
-    val isWaking = isLoading && loadingSeconds >= 3
+    val hasAnyOnline = livePulse != null || githubDownloads != null || stats != null
+    val isWaking = isLoading && loadingSeconds >= 3 && !hasAnyOnline
 
     val ribbonBg = when {
         isWaking -> Color(0xFFF59E0B).copy(alpha = 0.14f)
-        isLoading -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        isOnline -> Color(0xFF10B981).copy(alpha = 0.12f)
+        isLoading && !hasAnyOnline -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        hasAnyOnline -> Color(0xFF10B981).copy(alpha = 0.12f)
         else -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
     }
 
     val borderColor = when {
         isWaking -> Color(0xFFF59E0B).copy(alpha = 0.40f)
-        isLoading -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-        isOnline -> Color(0xFF10B981).copy(alpha = 0.35f)
+        isLoading && !hasAnyOnline -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        hasAnyOnline -> Color(0xFF10B981).copy(alpha = 0.35f)
         else -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
     }
 
@@ -427,8 +578,8 @@ private fun ServerStatusRibbon(
                         .background(
                             when {
                                 isWaking -> Color(0xFFF59E0B)
-                                isLoading -> Color(0xFFFBBF24)
-                                isOnline -> Color(0xFF10B981)
+                                isLoading && !hasAnyOnline -> Color(0xFFFBBF24)
+                                hasAnyOnline -> Color(0xFF10B981)
                                 else -> MaterialTheme.colorScheme.error
                             },
                         ),
@@ -437,32 +588,37 @@ private fun ServerStatusRibbon(
                 Spacer(Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    val connectedSources = buildList {
+                        if (livePulse != null) add("Presence")
+                        if (githubDownloads != null) add("GitHub")
+                        if (stats != null) add("Render")
+                    }
                     Text(
                         text = when {
-                            isWaking -> "Cloud Asleep (Free Tier) · Waking instance (~25s)..."
-                            isLoading -> "Connecting to Render Cloud..."
-                            isOnline -> "ONLINE · auramusic-stats.onrender.com"
-                            else -> "Server Offline / Waking Up"
+                            isWaking -> "Waking Render Free Tier (~25s)..."
+                            isLoading && !hasAnyOnline -> "Fetching live telemetry sources..."
+                            connectedSources.isNotEmpty() -> "LIVE · ${connectedSources.joinToString(" + ")}"
+                            else -> "All telemetry sources offline"
                         },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = when {
                             isWaking -> Color(0xFFF59E0B)
-                            isLoading -> Color(0xFFFBBF24)
-                            isOnline -> Color(0xFF10B981)
+                            isLoading && !hasAnyOnline -> Color(0xFFFBBF24)
+                            connectedSources.isNotEmpty() -> Color(0xFF10B981)
                             else -> MaterialTheme.colorScheme.error
                         },
                     )
                     if (isWaking) {
                         Text(
-                            text = "Render containers sleep after 15m. Booting up Docker container ($loadingSeconds s elapsed)...",
+                            text = "Render containers sleep after 15m idle ($loadingSeconds s elapsed)...",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                         )
                     } else if (errorMessage != null) {
                         Text(
-                            text = "Free tier instances may sleep. Tap refresh to wake up.",
+                            text = "Render stats note: $errorMessage",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
@@ -470,7 +626,8 @@ private fun ServerStatusRibbon(
                     }
                 }
 
-                if (isOnline) {
+                val latencyMs = livePulse?.latencyMs ?: stats?.latencyMs
+                if (latencyMs != null && latencyMs > 0) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
@@ -483,11 +640,11 @@ private fun ServerStatusRibbon(
                             Icon(
                                 imageVector = Icons.Rounded.Speed,
                                 contentDescription = null,
-                                tint = if (stats.latencyMs < 300) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                tint = if (latencyMs < 500) Color(0xFF10B981) else Color(0xFFFBBF24),
                                 modifier = Modifier.size(13.dp),
                             )
                             Text(
-                                text = "${stats.latencyMs} ms",
+                                text = "$latencyMs ms",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -508,6 +665,352 @@ private fun ServerStatusRibbon(
                     color = Color(0xFFF59E0B),
                     trackColor = Color(0xFFF59E0B).copy(alpha = 0.2f),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleasesAndJamCard(
+    downloads: GitHubDownloadsSummary?,
+    downloadsError: String?,
+    livePulse: LiveNetworkPulse?,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Download,
+                        contentDescription = null,
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "GitHub Release Downloads",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (livePulse != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFF10B981).copy(alpha = 0.14f),
+                    ) {
+                        Text(
+                            text = "${livePulse.activeParties} Jam Rooms · ${livePulse.partyMembers} Users",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF10B981),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            fontSize = 10.sp,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            if (downloads == null) {
+                Text(
+                    text = downloadsError ?: "Could not load GitHub Release asset counts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (downloads.releases.isEmpty()) {
+                Text(
+                    text = "No published GitHub releases found.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val total = downloads.totalDownloads.coerceAtLeast(1L)
+                for (rel in downloads.releases.take(5)) {
+                    val pct = (rel.totalDownloads.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = rel.tagName.ifBlank { rel.name },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "${rel.totalDownloads} (${rel.androidDownloads} APK · ${rel.desktopDownloads} PC)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { pct },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(CircleShape),
+                            color = Color(0xFF8B5CF6),
+                            trackColor = MaterialTheme.colorScheme.surface,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostHogAnalyticsCard(
+    status: AnalyticsConnectionStatus,
+    onOpenDashboard: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var showEditor by remember { mutableStateOf(false) }
+    var keyInput by remember { mutableStateOf("") }
+    var hostInput by remember(status.host) { mutableStateOf(status.host) }
+    var isVerifying by remember { mutableStateOf(false) }
+    var verifyMessage by remember { mutableStateOf<String?>(null) }
+    var verifyError by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        border = BorderStroke(
+            1.dp,
+            if (status.isConfigured) {
+                Color(0xFF10B981).copy(alpha = 0.35f)
+            } else {
+                Color(0xFFF59E0B).copy(alpha = 0.35f)
+            },
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Key,
+                        contentDescription = null,
+                        tint = if (status.isConfigured) Color(0xFF10B981) else Color(0xFFF59E0B),
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "PostHog Cloud Analytics ($0)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = (if (status.isConfigured) Color(0xFF10B981) else Color(0xFFF59E0B)).copy(alpha = 0.15f),
+                ) {
+                    Text(
+                        text = if (status.isConfigured) "ACTIVE" else "SETUP NEEDED",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (status.isConfigured) Color(0xFF10B981) else Color(0xFFF59E0B),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            if (status.isConfigured) {
+                val sourceLabel = when (status.source) {
+                    AnalyticsConfigSource.BUILD_CONFIG -> "Bundled in release build"
+                    AnalyticsConfigSource.RUNTIME_OVERRIDE -> "Device key override"
+                    AnalyticsConfigSource.NONE -> "Not configured"
+                }
+                Text(
+                    text = "$sourceLabel · Key ${status.maskedKey} · Host ${status.host}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "This device: ${status.sentThisSession} sent this session · ${status.queuedEvents} queued on disk" +
+                        (status.lastHttpCode?.let { " · Last HTTP $it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                status.lastError?.let { err ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Last delivery error: $err",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.sp,
+                    )
+                }
+            } else {
+                Text(
+                    text = "Not tracking events yet (no dummy data). Create a free project on posthog.com (1M events/mo, no card), copy your phc_... Project API key into local.properties / GitHub Secrets for all users, or test it on this device below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { showEditor = !showEditor },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = if (showEditor) "Hide Key Setup" else if (status.isConfigured) "Test / Edit Key" else "Paste & Verify Key",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Button(
+                    onClick = onOpenDashboard,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Open PostHog",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = showEditor) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = keyInput,
+                        onValueChange = { keyInput = it },
+                        label = { Text("PostHog Project API Key (phc_...)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = hostInput,
+                        onValueChange = { hostInput = it },
+                        label = { Text("PostHog Host (us.i.posthog.com or eu.i.posthog.com)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    isVerifying = true
+                                    verifyMessage = null
+                                    AuraAnalytics.saveAndVerifyConfig(keyInput, hostInput).fold(
+                                        onSuccess = { code ->
+                                            isVerifying = false
+                                            verifyError = false
+                                            verifyMessage = "Verified live with PostHog (HTTP $code)! Saved on this device."
+                                            keyInput = ""
+                                        },
+                                        onFailure = { err ->
+                                            isVerifying = false
+                                            verifyError = true
+                                            verifyMessage = err.message ?: "Verification failed"
+                                        },
+                                    )
+                                }
+                            },
+                            enabled = !isVerifying && keyInput.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            if (isVerifying) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Testing...", fontSize = 12.sp)
+                            } else {
+                                Text("Verify & Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (status.source == AnalyticsConfigSource.RUNTIME_OVERRIDE) {
+                            TextButton(
+                                onClick = {
+                                    AuraAnalytics.clearRuntimeConfig()
+                                    verifyMessage = "Cleared device override."
+                                    verifyError = false
+                                },
+                            ) {
+                                Text("Reset", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+
+                    verifyMessage?.let { msg ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (verifyError) MaterialTheme.colorScheme.error else Color(0xFF10B981),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
             }
         }
     }
@@ -981,7 +1484,7 @@ private fun PrivacyGuaranteeCard() {
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = "AuraMusic transmits zero personal identity, zero song telemetry, and zero location information. Telemetry pings transmit strictly an anonymous randomized installation token once every 24 hours to track active installations.",
+                    text = "AuraMusic transmits zero personal identity, zero song titles/artists, zero search query text, and zero location information. Telemetry sends only anonymous random installation IDs and feature counts.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
