@@ -15,6 +15,7 @@ import com.music.bitchord.playback.smart.TransitionTrackInfo
 import com.music.bitchord.playback.smart.echoTailSeconds
 import com.music.bitchord.playback.smart.planTransition
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.delay
@@ -22,11 +23,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -108,6 +112,8 @@ class DesktopPlaybackEngine(
     private var resolveJob: Job? = null
     private var upgradeJob: Job? = null
     private var nextResolveJob: Job? = null
+    private var swapJob: Job? = null
+    private var incomingUpgradeJob: Job? = null
 
     @Volatile private var playbackSpeed = 1f
     @Volatile private var volume = 1f
@@ -217,6 +223,10 @@ class DesktopPlaybackEngine(
         resolveJob?.cancel()
         nextResolveJob?.cancel()
         upgradeJob?.cancel()
+        swapJob?.cancel()
+        incomingUpgradeJob?.cancel()
+        swapJob?.cancel()
+        incomingUpgradeJob?.cancel()
         commands += Command.Flush
         searchingBetterFor = null
         incomingSearchingFor = null
@@ -260,7 +270,7 @@ class DesktopPlaybackEngine(
     private suspend fun openTrack(song: Song, stream: DesktopStream, startAtMs: Long): Result<Track> =
         withContext(Dispatchers.IO) {
             val decoder = DesktopAudioDecoder()
-            decoder.open(
+            val opened = decoder.open(
                 url = stream.url,
                 headers = stream.headers,
                 // Float throughout: the processors work in it and the sink converts once, at the
@@ -268,19 +278,39 @@ class DesktopPlaybackEngine(
                 requested = DesktopPcmFormat(44_100, 2, bytesPerSample = 4, isFloat = true),
                 windowed = stream.windowedReads,
                 transport = stream.transport,
-            ).map {
-                if (startAtMs > 0) decoder.seek(startAtMs * 1_000)
-                // From here the decoder belongs to its own read-ahead thread: the audio thread only
-                // ever takes what has already been decoded, so a slow network read is not a gap.
-                val ahead = DesktopDecodeAhead(
-                    source = decoder,
-                    outputFormat = decoder.outputFormat,
-                    durationUs = decoder.durationUs,
-                    measuredFormat = decoder.measuredFormat,
-                    name = "AuraMusic-Decode ${song.title.take(24)}",
-                )
-                Track(song, ahead, stream, startAtMs * 1_000)
-            }.onFailure { decoder.close() }
+            )
+            opened.fold(
+                onSuccess = {
+                    var ahead: DesktopDecodeAhead? = null
+                    try {
+                        currentCoroutineContext().ensureActive()
+                        if (startAtMs > 0) decoder.seek(startAtMs * 1_000)
+                        currentCoroutineContext().ensureActive()
+                        // From here the decoder belongs to its own read-ahead thread: the audio thread only
+                        // ever takes what has already been decoded, so a slow network read is not a gap.
+                        ahead = DesktopDecodeAhead(
+                            source = decoder,
+                            outputFormat = decoder.outputFormat,
+                            durationUs = decoder.durationUs,
+                            measuredFormat = decoder.measuredFormat,
+                            name = "AuraMusic-Decode ${song.title.take(24)}",
+                        )
+                        if (!currentCoroutineContext().isActive) {
+                            throw CancellationException("Track open cancelled")
+                        }
+                        Result.success(Track(song, ahead, stream, startAtMs * 1_000))
+                    } catch (t: Throwable) {
+                        runCatching { ahead?.close() }
+                        runCatching { decoder.close() }
+                        if (t is CancellationException) throw t
+                        Result.failure(t)
+                    }
+                },
+                onFailure = { failure ->
+                    runCatching { decoder.close() }
+                    Result.failure(failure)
+                },
+            )
         }
 
     /**
@@ -355,7 +385,8 @@ class DesktopPlaybackEngine(
 
     /** Re-opens the current track on a different stream, carrying the playhead over. */
     private fun swapStream(song: Song, stream: DesktopStream, positionMs: Long) {
-        scope.launch {
+        swapJob?.cancel()
+        swapJob = scope.launch {
             openTrack(song, stream, positionMs).fold(
                 onSuccess = { track ->
                     val latest = _state.value
@@ -391,11 +422,12 @@ class DesktopPlaybackEngine(
         val song = current.song ?: return
         if (forceSourceRefresh) DesktopAddonSource.clearCompletedTrackCalls()
         upgradeJob?.cancel()
+        swapJob?.cancel()
         DesktopTrackLog.log(
             "re-opening '${song.title}' — pinned to the original: " +
                 "${DesktopOriginalVersion.isPinned(song.videoId)}",
         )
-        scope.launch {
+        swapJob = scope.launch {
             DesktopMusicSources.resolve(song, audioQuality).fold(
                 onSuccess = { stream ->
                     if (_state.value.song?.videoId != song.videoId) return@fold
@@ -556,7 +588,8 @@ class DesktopPlaybackEngine(
     private fun upgradeIncoming(song: Song, opened: DesktopStream, pending: Deferred<DesktopStream?>) {
         // The player says "upgrading" for this track from the moment it is shown, mid-blend.
         incomingSearchingFor = song.videoId
-        scope.launch {
+        incomingUpgradeJob?.cancel()
+        incomingUpgradeJob = scope.launch {
             val better = runCatching { pending.await() }.getOrNull()
                 ?.takeIf { DesktopMusicSources.worthSwapping(it.format, opened.format) }
             if (better == null) {
@@ -587,7 +620,8 @@ class DesktopPlaybackEngine(
      * has finished — [replaceCurrent] refuses anything mid-blend.
      */
     private fun playingUpgrade(song: Song, better: DesktopStream) {
-        scope.launch {
+        incomingUpgradeJob?.cancel()
+        incomingUpgradeJob = scope.launch {
             repeat(BLEND_WAIT_POLLS) {
                 val playing = _state.value.song?.videoId == song.videoId
                 if (playing && !displaySwitched && fadeRemaining <= 0) {
@@ -614,6 +648,8 @@ class DesktopPlaybackEngine(
         resolveJob?.cancel()
         nextResolveJob?.cancel()
         upgradeJob?.cancel()
+        swapJob?.cancel()
+        incomingUpgradeJob?.cancel()
         thread.interrupt()
         scope.cancel()
     }
@@ -1089,7 +1125,7 @@ class DesktopPlaybackEngine(
             hasDeferredNext = false
             deferredNext = null
         }
-        if (had) prepareNext(next)
+        if (had) scope.launch { prepareNext(next) }
     }
 
     /** Source time of audio written to the sink but not yet heard. */
@@ -1191,6 +1227,10 @@ class DesktopPlaybackEngine(
                     fadeRemaining = 0
                     sink.flush()
                     framesWritten = sink.framesPlayed()
+                    synchronized(blendLock) {
+                        hasDeferredNext = false
+                        deferredNext = null
+                    }
                     endBlend()
                 }
             }

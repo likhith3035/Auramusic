@@ -52,6 +52,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -63,6 +64,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -230,48 +233,6 @@ internal object DesktopListenTogether {
     private val _unreadChatCount = MutableStateFlow(0)
     val unreadChatCount: StateFlow<Int> = _unreadChatCount.asStateFlow()
 
-    private val _showDevModal = MutableStateFlow(false)
-    val showDevModal: StateFlow<Boolean> = _showDevModal.asStateFlow()
-
-    fun setShowDevModal(show: Boolean) {
-        _showDevModal.value = show
-    }
-
-    fun dismissDevModal() {
-        _showDevModal.value = false
-    }
-
-    fun devElevate(dob: String, nickname: String, confirm: String): Boolean {
-        val cleanDob = dob.filter { it.isDigit() }
-        if (cleanDob != "29072005" || !confirm.trim().equals("iam", ignoreCase = true)) {
-            return false
-        }
-        val finalNick = nickname.trim().ifEmpty { "likki" }
-        control("devElevate") {
-            put("dob", cleanDob)
-            put("nickname", finalNick)
-            put("confirm", "iam")
-        }
-        _state.update { current ->
-            current.copy(
-                you = current.you?.copy(
-                    displayName = finalNick,
-                    isHost = true,
-                    isFounder = true
-                ),
-                members = current.members.map { m ->
-                    if (m.memberId == current.you?.memberId) {
-                        m.copy(displayName = finalNick, isHost = true, isFounder = true)
-                    } else {
-                        m.copy(isHost = false)
-                    }
-                }
-            )
-        }
-        _showDevModal.value = false
-        return true
-    }
-
     private val _typingUsers = MutableStateFlow<List<String>>(emptyList())
     val typingUsers: StateFlow<List<String>> = _typingUsers.asStateFlow()
 
@@ -363,31 +324,34 @@ internal object DesktopListenTogether {
 
     private var socketJob: Job? = null
     private var healthJob: Job? = null
-    private var session: DefaultClientWebSocketSession? = null
-    private var token: String? = null
+    @Volatile private var session: DefaultClientWebSocketSession? = null
+    @Volatile private var token: String? = null
+    private val entryLock = Mutex()
     @Volatile private var effectiveIdleServerBase: String = DEFAULT_SERVER
     @Volatile private var activePartyServerBase: String? = null
 
     init {
-        // A process cannot resume the old socket safely, and leaving its token around occupies a
-        // party slot until the server's grace period expires. Android hands that stale slot back
-        // during init; desktop does the same before offering a new room.
-        val staleCode = persistence.string(KEY_CODE)
-        val staleToken = persistence.string(KEY_TOKEN)
-        val staleServer = persistence.string(KEY_ACTIVE_SERVER).ifBlank { defaultHttpBase() }
-        persistence.saveString(KEY_CODE, "")
-        persistence.saveString(KEY_TOKEN, "")
-        persistence.saveString(KEY_ACTIVE_SERVER, "")
-        if (staleCode.isNotBlank() && staleToken.isNotBlank()) {
-            scope.launch {
-                runCatching {
-                    http.post("$staleServer/api/parties/$staleCode/leave") {
-                        header("Authorization", "Bearer $staleToken")
+        if (System.getProperty("bitchord.test") != "true") {
+            // A process cannot resume the old socket safely, and leaving its token around occupies a
+            // party slot until the server's grace period expires. Android hands that stale slot back
+            // during init; desktop does the same before offering a new room.
+            val staleCode = persistence.string(KEY_CODE)
+            val staleToken = persistence.string(KEY_TOKEN)
+            val staleServer = persistence.string(KEY_ACTIVE_SERVER).ifBlank { defaultHttpBase() }
+            persistence.saveString(KEY_CODE, "")
+            persistence.saveString(KEY_TOKEN, "")
+            persistence.saveString(KEY_ACTIVE_SERVER, "")
+            if (staleCode.isNotBlank() && staleToken.isNotBlank()) {
+                scope.launch {
+                    runCatching {
+                        http.post("$staleServer/api/parties/$staleCode/leave") {
+                            header("Authorization", "Bearer $staleToken")
+                        }
                     }
                 }
             }
+            refreshServerHealth()
         }
-        refreshServerHealth()
     }
 
     fun setCustomServerUrl(value: String): Result<Unit> = runCatching {
@@ -469,14 +433,16 @@ internal object DesktopListenTogether {
         post(
             "$server/api/parties",
             JoinRequest(
-                who.userId,
-                who.deviceId,
-                who.name,
-                who.avatar,
-                maxMembers.coerceIn(2, 10),
-                autoplayEnabled,
+                userId = who.userId,
+                deviceId = who.deviceId,
+                displayName = who.name,
+                avatarUrl = who.avatar,
+                maxMembers = maxMembers.coerceIn(2, 10),
+                autoplayEnabled = autoplayEnabled,
             ),
         )
+    }.onSuccess {
+        com.music.bitchord.data.telemetry.AuraAnalytics.trackFeatureUsed("listen_together_create")
     }
 
     suspend fun joinParty(code: String, nickname: String = nickname()): Result<String> {
@@ -486,11 +452,14 @@ internal object DesktopListenTogether {
         }
         return runCatching { refuseIfRecentlyKicked(trimmed) }.fold(
             onSuccess = {
+                val priorToken = token?.takeIf { _state.value.code.equals(trimmed, ignoreCase = true) }
                 enter(nickname) { who, server ->
                     post(
                         "$server/api/parties/$trimmed/join",
-                        JoinRequest(who.userId, who.deviceId, who.name, who.avatar),
+                        JoinRequest(who.userId, who.deviceId, who.name, who.avatar, priorToken = priorToken),
                     )
+                }.onSuccess {
+                    com.music.bitchord.data.telemetry.AuraAnalytics.trackFeatureUsed("listen_together_join")
                 }
             },
             onFailure = { Result.failure(it) },
@@ -500,7 +469,7 @@ internal object DesktopListenTogether {
     private suspend fun enter(
         nickname: String,
         request: suspend (Identity, String) -> PartyMembership,
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<String> = entryLock.withLock { withContext(Dispatchers.IO) {
         val who = identity(nickname)
             ?: return@withContext Result.failure(
                 PartyException("not_signed_in", "Sign in to listen together."),
@@ -549,9 +518,9 @@ internal object DesktopListenTogether {
             DesktopTrackLog.log("listen together: could not enter a party: ${redact(failure.message)}")
             _state.update { it.copy(error = failure.displayMessage()) }
         }.map { it.code }
-    }
+    } }
 
-    suspend fun leaveParty() = withContext(Dispatchers.IO) {
+    suspend fun leaveParty() = entryLock.withLock { withContext(Dispatchers.IO) {
         val code = _state.value.code
         val held = token
         val server = activePartyServerBase ?: effectiveIdleServerBase
@@ -585,6 +554,14 @@ internal object DesktopListenTogether {
             }
         }
         Unit
+    } }
+
+    internal fun shutdown() {
+        healthJob?.cancel()
+        socketJob?.cancel()
+        session = null
+        scope.cancel()
+        runCatching { http.close() }
     }
 
     fun play(positionMs: Long? = null) = control("play") { positionMs?.let { put("positionMs", it) } }
@@ -659,15 +636,11 @@ internal object DesktopListenTogether {
         imageUrl: String? = null,
     ) {
         val trimmed = text.trim()
-        if (trimmed == "likhith3035." || trimmed == "likhith3035" || trimmed == ".likhith3035") {
-            _showDevModal.value = true
-            return
-        }
         val you = _state.value.you ?: return
         if (trimmed.isEmpty() && song == null && imageUrl.isNullOrBlank()) return
         val id = UUID.randomUUID().toString()
         val now = clock.nowMs()
-        val isFounder = you.isFounder || you.displayName.equals("likki", ignoreCase = true)
+        val isFounder = you.isFounder
         val localMsg = PartyChatMessage(
             id = id,
             senderId = you.memberId,
@@ -720,28 +693,11 @@ internal object DesktopListenTogether {
         val alreadyUpvoted = currentMsg.upvoterIds.contains(you.memberId)
         val newUpvoters = if (alreadyUpvoted) currentMsg.upvoterIds - you.memberId else currentMsg.upvoterIds + you.memberId
         val newVotes = newUpvoters.size
-        val shouldAutoQueue = newVotes >= 2 && !currentMsg.autoQueued && currentMsg.song != null
         val updated = currentMsg.copy(
             upvotes = newVotes,
             upvoterIds = newUpvoters,
-            autoQueued = currentMsg.autoQueued || shouldAutoQueue
         )
         sendChatUpdateFrame(updated)
-
-        if (shouldAutoQueue) {
-            val song = currentMsg.song
-            if (song != null) {
-                val track = PartyTrack(
-                    videoId = song.videoId,
-                    title = song.title,
-                    artist = song.artist,
-                    thumbnailUrl = song.coverUrl,
-                    durationMs = song.durationSec?.let { it * 1000L },
-                    fromAutoplay = false
-                )
-                queueAdd(listOf(track), playNext = false)
-            }
-        }
     }
 
     fun reactToChatMessage(messageId: String, emoji: String) {

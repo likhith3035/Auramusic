@@ -87,3 +87,129 @@ internal object DesktopSecretStore {
     /** Whether a store is actually reachable, for the settings screen to say so. */
     fun isAvailable(): Boolean = withService { _, _, _ -> true } == true
 }
+
+/**
+ * Cross-platform encrypted/keyring credential storage used across desktop secrets
+ * (Google session cookies, Discord tokens, Last.fm/ListenBrainz keys, Spotify sp_dc).
+ */
+internal object DesktopSecretVault {
+    private const val DPAPI_PREFIX = "dpapi:v1:"
+
+    private fun attrs(secretId: String) = mapOf("application" to "bitchord", "account" to secretId)
+
+    fun write(
+        persistence: DesktopPersistence,
+        prefKey: String,
+        secretId: String,
+        label: String,
+        secret: String,
+    ) {
+        if (secret.isBlank()) {
+            remove(persistence, prefKey, secretId)
+            return
+        }
+        if (DesktopPlatform.isWindows) {
+            val sealed = DesktopWindowsCrypto.protect(secret.toByteArray(Charsets.UTF_8))
+                ?: error("Windows DPAPI could not seal credential '$secretId'")
+            DesktopPreferenceChunks.write(
+                persistence.preferences,
+                prefKey,
+                DPAPI_PREFIX + java.util.Base64.getEncoder().encodeToString(sealed),
+            )
+            return
+        }
+        if (DesktopSecretStore.store(label, attrs(secretId), secret.toByteArray(Charsets.UTF_8))) {
+            DesktopPreferenceChunks.remove(persistence.preferences, prefKey)
+            deleteLocalSecretFile(secretId)
+        } else {
+            writeLocalSecretFile(secretId, secret)
+            DesktopPreferenceChunks.remove(persistence.preferences, prefKey)
+        }
+    }
+
+    fun read(
+        persistence: DesktopPersistence,
+        prefKey: String,
+        secretId: String,
+    ): String? {
+        if (DesktopPlatform.isWindows) {
+            val stored = DesktopPreferenceChunks.read(persistence.preferences, prefKey)
+                ?.takeIf { it.isNotBlank() } ?: return null
+            if (stored.startsWith(DPAPI_PREFIX)) {
+                val decoded = runCatching {
+                    java.util.Base64.getDecoder().decode(stored.removePrefix(DPAPI_PREFIX))
+                }.getOrNull() ?: return null
+                return DesktopWindowsCrypto.unprotect(decoded)
+                    ?.toString(Charsets.UTF_8)
+                    ?.takeIf { it.isNotBlank() }
+            }
+            // Migrate legacy plaintext registry entries into DPAPI automatically.
+            DesktopWindowsCrypto.protect(stored.toByteArray(Charsets.UTF_8))?.let { sealed ->
+                DesktopPreferenceChunks.write(
+                    persistence.preferences,
+                    prefKey,
+                    DPAPI_PREFIX + java.util.Base64.getEncoder().encodeToString(sealed),
+                )
+            }
+            return stored
+        }
+        DesktopSecretStore.lookup(attrs(secretId))
+            ?.toString(Charsets.UTF_8)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        readLocalSecretFile(secretId)?.takeIf { it.isNotBlank() }?.let { return it }
+        // Migrate legacy preference value out of java.util.prefs.
+        val legacy = DesktopPreferenceChunks.read(persistence.preferences, prefKey)?.takeIf { it.isNotBlank() }
+        if (legacy != null) {
+            write(persistence, prefKey, secretId, secretId, legacy)
+            return legacy
+        }
+        return null
+    }
+
+    fun remove(
+        persistence: DesktopPersistence,
+        prefKey: String,
+        secretId: String,
+    ) {
+        DesktopSecretStore.remove(attrs(secretId))
+        deleteLocalSecretFile(secretId)
+        DesktopPreferenceChunks.remove(persistence.preferences, prefKey)
+    }
+
+    private fun secretFileFor(secretId: String): java.io.File {
+        val safeName = secretId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val dir = java.io.File(System.getProperty("user.home"), ".local/share/AuraMusic/.secrets")
+        return java.io.File(dir, "$safeName.sec")
+    }
+
+    private fun writeLocalSecretFile(secretId: String, secret: String) {
+        val file = secretFileFor(secretId)
+        val dir = file.parentFile
+        if (dir != null && !dir.exists()) {
+            dir.mkdirs()
+            runCatching {
+                java.nio.file.Files.setPosixFilePermissions(
+                    dir.toPath(),
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"),
+                )
+            }
+        }
+        file.writeText(secret, Charsets.UTF_8)
+        runCatching {
+            java.nio.file.Files.setPosixFilePermissions(
+                file.toPath(),
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"),
+            )
+        }
+    }
+
+    private fun readLocalSecretFile(secretId: String): String? = runCatching {
+        val file = secretFileFor(secretId)
+        if (file.isFile) file.readText(Charsets.UTF_8) else null
+    }.getOrNull()
+
+    private fun deleteLocalSecretFile(secretId: String) {
+        runCatching { secretFileFor(secretId).delete() }
+    }
+}

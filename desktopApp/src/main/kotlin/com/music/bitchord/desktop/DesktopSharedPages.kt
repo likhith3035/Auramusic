@@ -73,6 +73,17 @@ internal object DesktopAppUiHost : AppUiHost {
         _homeRecentsViewType.value = value
     }
 
+    private val _homeClockStyleIndex = MutableStateFlow(
+        persistence.int(KEY_HOME_CLOCK_STYLE_INDEX, 0).coerceAtLeast(0),
+    )
+    override val homeClockStyleIndex: StateFlow<Int> = _homeClockStyleIndex
+
+    override fun setHomeClockStyleIndex(index: Int) {
+        val normalized = index.coerceAtLeast(0)
+        persistence.saveInt(KEY_HOME_CLOCK_STYLE_INDEX, normalized)
+        _homeClockStyleIndex.value = normalized
+    }
+
     /** Nothing is pinned here: the desktop has no pin action to put anything first. */
     override val pinnedPlaylists: StateFlow<List<String>> = MutableStateFlow(emptyList())
 
@@ -118,6 +129,7 @@ internal object DesktopAppUiHost : AppUiHost {
 
     private const val KEY_SWIPE_PLAY_NEXT = "swipe_play_next"
     private const val KEY_HOME_RECENTS_VIEW = "home_recents_view"
+    private const val KEY_HOME_CLOCK_STYLE_INDEX = "home_clock_style_index"
 }
 
 /**

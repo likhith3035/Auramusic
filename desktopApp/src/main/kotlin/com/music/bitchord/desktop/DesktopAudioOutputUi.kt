@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,9 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.desktop.connect.AuraConnectHost
 import com.music.bitchord.ui.icons.BitChordIcons
 
 /**
@@ -62,6 +66,49 @@ internal fun DesktopAudioOutputDialog(onDismiss: () -> Unit) {
                 OutputRow(device.name, device.description, chosen = selected == device.id) {
                     DesktopAudioDevices.select(device.id)
                     onDismiss()
+                }
+            }
+            val connectPin by AuraConnectHost.pairingPin.collectAsState()
+            val pairedCount by AuraConnectHost.pairedCount.collectAsState()
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White.copy(alpha = 0.05f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Aura Connect Pairing PIN",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Enter this code on your phone to authorize Wi-Fi remote control ($pairedCount paired).",
+                        color = DesktopSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            connectPin,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { AuraConnectHost.regeneratePairingPin() }) {
+                                Text("New PIN")
+                            }
+                            if (pairedCount > 0) {
+                                TextButton(onClick = { AuraConnectHost.revokeAllClients() }) {
+                                    Text("Revoke", color = DesktopDestructive)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

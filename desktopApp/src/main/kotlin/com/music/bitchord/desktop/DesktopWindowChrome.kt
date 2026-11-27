@@ -32,6 +32,7 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -185,6 +186,7 @@ private fun MacCaptionButton(
             .clickable(
                 interactionSource = interaction,
                 indication = null,
+                role = Role.Button,
                 onClick = onClick,
             )
             .semantics { contentDescription = label }
@@ -200,8 +202,8 @@ private fun MacCaptionButton(
  * The platform's own caption metrics, which is what makes these read as the window's controls
  * rather than the application's.
  */
-private val CAPTION_TOUCH_SIZE = 22.dp
-private val CAPTION_HEIGHT = 24.dp
+private val CAPTION_TOUCH_SIZE = 32.dp
+private val CAPTION_HEIGHT = 32.dp
 private val MAC_DOT_RADIUS = 6.dp
 
 /** Half the width of a glyph, and the weight every one of them is drawn at. */

@@ -23,7 +23,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -166,7 +167,7 @@ private fun NewPlaylistForm(
     val focusRequester = remember { FocusRequester() }
     // The form exists to be typed into; opening it already focused saves the click that would
     // otherwise always follow.
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     val submit = { if (name.isNotBlank() && !busy) onCreate(name.trim(), privacy) }
 
@@ -176,7 +177,7 @@ private fun NewPlaylistForm(
     ) {
         onBack?.let {
             IconButton(onClick = it) {
-                Icon(Icons.Rounded.ArrowBack, DesktopStrings["back", "Back"], tint = Color.White)
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, DesktopStrings["back", "Back"], tint = Color.White)
             }
         }
         Column(Modifier.weight(1f)) {
@@ -221,7 +222,7 @@ private fun NewPlaylistForm(
         }
         if (name.isNotEmpty()) {
             Box(
-                Modifier.size(28.dp).clip(CircleShape).clickable { name = "" },
+                Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) { name = "" },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.Close, DesktopStrings["clear_name", "Clear name"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
@@ -267,7 +268,7 @@ internal fun DesktopRenamePlaylistDialog(
 ) {
     var name by remember(current) { mutableStateOf(current) }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
     val submit = { if (name.isNotBlank() && name.trim() != current && !busy) onRename(name.trim()) }
 
     DesktopDialogFrame(onDismiss = onDismiss) {

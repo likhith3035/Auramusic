@@ -78,6 +78,7 @@ internal fun DesktopReplayPage(
     onPeriodChange: (DesktopReplayPeriod) -> Unit,
     onPlaySong: (Song) -> Unit,
     onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (DesktopRankedEntry) -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     // The mesh behind this page is painted by the frame, so the chrome is tinted by it too.
@@ -114,6 +115,9 @@ internal fun DesktopReplayPage(
             }
 
             item("cards") {
+                val topArtistLabel = DesktopStrings["top_artist", "Top artist"]
+                val topSongLabel = DesktopStrings["top_song", "Top song"]
+                val topAlbumLabel = DesktopStrings["top_album", "Top album"]
                 DesktopScrollableRow(gutter = GUTTER, spacing = 12.dp) {
                     items(summary.heroCards(), key = { it.label }) { card ->
                         ReplayCreditCard(
@@ -123,7 +127,13 @@ internal fun DesktopReplayPage(
                             artworkUrl = card.artworkUrl,
                             holder = holder,
                             memberSince = summary.memberSince(),
-                            onClick = {},
+                            onClick = {
+                                when (card.label) {
+                                    topArtistLabel -> summary.artists.firstOrNull()?.let { onOpenArtist(it.title) }
+                                    topSongLabel -> summary.songs.firstOrNull()?.let { onPlaySong(it.song) }
+                                    topAlbumLabel -> summary.albums.firstOrNull()?.let(onOpenAlbum)
+                                }
+                            },
                             modifier = Modifier.width(300.dp),
                         )
                     }
@@ -147,7 +157,7 @@ internal fun DesktopReplayPage(
                 key = "albums",
                 title = DesktopStrings["top_albums", "Top Albums"],
                 rows = summary.albumRows(CHART_LENGTH),
-                onClick = {},
+                onClick = { index -> summary.albums.getOrNull(index)?.let(onOpenAlbum) },
             )
 
             item("habits") { Habits(summary) }
@@ -243,7 +253,7 @@ private fun ChartRow(row: DesktopReplayRow, circular: Boolean, onClick: () -> Un
             Text(
                 listOfNotNull(row.subtitle, formatListening(row.ms)).joinToString(" · "),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.55f),
+                color = Color.White.copy(alpha = 0.72f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -252,7 +262,7 @@ private fun ChartRow(row: DesktopReplayRow, circular: Boolean, onClick: () -> Un
             Text(
                 row.plays.toString(),
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.45f),
+                color = Color.White.copy(alpha = 0.68f),
             )
         }
     }
@@ -266,7 +276,7 @@ private fun RankBadge(rank: Int) {
         rank.toString(),
         style = if (rank == 1) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.W800,
-        color = if (rank == 1) DesktopAccent else Color.White.copy(alpha = 0.45f),
+        color = if (rank == 1) DesktopAccent else Color.White.copy(alpha = 0.68f),
         modifier = Modifier.width(28.dp),
     )
 }
@@ -336,7 +346,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.55f),
+            color = Color.White.copy(alpha = 0.72f),
             letterSpacing = 1.sp,
         )
     }

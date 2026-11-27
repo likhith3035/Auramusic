@@ -298,6 +298,42 @@ private fun ScrobblingSection(onOpenLastfm: () -> Unit, onOpenListenBrainz: () -
     val lbEnabled by DesktopScrobbleSettings.listenBrainzEnabled.collectAsState()
     val lbToken by DesktopScrobbleSettings.listenBrainzToken.collectAsState()
     val signedIn = lastfmSession.isNotBlank()
+    var confirmLastfmSignOut by remember { mutableStateOf(false) }
+
+    if (confirmLastfmSignOut) {
+        DesktopDialogPanel(onDismiss = { confirmLastfmSignOut = false }, maxWidth = 360) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp)) {
+                Text(
+                    "Disconnect Last.fm?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Stop scrobbling and sign out of $lastfmUser.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DesktopSecondary,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = { confirmLastfmSignOut = false }) {
+                    Text(DesktopStrings["cancel", "Cancel"], color = DesktopSecondary)
+                }
+                TextButton(
+                    onClick = {
+                        confirmLastfmSignOut = false
+                        DesktopScrobbleSettings.signOutOfLastfm()
+                    },
+                ) {
+                    Text("Disconnect", color = DesktopDestructive)
+                }
+            }
+        }
+    }
 
     PanelGroup(
         header = "Scrobbling",
@@ -336,7 +372,7 @@ private fun ScrobblingSection(onOpenLastfm: () -> Unit, onOpenListenBrainz: () -
             onCheckedChange = { checked ->
                 if (checked && !signedIn) onOpenLastfm() else DesktopScrobbleSettings.setLastfmEnabled(checked)
             },
-            onClick = { if (signedIn) DesktopScrobbleSettings.signOutOfLastfm() else onOpenLastfm() },
+            onClick = { if (signedIn) confirmLastfmSignOut = true else onOpenLastfm() },
         )
         if (lastfmEnabled && signedIn) {
             val scrobble by DesktopScrobbleSettings.lastfmScrobble.collectAsState()

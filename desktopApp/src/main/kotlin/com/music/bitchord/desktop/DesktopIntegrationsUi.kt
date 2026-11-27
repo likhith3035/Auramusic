@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -281,7 +282,7 @@ private fun DialogField(
         }
         if (value.isNotEmpty() && enabled) {
             Box(
-                Modifier.size(26.dp).clip(CircleShape).clickable { onValueChange("") },
+                Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) { onValueChange("") },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.Close, DesktopStrings["clear", "Clear"], tint = DesktopSecondary, modifier = Modifier.size(16.dp))

@@ -21,13 +21,17 @@ internal object DesktopScrobbleSettings {
 
     private val _lastfmEnabled = flag(KEY_LASTFM_ENABLED, false)
     private val _lastfmUsername = text(KEY_LASTFM_USERNAME)
-    private val _lastfmSessionKey = text(KEY_LASTFM_SESSION_KEY)
+    private val _lastfmSessionKey = MutableStateFlow(
+        DesktopSecretVault.read(persistence, KEY_LASTFM_SESSION_KEY, KEY_LASTFM_SESSION_KEY).orEmpty(),
+    )
     private val _lastfmScrobble = flag(KEY_LASTFM_SCROBBLE, true)
     private val _lastfmNowPlaying = flag(KEY_LASTFM_NOW_PLAYING, true)
     private val _lastfmPrimaryArtistOnly = flag(KEY_LASTFM_PRIMARY_ARTIST, false)
 
     private val _listenBrainzEnabled = flag(KEY_LISTENBRAINZ_ENABLED, false)
-    private val _listenBrainzToken = text(KEY_LISTENBRAINZ_TOKEN)
+    private val _listenBrainzToken = MutableStateFlow(
+        DesktopSecretVault.read(persistence, KEY_LISTENBRAINZ_TOKEN, KEY_LISTENBRAINZ_TOKEN).orEmpty(),
+    )
     private val _listenBrainzPrimaryArtistOnly = flag(KEY_LISTENBRAINZ_PRIMARY_ARTIST, false)
 
     private val _minDuration = MutableStateFlow(persistence.int(KEY_MIN_DURATION, DEFAULT_MIN_DURATION))
@@ -60,7 +64,13 @@ internal object DesktopScrobbleSettings {
         write(_listenBrainzPrimaryArtistOnly, KEY_LISTENBRAINZ_PRIMARY_ARTIST, value)
 
     fun setListenBrainzToken(value: String) {
-        persistence.saveString(KEY_LISTENBRAINZ_TOKEN, value)
+        DesktopSecretVault.write(
+            persistence = persistence,
+            prefKey = KEY_LISTENBRAINZ_TOKEN,
+            secretId = KEY_LISTENBRAINZ_TOKEN,
+            label = "AuraMusic — ListenBrainz token",
+            secret = value,
+        )
         _listenBrainzToken.value = value
     }
 
@@ -82,7 +92,13 @@ internal object DesktopScrobbleSettings {
     /** Records a successful sign-in and turns scrobbling on, as Android does. */
     fun signedInToLastfm(username: String, sessionKey: String) {
         persistence.saveString(KEY_LASTFM_USERNAME, username)
-        persistence.saveString(KEY_LASTFM_SESSION_KEY, sessionKey)
+        DesktopSecretVault.write(
+            persistence = persistence,
+            prefKey = KEY_LASTFM_SESSION_KEY,
+            secretId = KEY_LASTFM_SESSION_KEY,
+            label = "AuraMusic — Last.fm session",
+            secret = sessionKey,
+        )
         _lastfmUsername.value = username
         _lastfmSessionKey.value = sessionKey
         setLastfmEnabled(true)
@@ -91,7 +107,7 @@ internal object DesktopScrobbleSettings {
     /** Clears the session and everything that depended on it. */
     fun signOutOfLastfm() {
         persistence.saveString(KEY_LASTFM_USERNAME, "")
-        persistence.saveString(KEY_LASTFM_SESSION_KEY, "")
+        DesktopSecretVault.remove(persistence, KEY_LASTFM_SESSION_KEY, KEY_LASTFM_SESSION_KEY)
         _lastfmUsername.value = ""
         _lastfmSessionKey.value = ""
         setLastfmEnabled(false)

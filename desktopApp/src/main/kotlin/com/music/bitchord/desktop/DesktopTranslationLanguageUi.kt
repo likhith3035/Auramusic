@@ -45,7 +45,8 @@ import java.util.Locale
 @Composable
 internal fun DesktopTranslationLanguageDialog(onDismiss: () -> Unit) {
     val stored by DesktopTranslationSetting.language.collectAsState()
-    val locale = remember { Locale.forLanguageTag(DesktopStrings.resolvedTag().ifBlank { "en" }) }
+    val appLanguage by DesktopStrings.language.collectAsState()
+    val locale = remember(appLanguage) { Locale.forLanguageTag(DesktopStrings.resolvedTag().ifBlank { "en" }) }
     var filter by remember { mutableStateOf("") }
 
     // Named in the reader's own language, and sorted that way too — the table's own order is

@@ -287,8 +287,7 @@ internal object DesktopAccounts {
     }
 
     fun remove(accountId: String) {
-        DesktopSecretStore.remove(attributesFor(accountId))
-        persistence.saveString(cookieFallbackKey(accountId), "")
+        DesktopSecretVault.remove(persistence, cookieFallbackKey(accountId), accountId)
         val remaining = accounts().filterNot { it.accountId == accountId }
         write(remaining)
         val next = remaining.firstOrNull()
@@ -303,28 +302,19 @@ internal object DesktopAccounts {
 
     // ---- Where the credential itself lives ---------------------------------
 
-    private fun attributesFor(accountId: String) =
-        mapOf("application" to "bitchord", "account" to accountId)
-
-    /** The keyring first, and a preference only when there is no keyring. */
+    /** The platform secret store (DPAPI on Windows, Secret Service / 0600 vault on Linux/macOS). */
     private fun writeCookie(accountId: String, cookie: String) {
-        val stored = DesktopSecretStore.store(
+        DesktopSecretVault.write(
+            persistence = persistence,
+            prefKey = cookieFallbackKey(accountId),
+            secretId = accountId,
             label = DesktopStrings["d_bitchord_youtube_music_session", "AuraMusic — YouTube Music session"],
-            attributes = attributesFor(accountId),
-            secret = cookie.toByteArray(Charsets.UTF_8),
+            secret = cookie,
         )
-        if (stored) {
-            persistence.saveString(cookieFallbackKey(accountId), "")
-        } else {
-            DesktopTrackLog.log("no keyring available; keeping the session in preferences instead")
-            DesktopPreferenceChunks.write(persistence.preferences, cookieFallbackKey(accountId), cookie)
-        }
     }
 
     fun cookieOf(accountId: String): String? =
-        DesktopSecretStore.lookup(attributesFor(accountId))?.toString(Charsets.UTF_8)?.takeIf { it.isNotBlank() }
-            ?: DesktopPreferenceChunks.read(persistence.preferences, cookieFallbackKey(accountId))
-                ?.takeIf { it.isNotBlank() }
+        DesktopSecretVault.read(persistence, cookieFallbackKey(accountId), accountId)
 
     private fun cookieFallbackKey(accountId: String) = "google_cookie_$accountId"
 

@@ -26,6 +26,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import netscape.javascript.JSObject
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -170,10 +174,13 @@ class DesktopPoTokenWebView private constructor(
             "https://www.youtube.com/api/jnn/v1/Create",
             "[ \"$REQUEST_KEY\" ]",
         ) { responseBody ->
-            val parsedChallengeData = parseChallengeData(responseBody)
+            val parsedChallengeJsonLiteral = Json.encodeToString(
+                JsonPrimitive.serializer(),
+                JsonPrimitive(parseChallengeData(responseBody)),
+            )
             engine.executeScript(
                 """try {
-                    data = $parsedChallengeData
+                    data = JSON.parse($parsedChallengeJsonLiteral)
                     runBotGuard(data).then(function (result) {
                         this.webPoSignalOutput = result.webPoSignalOutput
                         $JS_INTERFACE.onRunBotguardResult(result.botguardResponse)
@@ -196,7 +203,10 @@ class DesktopPoTokenWebView private constructor(
         TrackLog.d(TAG, "botguardResponse received")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
-            "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
+            buildJsonArray {
+                add(REQUEST_KEY)
+                add(botguardResponse)
+            }.toString(),
         ) { responseBody ->
             TrackLog.d(TAG, "GenerateIT response received")
             try {
@@ -253,9 +263,10 @@ class DesktopPoTokenWebView private constructor(
             suspendCancellableCoroutine { cont ->
                 TrackLog.d(TAG, "PO-token generation requested")
                 poTokenContinuations[requestKey] = cont
+                val quotedRequestKey = Json.encodeToString(JsonPrimitive.serializer(), JsonPrimitive(requestKey))
                 engine.executeScript(
                     """(function() {
-                        var requestKey = "$requestKey"
+                        var requestKey = $quotedRequestKey
                         try {
                             var u8Identifier = ${stringToU8(identifier)}
                             obtainPoToken(u8Identifier).then(function(poTokenU8) {
@@ -321,7 +332,7 @@ class DesktopPoTokenWebView private constructor(
                 .build()
             val (httpCode, body) = withContext(Dispatchers.IO) {
                 Http.client.newCall(request).execute().use { response ->
-                    response.code to if (response.code == 200) response.body?.string() else null
+                    response.code to if (response.code == 200) response.body.string() else null
                 }
             }
             if (body.isNullOrEmpty()) {

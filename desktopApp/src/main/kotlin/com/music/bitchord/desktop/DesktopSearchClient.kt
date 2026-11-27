@@ -36,6 +36,19 @@ object DesktopSearchClient {
         return YtMusicRepository.search(query.trim(), filter)
     }
 
+    suspend fun searchPage(
+        query: String,
+        filter: SearchFilter = SearchFilter.SONGS,
+    ): Result<YtMusicRepository.SearchPage> {
+        if (query.isBlank()) return Result.failure(IllegalArgumentException("Search query cannot be empty"))
+        return YtMusicRepository.searchPage(query.trim(), filter)
+    }
+
+    suspend fun searchContinuation(
+        token: String,
+        filter: SearchFilter,
+    ): Result<YtMusicRepository.SearchPage> = YtMusicRepository.searchContinuation(token, filter)
+
     suspend fun home(): Result<HomeFeed> = YtMusicRepository.home()
 
     suspend fun moreHome(token: String): Result<HomeFeed> = YtMusicRepository.moreHome(token)

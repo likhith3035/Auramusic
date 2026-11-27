@@ -25,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
@@ -41,13 +43,14 @@ import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.ThumbUp
-import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +76,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -94,6 +98,8 @@ import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.swing.Swing
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -114,7 +120,6 @@ internal fun DesktopListenTogetherDialog(autoplayEnabled: Boolean, onDismiss: ()
     var busy by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
     var showRecapDialog by remember { mutableStateOf(false) }
-    val showDevModal by DesktopListenTogether.showDevModal.collectAsState()
 
     val pendingInvite by DesktopListenTogether.pendingInvite.collectAsState()
     LaunchedEffect(pendingInvite) {
@@ -143,15 +148,6 @@ internal fun DesktopListenTogetherDialog(autoplayEnabled: Boolean, onDismiss: ()
 
     if (showRecapDialog) {
         DesktopPartyRecapDialog(onDismiss = { showRecapDialog = false })
-    }
-
-    if (showDevModal) {
-        DesktopDevTerminalModal(
-            onDismiss = { DesktopListenTogether.dismissDevModal() },
-            onElevate = { dob, nick, conf ->
-                DesktopListenTogether.devElevate(dob, nick, conf)
-            }
-        )
     }
 
     DesktopDialogPanel(onDismiss = onDismiss, maxWidth = 920) {
@@ -990,7 +986,7 @@ private fun PartyChatPanel(state: DesktopListenTogether.State) {
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
-                        Icons.Rounded.VolumeUp,
+                        Icons.AutoMirrored.Rounded.VolumeUp,
                         null,
                         modifier = Modifier.size(15.dp),
                         tint = if (showSoundboard) DesktopAccent else DesktopSecondary
@@ -1352,19 +1348,23 @@ private fun PartyChatPanel(state: DesktopListenTogether.State) {
         ) {
             IconButton(
                 onClick = {
-                    scope.launch(Dispatchers.IO) {
+                    scope.launch {
                         try {
-                            val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Select Photo to Share", java.awt.FileDialog.LOAD)
-                            dialog.setFilenameFilter { _, name ->
-                                val n = name.lowercase()
-                                n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp")
+                            val selectedFile = withContext(Dispatchers.Swing) {
+                                val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Select Photo to Share", java.awt.FileDialog.LOAD)
+                                dialog.setFilenameFilter { _, name ->
+                                    val n = name.lowercase()
+                                    n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp")
+                                }
+                                dialog.isVisible = true
+                                val dir = dialog.directory
+                                val file = dialog.file
+                                if (dir != null && file != null) java.io.File(dir, file) else null
                             }
-                            dialog.isVisible = true
-                            val dir = dialog.directory
-                            val file = dialog.file
-                            if (dir != null && file != null) {
-                                val chosen = java.io.File(dir, file)
-                                val base64 = DesktopListenTogether.compressDesktopImageToBase64(chosen)
+                            if (selectedFile != null) {
+                                val base64 = withContext(Dispatchers.IO) {
+                                    DesktopListenTogether.compressDesktopImageToBase64(selectedFile)
+                                }
                                 if (base64 != null) {
                                     DesktopListenTogether.sendChatMessage(
                                         text = inputText.trim(),
@@ -1375,7 +1375,7 @@ private fun PartyChatPanel(state: DesktopListenTogether.State) {
                                     replyingTo = null
                                 }
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             // Dialog closed or cancelled
                         }
                     }
@@ -1385,22 +1385,26 @@ private fun PartyChatPanel(state: DesktopListenTogether.State) {
             }
             IconButton(
                 onClick = {
-                    scope.launch(Dispatchers.IO) {
+                    scope.launch {
                         try {
-                            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                            if (clipboard.isDataFlavorAvailable(java.awt.datatransfer.DataFlavor.imageFlavor)) {
-                                val img = clipboard.getData(java.awt.datatransfer.DataFlavor.imageFlavor) as? java.awt.Image
-                                if (img != null) {
-                                    val base64 = DesktopListenTogether.compressDesktopImageToBase64(img)
-                                    if (base64 != null) {
-                                        DesktopListenTogether.sendChatMessage(
-                                            text = inputText.trim(),
-                                            imageUrl = base64,
-                                            replyTo = replyingTo,
-                                        )
-                                        inputText = ""
-                                        replyingTo = null
-                                    }
+                            val img = withContext(Dispatchers.Swing) {
+                                val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                                if (clipboard.isDataFlavorAvailable(java.awt.datatransfer.DataFlavor.imageFlavor)) {
+                                    clipboard.getData(java.awt.datatransfer.DataFlavor.imageFlavor) as? java.awt.Image
+                                } else null
+                            }
+                            if (img != null) {
+                                val base64 = withContext(Dispatchers.IO) {
+                                    DesktopListenTogether.compressDesktopImageToBase64(img)
+                                }
+                                if (base64 != null) {
+                                    DesktopListenTogether.sendChatMessage(
+                                        text = inputText.trim(),
+                                        imageUrl = base64,
+                                        replyTo = replyingTo,
+                                    )
+                                    inputText = ""
+                                    replyingTo = null
                                 }
                             }
                         } catch (_: Exception) {}
@@ -1450,16 +1454,18 @@ private fun PartyChatPanel(state: DesktopListenTogether.State) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                scope.launch(Dispatchers.IO) {
+                                scope.launch {
                                     try {
-                                        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Save Photo As", java.awt.FileDialog.SAVE)
-                                        dialog.file = "party_photo_${System.currentTimeMillis()}.png"
-                                        dialog.isVisible = true
-                                        val dir = dialog.directory
-                                        val file = dialog.file
-                                        if (dir != null && file != null) {
-                                            val target = java.io.File(dir, file)
-                                            if (currentImg.contains("base64,")) {
+                                        val target = withContext(Dispatchers.Swing) {
+                                            val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Save Photo As", java.awt.FileDialog.SAVE)
+                                            dialog.file = "party_photo_${System.currentTimeMillis()}.png"
+                                            dialog.isVisible = true
+                                            val dir = dialog.directory
+                                            val file = dialog.file
+                                            if (dir != null && file != null) java.io.File(dir, file) else null
+                                        }
+                                        if (target != null && currentImg.contains("base64,")) {
+                                            withContext(Dispatchers.IO) {
                                                 val bytes = java.util.Base64.getDecoder().decode(currentImg.substringAfter("base64,"))
                                                 target.writeBytes(bytes)
                                             }
@@ -1639,14 +1645,14 @@ private fun PartyChatMessageRow(
                             .background(DesktopCardFill)
                             .padding(8.dp)
                     ) {
-                        if (msg.autoQueued || (msg.upvotes >= 2 && song != null)) {
+                        if (msg.autoQueued || msg.upvotes >= 2) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = DesktopAccent.copy(alpha = 0.2f),
                                 modifier = Modifier.padding(bottom = 6.dp)
                             ) {
                                 Text(
-                                    "🗳️ Auto-Queued by Democracy",
+                                    "Auto-Queued by Democracy",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = DesktopAccent,
@@ -1764,13 +1770,13 @@ private fun PartyChatMessageRow(
             // + Reaction trigger
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(DesktopCardInsetFill)
-                    .clickable { showEmojiDock = !showEmojiDock },
+                    .clickable(role = Role.Button) { showEmojiDock = !showEmojiDock },
                 contentAlignment = Alignment.Center
             ) {
-                Text("➕", fontSize = 9.sp)
+                Icon(Icons.Rounded.Add, contentDescription = "Add reaction", tint = DesktopSecondary, modifier = Modifier.size(16.dp))
             }
 
             Spacer(Modifier.width(4.dp))
@@ -1778,13 +1784,13 @@ private fun PartyChatMessageRow(
             // Reply trigger
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(DesktopCardInsetFill)
-                    .clickable { onReply(msg) },
+                    .clickable(role = Role.Button) { onReply(msg) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("↩️", fontSize = 9.sp)
+                Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = "Reply", tint = DesktopSecondary, modifier = Modifier.size(16.dp))
             }
 
             // Pin trigger (if host)
@@ -1792,13 +1798,18 @@ private fun PartyChatMessageRow(
                 Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(if (msg.isPinned) DesktopAccent.copy(alpha = 0.25f) else DesktopCardInsetFill)
-                        .clickable { onPin(msg.id) },
+                        .clickable(role = Role.Button) { onPin(msg.id) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (msg.isPinned) "📌" else "📍", fontSize = 9.sp)
+                    Icon(
+                        if (msg.isPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = if (msg.isPinned) "Unpin message" else "Pin message",
+                        tint = if (msg.isPinned) DesktopAccent else DesktopSecondary,
+                        modifier = Modifier.size(15.dp),
+                    )
                 }
             }
         }
@@ -1829,119 +1840,6 @@ private fun PartyChatMessageRow(
                                 .padding(3.dp)
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DesktopDevTerminalModal(
-    onDismiss: () -> Unit,
-    onElevate: (String, String, String) -> Boolean,
-) {
-    var dobInput by remember { mutableStateOf("") }
-    var nicknameInput by remember { mutableStateOf("likki") }
-    var confirmInput by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isSuccess by remember { mutableStateOf(false) }
-
-    DesktopDialogPanel(onDismiss = onDismiss, maxWidth = 480) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .desktopCardInset(RoundedCornerShape(20.dp))
-                .padding(24.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = DesktopAccent.copy(alpha = 0.15f),
-                    modifier = Modifier.size(42.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("⚡", fontSize = 20.sp)
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        "Developer Authorization",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        "Host elevation & founder verification",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = DesktopSecondary
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            OutlinedTextField(
-                value = dobInput,
-                onValueChange = { dobInput = it; errorMessage = null },
-                label = { Text("Date of Birth (e.g. 29 07 2005)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = nicknameInput,
-                onValueChange = { nicknameInput = it; errorMessage = null },
-                label = { Text("Developer Nickname") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = confirmInput,
-                onValueChange = { confirmInput = it; errorMessage = null },
-                label = { Text("Type 'iam' to verify host identity") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            errorMessage?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, color = DesktopDestructive, style = MaterialTheme.typography.bodySmall)
-            }
-
-            if (isSuccess) {
-                Spacer(Modifier.height(8.dp))
-                Text("👑 Elevation verified! Host granted.", color = DesktopAccent, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = DesktopSecondary)
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        val ok = onElevate(dobInput, nicknameInput, confirmInput)
-                        if (ok) {
-                            isSuccess = true
-                            onDismiss()
-                        } else {
-                            errorMessage = "Invalid verification credentials. Access denied."
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DesktopAccent, contentColor = Color.Black)
-                ) {
-                    Text("Elevate to Host", fontWeight = FontWeight.Bold)
                 }
             }
         }

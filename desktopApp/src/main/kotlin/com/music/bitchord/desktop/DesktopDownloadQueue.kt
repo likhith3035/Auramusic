@@ -164,6 +164,7 @@ object DesktopDownloadQueue {
                         outcome.fold(
                             onSuccess = { saved ->
                                 _active.update { it - id }
+                                com.music.bitchord.data.telemetry.AuraAnalytics.trackDownloadCompleted("desktop")
                                 _finished.tryEmit(saved)
                             },
                             onFailure = { failed(id, item, it) },

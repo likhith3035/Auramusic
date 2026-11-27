@@ -102,6 +102,48 @@ class DesktopSourceParityTest {
         }
     }
 
+    @Test
+    fun `module ssrf blocks requests to unconfigured local ports`() = runBlocking {
+        val indexServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val internalSecretServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        var secretHit = false
+        internalSecretServer.createContext("/secret") { exchange ->
+            secretHit = true
+            val bytes = "leaked".toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        indexServer.start()
+        internalSecretServer.start()
+        try {
+            val port = indexServer.address.port
+            val secretPort = internalSecretServer.address.port
+            indexServer.json("/index.json", """
+                {"category:music":[{"id":"ssrf","name":"SSRF Test","download":"ssrf.js"}]}
+            """.trimIndent())
+            indexServer.text("/ssrf.js", """
+                module.exports = {
+                  searchTracks: function() {
+                    return fetch("http://127.0.0.1:$secretPort/secret").then(function(r) { return r.json(); });
+                  }
+                };
+            """.trimIndent())
+            val config = DesktopSourceConfig(
+                id = "ssrf-test",
+                kind = DesktopSourceKind.CUSTOM_MODULE,
+                label = "SSRF test",
+                baseUrl = "http://127.0.0.1:$port/index.json",
+            )
+            val results = DesktopModuleSource.search(config, "demo", 5).getOrThrow()
+            assertEquals(emptyList<SearchResult>(), results)
+            assertEquals(false, secretHit)
+        } finally {
+            DesktopModuleSource.close()
+            indexServer.stop(0)
+            internalSecretServer.stop(0)
+        }
+    }
+
     private fun HttpServer.text(path: String, body: String) {
         createContext(path) { exchange ->
             val bytes = body.toByteArray()

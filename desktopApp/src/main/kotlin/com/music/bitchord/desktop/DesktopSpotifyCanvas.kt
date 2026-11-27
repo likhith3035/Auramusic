@@ -341,10 +341,18 @@ internal object DesktopSpotifyToken {
     @Volatile private var session: Pair<String, String>? = null
 
     /** The listener's `sp_dc` cookie. Nothing here works without it. */
-    fun cookie(): String = DesktopPersistence().string(KEY_SPDC).trim()
+    fun cookie(): String =
+        DesktopSecretVault.read(DesktopPersistence(), KEY_SPDC, KEY_SPDC).orEmpty().trim()
 
     fun setCookie(value: String) {
-        DesktopPersistence().saveString(KEY_SPDC, value.trim())
+        val trimmed = value.trim()
+        DesktopSecretVault.write(
+            persistence = DesktopPersistence(),
+            prefKey = KEY_SPDC,
+            secretId = KEY_SPDC,
+            label = "AuraMusic — Spotify sp_dc",
+            secret = trimmed,
+        )
         cachedAccessToken = null
         accessTokenExpiresAtMs = 0L
         retryAfterMs = 0L

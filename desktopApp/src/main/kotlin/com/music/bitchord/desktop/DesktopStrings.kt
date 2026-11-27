@@ -1,5 +1,8 @@
 package com.music.bitchord.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
@@ -41,18 +44,24 @@ object DesktopStrings {
     @Volatile
     private var current: Map<String, String> = emptyMap()
 
+    private var catalogueState by mutableStateOf<Map<String, String>>(emptyMap())
+
     private val _language = MutableStateFlow(DesktopPersistence().string(KEY_LANGUAGE))
+
+    private var languageState by mutableStateOf(_language.value)
 
     /** The stored choice: a tag, or blank for the system's own language. */
     val language: StateFlow<String> = _language
 
     init {
-        current = catalogue(resolvedTag())
+        val initial = catalogue(resolvedTag())
+        current = initial
+        catalogueState = initial
     }
 
     /** Which catalogue is actually in use, after the system default is resolved. */
     fun resolvedTag(): String {
-        val chosen = _language.value
+        val chosen = languageState
         if (chosen.isNotBlank()) return chosen
         val system = Locale.getDefault().language.lowercase(Locale.ROOT)
         return if (available.any { it.tag == system }) system else "en"
@@ -61,12 +70,15 @@ object DesktopStrings {
     fun setLanguage(tag: String) {
         DesktopPersistence().saveString(KEY_LANGUAGE, tag)
         _language.value = tag
-        current = catalogue(resolvedTag())
+        languageState = tag
+        val loaded = catalogue(resolvedTag())
+        current = loaded
+        catalogueState = loaded
     }
 
     /** The label shown for the stored choice. */
     fun languageLabel(): String =
-        available.firstOrNull { it.tag == _language.value }?.label ?: "System default"
+        available.firstOrNull { it.tag == languageState }?.label ?: "System default"
 
     /**
      * The string for [key], or [fallback] when no catalogue has one.
@@ -74,8 +86,10 @@ object DesktopStrings {
      * The fallback is the English text the call site would otherwise have held literally, so an
      * untranslated key still reads as the sentence it was written as.
      */
-    operator fun get(key: String, fallback: String = key): String =
-        current[key] ?: english[key] ?: fallback
+    operator fun get(key: String, fallback: String = key): String {
+        val reactive = catalogueState
+        return reactive[key] ?: current[key] ?: english[key] ?: fallback
+    }
 
     /** As [get], with Android's `%1$s`-style positional arguments filled in. */
     fun format(key: String, vararg arguments: Any?, fallback: String = key): String =

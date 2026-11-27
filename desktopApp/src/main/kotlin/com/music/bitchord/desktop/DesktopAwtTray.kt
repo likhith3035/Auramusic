@@ -16,7 +16,10 @@ internal object DesktopAwtTray {
     private var tooltip: String = APP_NAME
 
     /** Whether this platform has a tray AWT can reach. */
-    fun isSupported(): Boolean = runCatching { SystemTray.isSupported() }.getOrDefault(false)
+    fun isSupported(): Boolean {
+        if (System.getProperty("bitchord.test") == "true") return false
+        return runCatching { SystemTray.isSupported() }.getOrDefault(false)
+    }
 
     /** The logo, rasterised. */
     fun setIcon(rendered: BufferedImage?) {
@@ -48,12 +51,18 @@ internal object DesktopAwtTray {
     }
 
     fun stop() {
-        EventQueue.invokeLater {
+        if (!isSupported()) return
+        val removeTask = Runnable {
             synchronized(lock) {
-                val current = icon ?: return@invokeLater
+                val current = icon ?: return@Runnable
                 runCatching { SystemTray.getSystemTray().remove(current) }
                 icon = null
             }
+        }
+        if (EventQueue.isDispatchThread()) {
+            removeTask.run()
+        } else {
+            runCatching { EventQueue.invokeAndWait(removeTask) }
         }
     }
 

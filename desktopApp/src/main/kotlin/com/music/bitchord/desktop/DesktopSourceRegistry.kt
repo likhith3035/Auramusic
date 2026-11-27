@@ -1,5 +1,6 @@
 package com.music.bitchord.desktop
 
+import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.Song
@@ -194,6 +195,12 @@ internal object DesktopSourceRegistry {
     /** Searching is YouTube Music's job, and only YouTube Music's. */
     suspend fun search(query: String, filter: SearchFilter): Result<List<SearchResult>> =
         DesktopSearchClient.search(query, filter)
+
+    suspend fun searchPage(query: String, filter: SearchFilter): Result<YtMusicRepository.SearchPage> =
+        DesktopSearchClient.searchPage(query, filter)
+
+    suspend fun searchContinuation(token: String, filter: SearchFilter): Result<YtMusicRepository.SearchPage> =
+        DesktopSearchClient.searchContinuation(token, filter)
 
     suspend fun resolve(
         song: Song,

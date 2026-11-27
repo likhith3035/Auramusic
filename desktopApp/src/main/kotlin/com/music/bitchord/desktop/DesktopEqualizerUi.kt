@@ -50,10 +50,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
@@ -116,7 +118,16 @@ internal fun DesktopEqualizerDialog(onDismiss: () -> Unit) {
         Column(
             Modifier
                 .graphicsLayer { this.alpha = alpha }
-                .then(if (enabled) Modifier else Modifier.pointerInput(Unit) {})
+                .then(
+                    if (enabled) Modifier
+                    else Modifier.pointerInput(Unit) {
+                        awaitEachGesture {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                            }
+                        }
+                    },
+                )
                 .then(desktopPanelBody(cardMax = 520.dp))
                 .verticalScroll(rememberScrollState()),
         ) {
@@ -286,6 +297,7 @@ private fun DynamicSoundstagePresets(
                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                     color = textColor,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -337,15 +349,15 @@ private fun DesktopDynamicFrequencyCurve(
                 Text(
                     "ACOUSTIC FREQUENCY RESPONSE",
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = DesktopSecondary.copy(alpha = 0.8f),
+                    color = DesktopSecondary.copy(alpha = 0.9f),
                 )
                 Text(
                     if (x == 0 && y == 0) "0 dB FLAT" else "${if (x >= 0) "+$x" else "$x"} / ${if (y >= 0) "+$y" else "$y"}",
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
-                    color = DesktopAccent.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                    color = DesktopAccent.copy(alpha = 0.9f),
                 )
             }
 
@@ -449,8 +461,8 @@ private fun DesktopDynamicFrequencyCurve(
                     Text(
                         label,
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 8.sp,
-                        color = DesktopSecondary.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                        color = DesktopSecondary.copy(alpha = 0.85f),
                     )
                 }
             }
@@ -573,35 +585,35 @@ private fun TonePad(x: Int, y: Int, onChange: (Int, Int) -> Unit) {
     ) {
         // Corner direction badges
         Text(
-            "🔥 WARM BASS",
+            "WARM BASS",
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFF59E0B).copy(alpha = 0.45f),
+            color = Color(0xFFFBBF24).copy(alpha = 0.8f),
             modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
         )
         Text(
-            "✨ BRIGHT AIR",
+            "BRIGHT AIR",
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF06B6D4).copy(alpha = 0.45f),
+            color = Color(0xFF22D3EE).copy(alpha = 0.8f),
             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
         )
         Text(
-            "🎧 WARM SCOOP",
+            "WARM SCOOP",
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF8B5CF6).copy(alpha = 0.45f),
+            color = Color(0xFFA78BFA).copy(alpha = 0.8f),
             modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
         )
         Text(
-            "⚡ CRISP SCOOP",
+            "CRISP SCOOP",
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFEC4899).copy(alpha = 0.45f),
+            color = Color(0xFFF472B6).copy(alpha = 0.8f),
             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
         )
 

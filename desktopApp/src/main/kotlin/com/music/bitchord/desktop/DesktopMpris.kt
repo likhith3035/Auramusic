@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 private const val MPRIS_ROOT_INTERFACE = "org.mpris.MediaPlayer2"
 private const val MPRIS_PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
 private const val MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
-private const val MPRIS_BUS_NAME = "org.mpris.MediaPlayer2.bitchord"
+private const val MPRIS_BUS_NAME = "org.mpris.MediaPlayer2.auramusic"
 
 interface MprisMetadataType : TypeRef<Map<String, Variant<*>>>
 
@@ -201,7 +201,7 @@ internal class DesktopMprisController(
             "CanRaise" to variant(false),
             "HasTrackList" to variant(false),
             "Identity" to variant("AuraMusic"),
-            "DesktopEntry" to variant("bitchord"),
+            "DesktopEntry" to variant("auramusic"),
             "SupportedUriSchemes" to variant(listOf("file", "http", "https"), "as"),
             "SupportedMimeTypes" to variant(
                 listOf("audio/mpeg", "audio/mp4", "audio/aac", "audio/flac", "audio/ogg"),

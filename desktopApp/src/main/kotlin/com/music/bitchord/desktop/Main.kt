@@ -65,12 +65,28 @@ fun main(args: Array<String> = emptyArray()) {
 
     // Anonymous daily heartbeat telemetry for active users counter
     val desktopConfigDir = java.io.File(System.getProperty("user.home"), ".bitchord").apply { mkdirs() }
+    val desktopVersion = System.getProperty("bitchord.version")?.takeIf { it.isNotBlank() } ?: "3.3.0"
+    val desktopOs = System.getProperty("os.name") ?: "Desktop"
+    com.music.bitchord.data.link.YouTubeResumeStore.init(desktopConfigDir)
+    com.music.bitchord.data.taste.MusicTasteStore.init(desktopConfigDir)
     com.music.bitchord.data.telemetry.AuraTelemetryClient.init(desktopConfigDir)
+    com.music.bitchord.data.weather.AuraWeatherRepository.init(desktopConfigDir)
     com.music.bitchord.data.telemetry.AuraTelemetryClient.ping(
-        version = "3.2.1",
+        version = desktopVersion,
         platform = "Desktop",
-        osVersion = System.getProperty("os.name") ?: "Desktop",
+        osVersion = desktopOs,
     )
+
+    // Privacy-strict PostHog event telemetry (active only when POSTHOG_API_KEY / override is set)
+    com.music.bitchord.data.telemetry.AuraAnalytics.init(
+        directory = desktopConfigDir,
+        buildPosthogApiKey = System.getProperty("bitchord.posthog.key").orEmpty(),
+        buildPosthogHost = System.getProperty("bitchord.posthog.host").orEmpty(),
+        version = desktopVersion,
+        platform = "Desktop",
+        osVersion = desktopOs,
+    )
+    com.music.bitchord.data.telemetry.AuraAnalytics.trackAppLaunch()
 
     desktopMain()
 }
@@ -184,8 +200,10 @@ private fun desktopMain() = application {
                 }
 
                 if (showSplash) {
+                    val reduceSplashAnim by DesktopPlayerSettings.reduceAnimation.collectAsState()
                     AuraSplashScreen(
                         onFinished = { showSplash = false },
+                        reduceAnimation = reduceSplashAnim,
                     )
                 }
             }

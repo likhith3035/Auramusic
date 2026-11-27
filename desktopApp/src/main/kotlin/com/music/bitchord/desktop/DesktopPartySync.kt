@@ -60,6 +60,7 @@ internal class DesktopPartySync(
     private val onLeftParty: () -> Unit = {},
 ) {
 
+    private val stateLock = Any()
     private val jobs = mutableListOf<Job>()
     private var startJob: Job? = null
     private var publishJob: Job? = null
@@ -91,56 +92,71 @@ internal class DesktopPartySync(
 
     fun start() {
         stop()
-        jobs += scope.launch {
+        val stateJob = scope.launch {
             DesktopListenTogether.state
                 .map { Triple(it.playback.seq, it.queue.seq, it.code) }
                 .distinctUntilChanged()
                 .collect { key ->
-                    if (key.third != lastPartyCode) {
-                        val wasInParty = lastPartyCode != null
-                        val nowInParty = key.third != null
-                        lastPartyCode = key.third
-                        if (!wasInParty && nowInParty) onEnteredParty()
-                        if (wasInParty && !nowInParty) onLeftParty()
+                    var transition = 0 // 1 = entered, -1 = left
+                    synchronized(stateLock) {
+                        if (key.third != lastPartyCode) {
+                            val wasInParty = lastPartyCode != null
+                            val nowInParty = key.third != null
+                            lastPartyCode = key.third
+                            if (!wasInParty && nowInParty) transition = 1
+                            else if (wasInParty && !nowInParty) transition = -1
+                        }
+                        if (pendingIntentVideoId == null &&
+                            key.first >= awaitPlaybackSeq &&
+                            key.second >= awaitQueueSeq
+                        ) {
+                            quietUntilMs = 0L
+                        }
                     }
-                    // Every control sent has come back, so the party now describes what the
-                    // listener did — or somebody else has moved it on past that, which is as good
-                    // a reason to stop holding reconcile off.
-                    if (pendingIntentVideoId == null &&
-                        key.first >= awaitPlaybackSeq &&
-                        key.second >= awaitQueueSeq
-                    ) {
-                        quietUntilMs = 0L
-                    }
+                    if (transition == 1) onEnteredParty()
+                    else if (transition == -1) onLeftParty()
                     reconcile()
                 }
         }
         // A steady tick as well as the frames: drift accumulates between controls, and nothing
         // arrives to announce it.
-        jobs += scope.launch {
+        val tickJob = scope.launch {
             while (true) {
                 delay(RECONCILE_INTERVAL_MS)
                 reconcile()
             }
         }
+        synchronized(stateLock) {
+            jobs += stateJob
+            jobs += tickJob
+        }
     }
 
     fun stop() {
-        jobs.forEach(Job::cancel)
-        jobs.clear()
-        startJob?.cancel()
-        startJob = null
-        publishJob?.cancel()
-        publishJob = null
-        loadingVideoId = null
-        alignedSeq = -1L
-        driftStrikes = 0
-        awaitPlaybackSeq = Long.MAX_VALUE
-        awaitQueueSeq = Long.MAX_VALUE
-        locallyPaused = false
-        lastPartyCode = null
-        appliedAutoplay = null
-        pendingIntentVideoId = null
+        val jobsToCancel: List<Job>
+        val startToCancel: Job?
+        val publishToCancel: Job?
+        synchronized(stateLock) {
+            jobsToCancel = jobs.toList()
+            jobs.clear()
+            startToCancel = startJob
+            startJob = null
+            publishToCancel = publishJob
+            publishJob = null
+            loadingVideoId = null
+            alignedSeq = -1L
+            driftStrikes = 0
+            awaitPlaybackSeq = Long.MAX_VALUE
+            awaitQueueSeq = Long.MAX_VALUE
+            locallyPaused = false
+            lastPartyCode = null
+            appliedAutoplay = null
+            pendingIntentVideoId = null
+            quietUntilMs = 0L
+        }
+        jobsToCancel.forEach(Job::cancel)
+        startToCancel?.cancel()
+        publishToCancel?.cancel()
     }
 
     /** Something the listener asked for here, which the party should be told about. */
@@ -151,24 +167,17 @@ internal class DesktopPartySync(
         // Keep waiting for that selection rather than letting the later gesture cancel its guard.
         val waitForVideoId = expectedVideoId
             ?: engine.state.value.takeIf { it.isLoading }?.song?.videoId
-        pendingIntentVideoId = waitForVideoId
-        // Nothing has gone out yet, so there is nothing to wait for and somebody else's control
-        // must not end the window protecting this one.
-        awaitPlaybackSeq = Long.MAX_VALUE
-        awaitQueueSeq = Long.MAX_VALUE
-        // A song selection first updates the visible state, then resolves a stream on a worker.
-        // Keep reconciliation out of the way until that new track is actually playable; otherwise
-        // the old party state can arrive during the resolve and pause/replace the new selection.
-        quietUntilMs = if (waitForVideoId != null) Long.MAX_VALUE else nowMs() + INTENT_QUIET_MS
-        publishJob?.cancel()
-        publishJob = scope.launch {
+        val prevPublish: Job?
+        val nextPublish: Job = scope.launch {
             delay(PUBLISH_DEBOUNCE_MS)
             if (waitForVideoId != null) {
                 repeat(PUBLISH_WAIT_ATTEMPTS) {
                     val playback = engine.state.value
                     if (playback.song?.videoId == waitForVideoId && !playback.isLoading) {
-                        pendingIntentVideoId = null
-                        quietUntilMs = nowMs() + INTENT_QUIET_MS
+                        synchronized(stateLock) {
+                            pendingIntentVideoId = null
+                            quietUntilMs = nowMs() + INTENT_QUIET_MS
+                        }
                         publish()
                         return@launch
                     }
@@ -176,12 +185,23 @@ internal class DesktopPartySync(
                 }
                 // The requested stream failed or was superseded. Do not publish the stale player
                 // state; the regular party reconciliation will recover it.
-                pendingIntentVideoId = null
-                quietUntilMs = nowMs()
+                synchronized(stateLock) {
+                    pendingIntentVideoId = null
+                    quietUntilMs = nowMs()
+                }
                 return@launch
             }
             publish()
         }
+        synchronized(stateLock) {
+            pendingIntentVideoId = waitForVideoId
+            awaitPlaybackSeq = Long.MAX_VALUE
+            awaitQueueSeq = Long.MAX_VALUE
+            quietUntilMs = if (waitForVideoId != null) Long.MAX_VALUE else nowMs() + INTENT_QUIET_MS
+            prevPublish = publishJob
+            publishJob = nextPublish
+        }
+        prevPublish?.cancel()
     }
 
     /** In a host-locked party, play/pause affects only this computer. */
@@ -189,10 +209,10 @@ internal class DesktopPartySync(
         val party = DesktopListenTogether.state.value
         if (!party.controlsLocked) return false
         if (engine.state.value.isPlaying) {
-            locallyPaused = true
+            synchronized(stateLock) { locallyPaused = true }
             engine.pause()
         } else {
-            locallyPaused = false
+            synchronized(stateLock) { locallyPaused = false }
             DesktopListenTogether.partyPositionMs()?.let(engine::seekTo)
             engine.play()
         }
@@ -203,16 +223,22 @@ internal class DesktopPartySync(
     fun reconcile() {
         val party = DesktopListenTogether.state.value
         if (!party.inParty) {
-            loadingVideoId = null
-            locallyPaused = false
-            appliedAutoplay = null
+            synchronized(stateLock) {
+                loadingVideoId = null
+                locallyPaused = false
+                appliedAutoplay = null
+            }
             return
         }
-        if (!party.controlsLocked) locallyPaused = false
-        if (nowMs() < quietUntilMs) return
+        val shouldApplyAutoplay: Boolean
+        synchronized(stateLock) {
+            if (!party.controlsLocked) locallyPaused = false
+            if (nowMs() < quietUntilMs) return
+            shouldApplyAutoplay = party.playback.autoplayEnabled != appliedAutoplay
+            if (shouldApplyAutoplay) appliedAutoplay = party.playback.autoplayEnabled
+        }
         val target = party.playback
-        if (target.autoplayEnabled != appliedAutoplay) {
-            appliedAutoplay = target.autoplayEnabled
+        if (shouldApplyAutoplay) {
             applyPartyAutoplay(target.autoplayEnabled)
         }
         val track = target.track
@@ -232,22 +258,25 @@ internal class DesktopPartySync(
         if (target.isPlaying && !party.clockSynced) return
 
         if (playback.song?.videoId != track.videoId) {
-            if (loadingVideoId != track.videoId) {
-                loadingVideoId = track.videoId
-                // The queue is only usable if the track is actually in it. It may not be: the
-                // queue and the track are two controls, and between them the party holds a new
-                // running order with the old song still current. Falling back to the track alone
-                // is always right; falling back to position zero never is.
+            val shouldLoad = synchronized(stateLock) {
+                if (loadingVideoId != track.videoId) {
+                    loadingVideoId = track.videoId
+                    true
+                } else {
+                    false
+                }
+            }
+            if (shouldLoad) {
                 val at = partyQueueIndexOf(party.queue, target, track.videoId)
                 if (at >= 0) playTrack(party.queue.items, at) else playTrack(listOf(track), 0)
             }
             return
         }
-        loadingVideoId = null
+        synchronized(stateLock) { loadingVideoId = null }
         reconcileQueue(party)
 
         if (!target.isPlaying) {
-            locallyPaused = false
+            synchronized(stateLock) { locallyPaused = false }
             if (playback.isPlaying) engine.pause()
             if (abs(playback.positionMs - target.positionMs) > PAUSED_TOLERANCE_MS) {
                 engine.seekTo(target.positionMs)
@@ -256,19 +285,25 @@ internal class DesktopPartySync(
         }
 
         val want = DesktopListenTogether.partyPositionMs()
-        if (locallyPaused) return
+        if (synchronized(stateLock) { locallyPaused }) return
         if (!playback.isPlaying) {
             val wait = DesktopListenTogether.msUntilStart()
             if (wait > 0) {
-                startJob?.cancel()
-                startJob = scope.launch {
+                val nextStart = scope.launch {
                     delay(wait)
                     reconcile()
                 }
+                val prevStart = synchronized(stateLock) {
+                    startJob.also { startJob = nextStart }
+                }
+                prevStart?.cancel()
                 return
             }
             if (want != null) engine.seekTo(want)
-            startJob?.cancel()
+            val prevStart = synchronized(stateLock) {
+                startJob.also { startJob = null }
+            }
+            prevStart?.cancel()
             engine.play()
             return
         }
@@ -276,17 +311,20 @@ internal class DesktopPartySync(
         if (want == null) return
         val drift = playback.positionMs - want
         val now = nowMs()
-        val decision = decideSeek(
-            drift = drift,
-            controlSeq = target.seq,
-            alignedSeq = alignedSeq,
-            strikes = driftStrikes,
-            nowMs = now,
-            cooldownUntilMs = driftCooldownUntilMs,
-        )
-        alignedSeq = decision.alignedSeq
-        driftStrikes = decision.strikes
-        if (decision.cooldownUntilMs > 0) driftCooldownUntilMs = decision.cooldownUntilMs
+        val decision = synchronized(stateLock) {
+            decideSeek(
+                drift = drift,
+                controlSeq = target.seq,
+                alignedSeq = alignedSeq,
+                strikes = driftStrikes,
+                nowMs = now,
+                cooldownUntilMs = driftCooldownUntilMs,
+            ).also { d ->
+                alignedSeq = d.alignedSeq
+                driftStrikes = d.strikes
+                if (d.cooldownUntilMs > 0) driftCooldownUntilMs = d.cooldownUntilMs
+            }
+        }
         if (decision.seek) {
             DesktopTrackLog.log("party: ${decision.reason} ${drift}ms")
             engine.seekTo(want)
@@ -368,9 +406,11 @@ internal class DesktopPartySync(
                 playbackControls++
             }
         }
-        awaitPlaybackSeq = basePlayback + playbackControls
-        awaitQueueSeq = baseQueue + queueControls
-        if (playbackControls == 0 && queueControls == 0) quietUntilMs = 0L
+        synchronized(stateLock) {
+            awaitPlaybackSeq = basePlayback + playbackControls
+            awaitQueueSeq = baseQueue + queueControls
+            if (playbackControls == 0 && queueControls == 0) quietUntilMs = 0L
+        }
     }
 
     private fun nowMs(): Long = System.nanoTime() / 1_000_000L

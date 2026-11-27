@@ -22,7 +22,11 @@ import kotlinx.serialization.json.put
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.proxy.ProxyExecutable
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.URI
+import java.net.UnknownHostException
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -94,13 +98,75 @@ private data class DesktopJsJson(val value: String)
 
 /** Minimal blocking HTTP bridge used only from the restricted module context. */
 private object DesktopModuleHttp {
+    private val allowedConfiguredOrigins = ConcurrentHashMap.newKeySet<String>()
+
+    fun allowConfiguredOrigin(url: String) {
+        originKey(url)?.let { allowedConfiguredOrigins += it }
+    }
+
+    private fun originKey(url: String): String? = runCatching {
+        val uri = URI(url.trim())
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return@runCatching null
+        if (scheme != "http" && scheme != "https") return@runCatching null
+        val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return@runCatching null
+        val port = if (uri.port > 0) uri.port else if (scheme == "https") 443 else 80
+        "$scheme://$host:$port"
+    }.getOrNull()
+
+    private fun isDisallowedAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress ||
+            address.isLoopbackAddress ||
+            address.isLinkLocalAddress ||
+            address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) return true
+        val bytes = address.address
+        if (address is Inet4Address && bytes.size == 4) {
+            val first = bytes[0].toInt() and 0xFF
+            val second = bytes[1].toInt() and 0xFF
+            if (first == 0 || first == 127) return true
+            if (first == 100 && second in 64..127) return true
+            if (first == 169 && second == 254) return true
+            if (first == 198 && (second == 18 || second == 19)) return true
+        } else if (address is Inet6Address && bytes.size == 16) {
+            val first = bytes[0].toInt() and 0xFF
+            if ((first and 0xFE) == 0xFC) return true
+        }
+        return false
+    }
+
+    internal fun validateTarget(url: String) {
+        val uri = runCatching { URI(url.trim()) }.getOrNull()
+            ?: throw SecurityException("Invalid module URL")
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        if (scheme != "http" && scheme != "https") {
+            throw SecurityException("Unsupported module URL scheme")
+        }
+        if (!uri.userInfo.isNullOrEmpty()) {
+            throw SecurityException("Embedded credentials in module URLs are blocked")
+        }
+        val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.')
+            ?: throw SecurityException("Module URL missing host")
+        val key = originKey(url)
+        val explicitlyConfigured = key != null && key in allowedConfiguredOrigins
+        if (!explicitlyConfigured) {
+            if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+                throw SecurityException("Local module target blocked: $host")
+            }
+            val resolved = InetAddress.getAllByName(host)
+            if (resolved.any(::isDisallowedAddress)) {
+                throw UnknownHostException("Non-public module target blocked: $host")
+            }
+        }
+    }
+
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
     private val client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        .followRedirects(HttpClient.Redirect.NEVER)
         .build()
 
     fun get(url: String): DesktopHttpResponse = request(url, "GET", emptyMap(), null)
@@ -111,6 +177,7 @@ private object DesktopModuleHttp {
         headers: Map<String, String>,
         body: String?,
     ): DesktopHttpResponse {
+        validateTarget(url)
         val builder = HttpRequest.newBuilder(URI.create(url))
             .timeout(Duration.ofSeconds(30))
         val supplied = headers.keys.any { it.equals("user-agent", ignoreCase = true) }
@@ -216,8 +283,9 @@ private class DesktopModuleEngine(
         check(function != null && function.canExecute()) {
             "$functionName is not a function"
         }
+        val jsonParse = context.getBindings("js").getMember("JSON")
         val guestArgs = args.map { argument ->
-            if (argument is DesktopJsJson) context.eval("js", "(${argument.value})") else argument
+            if (argument is DesktopJsJson) jsonParse.invokeMember("parse", argument.value) else argument
         }
         val result = function.execute(*guestArgs.toTypedArray())
         val bindings = context.getBindings("js")
@@ -375,6 +443,7 @@ private class DesktopModuleManager {
     suspend fun modules(indexUrl: String): Result<List<DesktopSpineModule>> = withContext(Dispatchers.IO) {
         runCatching {
             cachedIndex?.takeIf { it.first == indexUrl }?.second?.let { return@runCatching it }
+            DesktopModuleHttp.allowConfiguredOrigin(indexUrl)
             val response = DesktopModuleHttp.get(indexUrl)
             check(response.status in 200..299) { "Module index returned HTTP ${response.status}" }
             val modules = parseIndex(response.body)
@@ -403,6 +472,7 @@ private class DesktopModuleManager {
                 val key = moduleKey(indexUrl, module.id)
                 engines[key]?.let { return@runCatching it }
                 val downloadUrl = URI.create(indexUrl).resolve(module.download).toString()
+                DesktopModuleHttp.allowConfiguredOrigin(downloadUrl)
                 val response = DesktopModuleHttp.get(downloadUrl)
                 check(response.status in 200..299) { "Module ${module.id} returned HTTP ${response.status}" }
                 val engine = DesktopModuleEngine(response.body, URI.create(downloadUrl).resolve(".").toString())
