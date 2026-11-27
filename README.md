@@ -11,7 +11,7 @@
 
 [![Release](https://img.shields.io/github/v/release/likhith3035/Auramusic?style=for-the-badge&color=6366F1&labelColor=0d1117)](https://github.com/likhith3035/Auramusic/releases)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Windows%20%7C%20Linux%20%7C%20macOS-8B5CF6?style=for-the-badge&labelColor=0d1117)](https://github.com/likhith3035/Auramusic)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=0d1117)](https://kotlinlang.org/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.20-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=0d1117)](https://kotlinlang.org/)
 [![License](https://img.shields.io/github/license/likhith3035/Auramusic?style=for-the-badge&color=10B981&labelColor=0d1117)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-arm64--v8a%20%7C%20Universal%20%7C%20x64-blue?style=for-the-badge&labelColor=0d1117)](https://github.com/likhith3035/Auramusic/releases)
 
@@ -241,17 +241,17 @@ Visit the [**Releases Page**](https://github.com/likhith3035/Auramusic/releases)
 
 | Package File Name | Target Platform | Architecture | Download Size | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **`AuraMusic-v3.2.0-arm64-v8a.apk`** | Android 8.0+ | `arm64-v8a` (64-bit) | ~136 MB | **Recommended for all modern phones.** Fast installation, lower storage use, and optimized performance for Snapdragon, MediaTek Dimensity, Google Tensor, and Exynos processors. |
-| **`AuraMusic-v3.2.0-universal.apk`** | Android 8.0+ | Universal (All ABIs) | ~272 MB | **Universal compatibility.** Bundles all native slices (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`). Ideal for Android emulators, Intel Chromebooks, and older 32-bit hardware. |
-| **`AuraMusic-3.2.0-windows-portable.zip`** | Windows 10 / 11 | `x86_64` (64-bit) | ~284 MB | **Standalone Windows distribution.** Comes with a bundled OpenJDK runtime environment. Extract the zip and run `AuraMusic.exe` directly without any installation steps. |
+| **`AuraMusic-v3.3.0-arm64-v8a.apk`** | Android 8.0+ | `arm64-v8a` (64-bit) | ~136 MB | **Recommended for all modern phones.** Fast installation, lower storage use, and optimized performance for Snapdragon, MediaTek Dimensity, Google Tensor, and Exynos processors. |
+| **`AuraMusic-v3.3.0-universal.apk`** | Android 8.0+ | Universal (All ABIs) | ~272 MB | **Universal compatibility.** Bundles all native slices (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`). Ideal for Android emulators, Intel Chromebooks, and older 32-bit hardware. |
+| **`AuraMusic-3.3.0-windows-portable.zip`** | Windows 10 / 11 | `x86_64` (64-bit) | ~284 MB | **Standalone Windows distribution.** Comes with a bundled OpenJDK runtime environment. Extract the zip and run `AuraMusic.exe` directly without any installation steps. |
 
 ---
 
 ## Building from Source
 
 ### Prerequisites
-* **JDK 17** or higher (Android Studio JBR or Eclipse Temurin OpenJDK)
-* **Android SDK** with Platform Tools and API 34 Build-Tools
+* **JDK 21** or higher (Android Studio JBR or Eclipse Temurin OpenJDK)
+* **Android SDK** with Platform Tools and API 36 Build-Tools
 * **CMake 3.22+** and Android NDK (for native `libusb` and `oboe` audio drivers)
 * **Git** command-line tools
 
@@ -267,8 +267,8 @@ cd Auramusic
 ./gradlew :app:assembleDevDebug
 
 # Output APK files will be placed in:
-# app/build/outputs/apk/dev/debug/AuraMusic-v3.2.0-arm64-v8a.apk
-# app/build/outputs/apk/dev/debug/AuraMusic-v3.2.0-universal.apk
+# app/build/outputs/apk/dev/debug/AuraMusic-v3.3.0-arm64-v8a.apk
+# app/build/outputs/apk/dev/debug/AuraMusic-v3.3.0-universal.apk
 ```
 
 ### 3. Build & Package Desktop Application
@@ -280,7 +280,7 @@ cd Auramusic
 ./gradlew :desktopApp:windowsPortable
 
 # Output zip archive will be placed in:
-# desktopApp/build/distributions/AuraMusic-3.2.0-windows-portable.zip
+# desktopApp/build/distributions/AuraMusic-3.3.0-windows-portable.zip
 ```
 
 ---

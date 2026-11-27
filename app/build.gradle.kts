@@ -58,6 +58,18 @@ val addonAuthServer: String = (
         ?: "https://bitchord-auth.kushagrasingh.in"
     ).trim().trimEnd('/')
 
+val posthogApiKey: String = (
+    localProps.getProperty("POSTHOG_API_KEY")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("POSTHOG_API_KEY")?.takeIf { it.isNotBlank() }
+        ?: ""
+    ).trim()
+
+val posthogHost: String = (
+    localProps.getProperty("POSTHOG_HOST")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("POSTHOG_HOST")?.takeIf { it.isNotBlank() }
+        ?: "https://us.i.posthog.com"
+    ).trim().trimEnd('/')
+
 /*
  * Bump this by hand before cutting each sideloaded test build ("beta2",
  * "beta3", ...) and blank it out before cutting the real release. Marks the
@@ -103,6 +115,16 @@ android {
             "String",
             "ADDON_AUTH_URL",
             "\"${addonAuthServer.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+        )
+        buildConfigField(
+            "String",
+            "POSTHOG_API_KEY",
+            "\"${posthogApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+        )
+        buildConfigField(
+            "String",
+            "POSTHOG_HOST",
+            "\"${posthogHost.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
         )
     }
 
@@ -183,8 +205,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Fallback to debug keystore if no release keystore is present, ensuring APK is always signed and installable
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Do not silently fall back to the debug keystore for release artifacts.
+            signingConfig = signingConfigs.findByName("release")
         }
         /*
          * The release build, installable next to the dev and prod apps: same R8,
@@ -217,6 +239,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    lint {
+        // AGP 8.10.1 Lint bundles a Kotlin 2.1 metadata reader that fails on Kotlin 2.3.x modules.
+        checkReleaseBuilds = false
+        abortOnError = false
     }
     testOptions {
         unitTests {

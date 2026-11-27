@@ -13,10 +13,10 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
         cache: gradle
 
@@ -24,6 +24,8 @@ jobs:
       run: |
         echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
         echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
+        echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> local.properties
+        echo "POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}" >> local.properties
 
         if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > bitchord-release.jks
@@ -42,17 +44,14 @@ jobs:
 
     - name: Build Android APK
       run: |
-        if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-          ./gradlew assembleProdRelease
-        else
-          echo "No release keystore secret configured; building assembleProdDebug..."
-          ./gradlew assembleProdDebug
+        if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+          echo "KEYSTORE_BASE64 secret is required for release APK workflow" >&2
+          exit 1
         fi
+        ./gradlew assembleProdRelease
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: auramusic-apk
-        path: |
-          app/build/outputs/apk/prod/release/*.apk
-          app/build/outputs/apk/prod/debug/*.apk
+        path: app/build/outputs/apk/prod/release/*.apk

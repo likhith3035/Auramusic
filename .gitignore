@@ -48,11 +48,21 @@ AGENTS.md
 # Build artifacts & releases
 release/
 dist/
+desktopApp/build/distributions/
 *.apk
+*.aab
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
 *.zip
 
 
 # Local promo & media
 promo/
+*.mp4
+*.mov
 "references by me/"
 references by me/

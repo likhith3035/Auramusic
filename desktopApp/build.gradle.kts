@@ -48,6 +48,8 @@ val desktopModuleIndexUrl = localProperty("MODULE_INDEX_URL")
 val listenTogetherServer = localProperty("LISTEN_TOGETHER_SERVER")
 val lastfmApiKey = localProperty("LASTFM_API_KEY")
 val lastfmSecret = localProperty("LASTFM_SECRET")
+val posthogApiKey = localProperty("POSTHOG_API_KEY")
+val posthogHost = localProperty("POSTHOG_HOST").ifBlank { "https://us.i.posthog.com" }
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -139,6 +141,11 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
+}
+
+tasks.withType<Test>().configureEach {
+    // Keep unit tests hermetic: skip AWT tray peer creation and startup server health probes.
+    systemProperty("bitchord.test", "true")
 }
 
 /** Builds the Automix analyser from the same C++ the Android app compiles. */
@@ -488,6 +495,9 @@ compose.desktop {
         }
         if (listenTogetherServer.isNotBlank()) {
             jvmArgs("-Dbitchord.listentogether.server=$listenTogetherServer")
+        }
+        if (posthogApiKey.isNotBlank()) {
+            jvmArgs("-Dbitchord.posthog.key=$posthogApiKey", "-Dbitchord.posthog.host=$posthogHost")
         }
 
         buildTypes.release.proguard {

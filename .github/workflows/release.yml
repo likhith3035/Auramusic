@@ -32,8 +32,10 @@ jobs:
 
       - name: Work out the version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          version="${{ inputs.version }}"
+          version="${INPUT_VERSION}"
           [ -n "$version" ] || version="${GITHUB_REF_NAME#v}"
           echo "value=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version"
@@ -42,6 +44,8 @@ jobs:
         run: |
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
           echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
+          echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> local.properties
+          echo "POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}" >> local.properties
 
       - name: Packaging tools
         run: |
@@ -70,16 +74,20 @@ jobs:
           jar tf "$jar" | grep -q 'models/.*\.onnx'
 
       - name: Build the AppImage
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
           app_dir=$(ls -d desktopApp/build/compose/binaries/main/app/* | head -n 1)
           desktopApp/packaging/appimage.sh \
             "$app_dir" \
-            dist/AuraMusic-${{ steps.version.outputs.value }}-linux-x86_64.AppImage \
+            "dist/AuraMusic-${APP_VERSION}-linux-x86_64.AppImage" \
             "$PWD/appimagetool.AppImage"
 
       - name: Collect
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          v=${{ steps.version.outputs.value }}
+          v="$APP_VERSION"
           mkdir -p dist
           cp desktopApp/build/compose/binaries/main/deb/*.deb "dist/AuraMusic-$v-linux-amd64.deb"
           cp desktopApp/build/compose/binaries/main/rpm/*.rpm "dist/AuraMusic-$v-linux-x86_64.rpm"
@@ -118,8 +126,10 @@ jobs:
       - name: Work out the version
         id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          version="${{ inputs.version }}"
+          version="${INPUT_VERSION}"
           [ -n "$version" ] || version="${GITHUB_REF_NAME#v}"
           echo "value=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version"
@@ -129,6 +139,8 @@ jobs:
         run: |
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
           echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
+          echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> local.properties
+          echo "POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}" >> local.properties
 
       - name: Tests
         run: .\gradlew.bat :shared:jvmTest :desktopApp:test "-Pbitchord.version=${{ steps.version.outputs.value }}"
@@ -180,6 +192,8 @@ jobs:
         run: |
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
           echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
+          echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> local.properties
+          echo "POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}" >> local.properties
 
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > bitchord-release.jks
@@ -198,12 +212,11 @@ jobs:
 
       - name: Build Android APK
         run: |
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            ./gradlew assembleProdRelease
-          else
-            echo "No release keystore secret configured; building assembleProdDebug..."
-            ./gradlew assembleProdDebug
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "KEYSTORE_BASE64 secret is required for release builds" >&2
+            exit 1
           fi
+          ./gradlew assembleProdRelease
 
       - name: Collect Android APKs
         run: |
